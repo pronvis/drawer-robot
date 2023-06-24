@@ -1,0 +1,11 @@
+**/*.rs.bk
+.#*
+.gdb_history
+Cargo.lock
+target/
+
+# editor files
+.idea
+
+#all binary files
+*.bin
