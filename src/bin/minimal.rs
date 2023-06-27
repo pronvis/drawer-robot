@@ -19,14 +19,16 @@ mod app {
     // Shared resources go here
     #[shared]
     struct Shared {
-        // TODO: Add resources
+        // for BigTreeTech SKR E3-DIP v1.1
+        // led: stm32f1xx_hal::gpio::Pin<'C', 1, stm32f1xx_hal::gpio::Output>,
+
+        // for BluePill
+        led: stm32f1xx_hal::gpio::Pin<'B', 12, stm32f1xx_hal::gpio::Output>,
     }
 
     // Local resources go here
     #[local]
-    struct Local {
-        led: stm32f1xx_hal::gpio::Pin<'C', 1, stm32f1xx_hal::gpio::Output>,
-    }
+    struct Local {}
 
     #[init]
     fn init(cx: init::Context) -> (Shared, Local) {
@@ -55,21 +57,16 @@ mod app {
         // Acquire the GPIOC peripheral
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
         let mut gpiod: stm32f1xx_hal::gpio::gpiod::Parts = cx.device.GPIOD.split();
-        let led = gpioc.pc1.into_push_pull_output(&mut gpioc.crl);
+        let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
+        let led = gpiob.pb12.into_push_pull_output(&mut gpiob.crh);
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, 72_000_000, systick_mono_token); // default STM32F303 clock-rate is 36MHz
 
         task1::spawn().ok();
+        task2::spawn().ok();
 
-        (
-            Shared {
-                // Initialization of shared resources go here
-            },
-            Local {
-                led, // Initialization of local resources go here
-            },
-        )
+        (Shared { led }, Local {})
     }
 
     // Optional idle, can be removed if not needed.
@@ -83,12 +80,25 @@ mod app {
     }
 
     // TODO: Add tasks
-    #[task(priority = 1, local = [led])]
-    async fn task1(cx: task1::Context) {
+    #[task(priority = 1, shared = [led])]
+    async fn task1(mut cx: task1::Context) {
         loop {
-            defmt::debug!("Hello from blink task!");
-            cx.local.led.toggle();
+            defmt::debug!("Hello from blink task-1!");
+            cx.shared.led.lock(|x| {
+                x.toggle();
+            });
             Systick::delay(1000.millis()).await;
+        }
+    }
+
+    #[task(priority = 2, shared = [led])]
+    async fn task2(mut cx: task2::Context) {
+        loop {
+            defmt::debug!("Hello from blink task-2!");
+            cx.shared.led.lock(|x| {
+                x.toggle();
+            });
+            Systick::delay(300.millis()).await;
         }
     }
 }
