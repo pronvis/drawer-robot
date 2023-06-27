@@ -13,23 +13,52 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 )]
 mod app {
 
-    use crate::app::motion_control::TimeConversionError::DelayToTicks;
     use rtic_monotonics::systick::*;
     use stepper::{
-        compat, fugit::NanosDurationU32 as Nanoseconds, motion_control, ramp_maker, Direction,
-        Stepper,
+        compat, fugit::NanosDurationU32 as Nanoseconds, motion_control,
+        motion_control::SoftwareMotionControl, ramp_maker, Direction, Stepper,
     };
     use stm32f1xx_hal::{pac, prelude::*, rcc, timer::Timer};
 
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
 
     type Num = fixed::FixedI64<typenum::U32>;
-    #[shared]
-    struct Shared {}
 
-    #[local]
-    struct Local {
-        stepper: Stepper<
+    // type Profile_Type = ramp_maker::Trapezoidal<fixed::FixedI64<Num>>;
+    type Profile_Type = ramp_maker::Trapezoidal<
+        fixed::FixedI64<
+            typenum::UInt<
+                typenum::UInt<
+                    typenum::UInt<
+                        typenum::UInt<
+                            typenum::UInt<typenum::UInt<typenum::UTerm, typenum::B1>, typenum::B0>,
+                            typenum::B0,
+                        >,
+                        typenum::B0,
+                    >,
+                    typenum::B0,
+                >,
+                typenum::B0,
+            >,
+        >,
+    >;
+
+    type Stepper_Type = Stepper<
+        stepper::drivers::drv8825::DRV8825<
+            (),
+            (),
+            (),
+            (),
+            (),
+            (),
+            (),
+            compat::Pin<stm32f1xx_hal::gpio::Pin<'C', 14, stm32f1xx_hal::gpio::Output>>, //step pin
+            compat::Pin<stm32f1xx_hal::gpio::Pin<'C', 13, stm32f1xx_hal::gpio::Output>>, //dir pin
+        >,
+    >;
+
+    type New_Stepper_Type = Stepper<
+        SoftwareMotionControl<
             stepper::drivers::drv8825::DRV8825<
                 (),
                 (),
@@ -41,8 +70,20 @@ mod app {
                 compat::Pin<stm32f1xx_hal::gpio::Pin<'C', 14, stm32f1xx_hal::gpio::Output>>, //step pin
                 compat::Pin<stm32f1xx_hal::gpio::Pin<'C', 13, stm32f1xx_hal::gpio::Output>>, //dir pin
             >,
+            stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, STEPPER_CLOCK_FREQ>,
+            Profile_Type,
+            DelayToTicks,
+            STEPPER_CLOCK_FREQ,
         >,
-        timer: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, STEPPER_CLOCK_FREQ>,
+    >;
+
+    #[shared]
+    struct Shared {}
+
+    #[local]
+    struct Local {
+        stepper: New_Stepper_Type,
+        // timer: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, STEPPER_CLOCK_FREQ>,
     }
 
     #[init]
@@ -105,7 +146,7 @@ mod app {
         // assume the driver we use for this example doesn't provide hardware
         // support for that. Let's instantiate a motion profile from the RampMaker
         // library to provide a software fallback.
-        let profile = ramp_maker::Trapezoidal::new(target_accel);
+        let profile: Profile_Type = ramp_maker::Trapezoidal::new(target_accel);
 
         // Now we need to initialize the stepper API. We do this by initializing a
         // driver (`MyDriver`), then wrapping that into the generic API (`Stepper`).
@@ -123,17 +164,15 @@ mod app {
             );
         let mut timer: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, STEPPER_CLOCK_FREQ> =
             timer.counter();
-        // let mut timer = timer.counter();
-        let mut stepper: Stepper<
-            stepper::drivers::drv8825::DRV8825<(), (), (), (), (), (), (), _, _>,
-        > = Stepper::from_driver(stepper::drivers::drv8825::DRV8825::new())
-            // Enable direction control
-            .enable_direction_control(compat::Pin { 0: dir }, Direction::Forward, &mut timer)
-            .unwrap()
-            // Enable step control
-            .enable_step_control(compat::Pin { 0: step });
-        // // Enable motion control using the software fallback
-        // .enable_motion_control((timer, profile, DelayToTicks));
+        let mut stepper: New_Stepper_Type =
+            Stepper::from_driver(stepper::drivers::drv8825::DRV8825::new())
+                // Enable direction control
+                .enable_direction_control(compat::Pin { 0: dir }, Direction::Forward, &mut timer)
+                .unwrap()
+                // Enable step control
+                .enable_step_control(compat::Pin { 0: step })
+                // Enable motion control using the software fallback
+                .enable_motion_control((timer, profile, DelayToTicks));
 
         //////////////////////////
         //////////////////////////
@@ -144,7 +183,7 @@ mod app {
 
         task3::spawn().ok();
 
-        (Shared {}, Local { stepper, timer })
+        (Shared {}, Local { stepper })
     }
 
     // Optional idle, can be removed if not needed.
@@ -157,16 +196,32 @@ mod app {
         }
     }
 
-    #[task(priority = 3, local = [ stepper, timer ])]
+    #[task(priority = 3, local = [ stepper ])]
     async fn task3(mut cx: task3::Context) {
         defmt::debug!("Move motor!");
-        loop {
-            let target_step = 2000;
-            let max_speed = Num::from_num(0.0000138); // steps / tick; 1000 steps / s
-            cx.local.stepper.step(cx.local.timer).wait().unwrap();
-            // .move_to_position(max_speed, target_step)
-            // .wait()
-            Systick::delay(3.millis()).await;
+        let target_step = 200000;
+        let max_speed = Num::from_num(0.0000138); // steps / tick; 1000 steps / s
+                                                  // cx.local.stepper.step(cx.local.timer).wait().unwrap();
+        cx.local
+            .stepper
+            .move_to_position(max_speed, target_step)
+            .wait()
+            .unwrap();
+        // Systick::delay(1.millis()).await;
+    }
+
+    use num_traits::cast::ToPrimitive;
+    pub struct DelayToTicks;
+    impl<const TIMER_HZ: u32> stepper::motion_control::DelayToTicks<Num, TIMER_HZ> for DelayToTicks {
+        type Error = core::convert::Infallible;
+
+        fn delay_to_ticks(
+            &self,
+            delay: Num,
+        ) -> Result<fugit::TimerDurationU32<TIMER_HZ>, Self::Error> {
+            Ok(fugit::TimerDurationU32::<TIMER_HZ>::from_ticks(
+                Num::to_u32(&delay).expect("the delay to convert"),
+            ))
         }
     }
 }
