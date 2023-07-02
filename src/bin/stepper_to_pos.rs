@@ -153,8 +153,6 @@ mod app {
                 // Enable direction control
                 .enable_direction_control(compat::Pin { 0: dir }, Direction::Backward, &mut timer)
                 .unwrap()
-                // .enable_step_mode_control((), stepper::step_mode::StepMode32::Full, &mut timer)
-                // unwrap()
                 // Enable step control
                 .enable_step_control(compat::Pin { 0: step })
                 // Enable motion control using the software fallback
@@ -185,7 +183,7 @@ mod app {
     #[task(priority = 3, local = [ stepper ])]
     async fn task3(mut cx: task3::Context) {
         defmt::debug!("Move motor!");
-        let target_step = 20000;
+        let target_step = 2000000;
         let max_speed = Num::from_num(0.000013885);
 
         cx.local

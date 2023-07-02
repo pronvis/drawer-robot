@@ -143,8 +143,6 @@ mod app {
                 // Enable direction control
                 .enable_direction_control(compat::Pin { 0: dir }, Direction::Backward, &mut timer)
                 .unwrap()
-                // .enable_step_mode_control((), stepper::step_mode::StepMode32::Full, &mut timer)
-                // unwrap()
                 // Enable step control
                 .enable_step_control(compat::Pin { 0: step });
 
