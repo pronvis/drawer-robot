@@ -57,33 +57,13 @@ mod app {
         >,
     >;
 
-    type New_Stepper_Type = Stepper<
-        SoftwareMotionControl<
-            stepper::drivers::drv8825::DRV8825<
-                (),
-                (),
-                (),
-                (),
-                (),
-                (),
-                (),
-                compat::Pin<stm32f1xx_hal::gpio::Pin<'C', 14, stm32f1xx_hal::gpio::Output>>, //step pin
-                compat::Pin<stm32f1xx_hal::gpio::Pin<'C', 13, stm32f1xx_hal::gpio::Output>>, //dir pin
-            >,
-            stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, STEPPER_CLOCK_FREQ>,
-            Profile_Type,
-            DelayToTicks,
-            STEPPER_CLOCK_FREQ,
-        >,
-    >;
-
     #[shared]
     struct Shared {}
 
     #[local]
     struct Local {
-        stepper: New_Stepper_Type,
-        // timer: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, STEPPER_CLOCK_FREQ>,
+        stepper: Stepper_Type,
+        timer: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, STEPPER_CLOCK_FREQ>,
     }
 
     #[init]
@@ -139,14 +119,8 @@ mod app {
         // These values assume a 1 MHz (values were 0.001) timer, but that depends on the timer you're
         // using, of course.
         // TODO: calculate right values for your clock speed
-        let target_accel = Num::from_num(0.0000138); // steps / tick^2; 1000 steps / s^2
-        let max_speed = Num::from_num(0.0000138); // steps / tick; 1000 steps / s
-
-        // We want to use the high-level motion control API (see below), but let's
-        // assume the driver we use for this example doesn't provide hardware
-        // support for that. Let's instantiate a motion profile from the RampMaker
-        // library to provide a software fallback.
-        let profile: Profile_Type = ramp_maker::Trapezoidal::new(target_accel);
+        let target_accel = Num::from_num(0.0000008); // steps / tick^2; 1000 steps / s^2
+        let max_speed = Num::from_num(0.000000008);
 
         // Now we need to initialize the stepper API. We do this by initializing a
         // driver (`MyDriver`), then wrapping that into the generic API (`Stepper`).
@@ -164,15 +138,15 @@ mod app {
             );
         let mut timer: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, STEPPER_CLOCK_FREQ> =
             timer.counter();
-        let mut stepper: New_Stepper_Type =
+        let mut stepper: Stepper_Type =
             Stepper::from_driver(stepper::drivers::drv8825::DRV8825::new())
                 // Enable direction control
-                .enable_direction_control(compat::Pin { 0: dir }, Direction::Forward, &mut timer)
+                .enable_direction_control(compat::Pin { 0: dir }, Direction::Backward, &mut timer)
                 .unwrap()
+                // .enable_step_mode_control((), stepper::step_mode::StepMode32::Full, &mut timer)
+                // unwrap()
                 // Enable step control
-                .enable_step_control(compat::Pin { 0: step })
-                // Enable motion control using the software fallback
-                .enable_motion_control((timer, profile, DelayToTicks));
+                .enable_step_control(compat::Pin { 0: step });
 
         //////////////////////////
         //////////////////////////
@@ -183,7 +157,7 @@ mod app {
 
         task3::spawn().ok();
 
-        (Shared {}, Local { stepper })
+        (Shared {}, Local { stepper, timer })
     }
 
     // Optional idle, can be removed if not needed.
@@ -196,18 +170,20 @@ mod app {
         }
     }
 
-    #[task(priority = 3, local = [ stepper ])]
+    #[task(priority = 3, local = [ stepper, timer ])]
     async fn task3(mut cx: task3::Context) {
         defmt::debug!("Move motor!");
-        let target_step = 200000;
-        let max_speed = Num::from_num(0.0000138); // steps / tick; 1000 steps / s
-                                                  // cx.local.stepper.step(cx.local.timer).wait().unwrap();
+
         cx.local
             .stepper
-            .move_to_position(max_speed, target_step)
+            .set_direction(stepper::Direction::Forward, cx.local.timer)
             .wait()
             .unwrap();
-        // Systick::delay(1.millis()).await;
+
+        loop {
+            cx.local.stepper.step(cx.local.timer).wait().unwrap();
+            Systick::delay(2.millis()).await;
+        }
     }
 
     use num_traits::cast::ToPrimitive;
