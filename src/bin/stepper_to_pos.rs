@@ -124,7 +124,7 @@ mod app {
         // These values assume a 1 MHz (values were 0.001) timer, but that depends on the timer you're
         // using, of course.
         // TODO: calculate right values for your clock speed
-        let target_accel = Num::from_num(0.0000008); // steps / tick^2; 1000 steps / s^2
+        let target_accel = Num::from_num(0.000013885); // steps / tick^2; 1000 steps / s^2
 
         // We want to use the high-level motion control API (see below), but let's
         // assume the driver we use for this example doesn't provide hardware
@@ -185,8 +185,8 @@ mod app {
     #[task(priority = 3, local = [ stepper ])]
     async fn task3(mut cx: task3::Context) {
         defmt::debug!("Move motor!");
-        let target_step = -2000000;
-        let max_speed = Num::from_num(0.000000008);
+        let target_step = 20000;
+        let max_speed = Num::from_num(0.000013885);
 
         cx.local
             .stepper

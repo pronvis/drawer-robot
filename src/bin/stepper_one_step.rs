@@ -182,7 +182,7 @@ mod app {
 
         loop {
             cx.local.stepper.step(cx.local.timer).wait().unwrap();
-            Systick::delay(2.millis()).await;
+            Systick::delay(1000.micros()).await;
         }
     }
 
