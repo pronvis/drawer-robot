@@ -27,7 +27,7 @@ mod app {
         timer::{Counter, Event},
     };
 
-    const TIMER_CLOCK_FREQ: u32 = 12_000;
+    const TIMER_CLOCK_FREQ: u32 = 100_000; // with 150_000 `WrongAutoReload` happens
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
 
     #[shared]
@@ -132,7 +132,7 @@ mod app {
 
         // loop {
         // Changes timer update frequency
-        cx.local.timer_1.start(500.millis()).unwrap();
+        cx.local.timer_1.start(1900.nanos()).unwrap();
         // Clears the update flag
         cx.local.timer_1.clear_interrupt(Event::Update);
         defmt::debug!("delay1: after 1 secs");
