@@ -3,6 +3,12 @@
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 use defmt_brtt as _; // global logger
+use rtic_monotonics::systick::*;
+use stm32f1xx_hal::{
+    adc::{self, Adc},
+    device::ADC1,
+    prelude::*,
+};
 
 use panic_probe as _;
 
@@ -28,4 +34,25 @@ pub fn exit() -> ! {
     loop {
         cortex_m::asm::bkpt();
     }
+}
+
+pub async fn read_potent(
+    adc1: &mut Adc<ADC1>,
+    pb0: &mut stm32f1xx_hal::gpio::Pin<'B', 0, stm32f1xx_hal::gpio::Analog>,
+) -> u16 {
+    //sum 10 measurments - max value 4.1k, so 41k which can be still stored in u16
+    let mut sum: u16 = 0;
+    for _ in 0..10 {
+        let data: u16 = adc1.read(pb0).unwrap();
+        sum += data;
+        Systick::delay(10.millis()).await;
+    }
+
+    return sum / 10;
+}
+
+pub fn calc_steps_delay(potent_value: u16) -> u32 {
+    let min_delay: u32 = 700_000;
+    let potent_shift: u32 = u32::from(potent_value) / 100 * 30_000;
+    return min_delay + potent_shift;
 }

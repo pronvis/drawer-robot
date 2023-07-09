@@ -13,33 +13,33 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 )]
 mod app {
 
+    use drawer_robot::*;
     use rtic_monotonics::systick::*;
+    use rtic_sync::{channel::*, make_channel};
     use stepper::{
         compat, fugit::NanosDurationU32 as Nanoseconds, motion_control,
         motion_control::SoftwareMotionControl, ramp_maker, Direction, Stepper,
     };
     use stm32f1xx_hal::{
-        gpio::PinState,
+        adc::{self, Adc},
+        device::ADC1,
         pac,
         prelude::*,
         rcc,
-        rcc::*,
         timer::Timer,
-        timer::{Counter, Event},
     };
 
-    const TIMER_CLOCK_FREQ: u32 = 1_000_000; // step = 1000 nanos
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
+    const CHANNEL_CAPACITY: usize = 1;
 
     #[shared]
-    struct Shared {
-        nanos_between_steps: u32,
-    }
+    struct Shared {}
 
     #[local]
     struct Local {
         step_pin: stm32f1xx_hal::gpio::Pin<'C', 14, stm32f1xx_hal::gpio::Output>,
-        timer_1: Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>,
+        adc1: Adc<ADC1>,
+        pb0: stm32f1xx_hal::gpio::Pin<'B', 0, stm32f1xx_hal::gpio::Analog>,
     }
 
     #[init]
@@ -68,30 +68,39 @@ mod app {
 
         // Acquire the GPIOC peripheral
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
-        let step_pin = gpioc
-            .pc14
-            .into_push_pull_output_with_state(&mut gpioc.crh, PinState::Low);
+
+        ////////////////////////////
+        ////////////////////////////
+        // Motor Driver Configuration
+
+        let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
+        // let step = gpioc.pc6.into_push_pull_output(&mut gpioc.crl);
+        //let dir = gpiob.pb15.into_push_pull_output(&mut gpiob.crl);
 
         let mut en = gpioc.pc15.into_push_pull_output(&mut gpioc.crh);
         en.set_low();
+        let step = gpioc.pc14.into_push_pull_output(&mut gpioc.crh);
+        let mut dir = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
+        dir.set_low();
 
-        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>::new(
-            cx.device.TIM1,
-            &clocks,
-        );
-        let mut timer_1: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ> =
-            timer.counter();
-        timer_1.start(2000.nanos()).unwrap();
-        timer_1.listen(Event::Update);
+        let mut adc1 = adc::Adc::adc1(cx.device.ADC1, clocks);
+        // Configure pb0 as an analog input
+        let mut pb0 = gpiob.pb0.into_analog(&mut gpiob.crl);
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token); // default STM32F303 clock-rate is 36MHz
 
+        let (sender, receiver) = make_channel!(u32, CHANNEL_CAPACITY);
+        task::spawn(receiver).ok();
+        task1::spawn(sender).ok();
+
         (
-            Shared {
-                nanos_between_steps: 1_000_000,
+            Shared {},
+            Local {
+                step_pin: step,
+                adc1,
+                pb0,
             },
-            Local { step_pin, timer_1 },
         )
     }
 
@@ -105,21 +114,39 @@ mod app {
         }
     }
 
-    #[task(binds = TIM1_UP, priority = 3, local = [  timer_1, step_pin, is_step: bool = true], shared = [&nanos_between_steps])]
-    fn delay_task_1(mut cx: delay_task_1::Context) {
-        if *cx.local.is_step {
-            cx.local.step_pin.set_low();
-            *cx.local.is_step = false;
-            cx.local
-                .timer_1
-                .start(cx.shared.nanos_between_steps.nanos())
-                .unwrap();
-        } else {
-            cx.local.step_pin.set_high();
-            *cx.local.is_step = true;
-            cx.local.timer_1.start(2000.nanos()).unwrap();
-        }
+    #[task(priority = 2, local = [ step_pin, current_delay: u32 = 1_000_000])]
+    async fn task(cx: task::Context, mut receiver: Receiver<'static, u32, CHANNEL_CAPACITY>) {
+        defmt::debug!("Move motor!");
 
-        cx.local.timer_1.clear_interrupt(Event::Update);
+        loop {
+            cx.local.step_pin.set_high();
+            Systick::delay(2000.nanos()).await;
+            cx.local.step_pin.set_low();
+            Systick::delay(2000.nanos()).await;
+
+            if !receiver.is_empty() {
+                let new_delay = receiver.try_recv().unwrap();
+                if new_delay != *cx.local.current_delay {
+                    *cx.local.current_delay = new_delay;
+                    defmt::debug!("new delay: {}", new_delay);
+                }
+            }
+            Systick::delay(cx.local.current_delay.nanos()).await;
+        }
+    }
+
+    #[task(priority = 1, local = [adc1, pb0])]
+    async fn task1(cx: task1::Context, mut sender: Sender<'static, u32, CHANNEL_CAPACITY>) {
+        // potentiometr min value: 0; max: 4100
+
+        loop {
+            let potent_value = read_potent(cx.local.adc1, cx.local.pb0).await;
+            let new_steps_delay = calc_steps_delay(potent_value);
+            if sender.is_empty() {
+                sender.send(new_steps_delay).await.unwrap();
+            }
+
+            Systick::delay(500.millis()).await;
+        }
     }
 }
