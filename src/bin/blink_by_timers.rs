@@ -27,7 +27,7 @@ mod app {
         timer::{Counter, Event},
     };
 
-    const TIMER_CLOCK_FREQ: u32 = 100_000; // with 150_000 `WrongAutoReload` happens
+    const TIMER_CLOCK_FREQ: u32 = 72_000; // means timer counter would increment each 1 millis
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
 
     #[shared]
@@ -35,8 +35,8 @@ mod app {
 
     #[local]
     struct Local {
-        led: stm32f1xx_hal::gpio::Pin<'C', 13, stm32f1xx_hal::gpio::Output>,
-        step_pin: stm32f1xx_hal::gpio::Pin<'B', 12, stm32f1xx_hal::gpio::Output>,
+        internal_led: stm32f1xx_hal::gpio::Pin<'C', 13, stm32f1xx_hal::gpio::Output>,
+        out_led: stm32f1xx_hal::gpio::Pin<'B', 12, stm32f1xx_hal::gpio::Output>,
         timer_1: Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>,
         timer_2: Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>,
     }
@@ -67,12 +67,12 @@ mod app {
 
         // Acquire the GPIOC peripheral
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
-        let led = gpioc
+        let internal_led = gpioc
             .pc13
             .into_push_pull_output_with_state(&mut gpioc.crh, PinState::Low);
 
         let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
-        let step_pin = gpiob
+        let out_led = gpiob
             .pb12
             .into_push_pull_output_with_state(&mut gpiob.crh, PinState::Low);
 
@@ -100,8 +100,8 @@ mod app {
         (
             Shared {},
             Local {
-                led,
-                step_pin,
+                internal_led,
+                out_led,
                 timer_1,
                 timer_2,
             },
@@ -118,21 +118,21 @@ mod app {
         }
     }
 
-    #[task(binds = TIM1_UP, priority = 3, local = [  timer_1, step_pin, led_state: bool = true])]
+    #[task(binds = TIM1_UP, priority = 3, local = [  timer_1, internal_led, led_state: bool = true])]
     fn delay_task_1(mut cx: delay_task_1::Context) {
         defmt::debug!("delay1: timer task");
         if *cx.local.led_state {
             // Uses resources managed by rtic to turn led off (on bluepill)
-            cx.local.step_pin.set_high();
+            cx.local.internal_led.set_high();
             *cx.local.led_state = false;
         } else {
-            cx.local.step_pin.set_low();
+            cx.local.internal_led.set_low();
             *cx.local.led_state = true;
         }
 
         // loop {
         // Changes timer update frequency
-        cx.local.timer_1.start(1900.nanos()).unwrap();
+        cx.local.timer_1.start(300.millis()).unwrap();
         // Clears the update flag
         cx.local.timer_1.clear_interrupt(Event::Update);
         defmt::debug!("delay1: after 1 secs");
@@ -142,21 +142,21 @@ mod app {
         // }
     }
 
-    #[task(binds = TIM2, priority = 4, local = [  timer_2, led, led_state: bool = true ])]
+    #[task(binds = TIM2, priority = 4, local = [  timer_2, out_led, led_state: bool = true ])]
     fn delay_task_2(mut cx: delay_task_2::Context) {
         defmt::debug!("delay2: timer task");
 
         if *cx.local.led_state {
             // Uses resources managed by rtic to turn led off (on bluepill)
-            cx.local.led.set_high();
+            cx.local.out_led.set_high();
             *cx.local.led_state = false;
         } else {
-            cx.local.led.set_low();
+            cx.local.out_led.set_low();
             *cx.local.led_state = true;
         }
         // loop {
         // Changes timer update frequency
-        cx.local.timer_2.start(500.millis()).unwrap();
+        cx.local.timer_2.start(700.millis()).unwrap();
         // Clears the update flag
         cx.local.timer_2.clear_interrupt(Event::Update);
         defmt::debug!("delay2: after 1 secs");
