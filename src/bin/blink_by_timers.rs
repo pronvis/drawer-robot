@@ -27,7 +27,7 @@ mod app {
         timer::{Counter, Event},
     };
 
-    const TIMER_CLOCK_FREQ: u32 = 72_000; // means timer counter would increment each 1 millis
+    const TIMER_CLOCK_FREQ: u32 = 72_000;
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
 
     #[shared]

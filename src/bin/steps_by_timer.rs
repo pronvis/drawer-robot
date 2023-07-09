@@ -18,16 +18,28 @@ mod app {
         compat, fugit::NanosDurationU32 as Nanoseconds, motion_control,
         motion_control::SoftwareMotionControl, ramp_maker, Direction, Stepper,
     };
-    use stm32f1xx_hal::{pac, prelude::*, rcc, timer::Timer};
+    use stm32f1xx_hal::{
+        gpio::PinState,
+        pac,
+        prelude::*,
+        rcc,
+        rcc::*,
+        timer::Timer,
+        timer::{Counter, Event},
+    };
 
+    const TIMER_CLOCK_FREQ: u32 = 1_000_000; // step = 1000 nanos
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
 
     #[shared]
-    struct Shared {}
+    struct Shared {
+        nanos_between_steps: u32,
+    }
 
     #[local]
     struct Local {
         step_pin: stm32f1xx_hal::gpio::Pin<'C', 14, stm32f1xx_hal::gpio::Output>,
+        timer_1: Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>,
     }
 
     #[init]
@@ -56,27 +68,38 @@ mod app {
 
         // Acquire the GPIOC peripheral
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
-
-        ////////////////////////////
-        ////////////////////////////
-        // Motor Driver Configuration
-
-        let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
-        // let step = gpioc.pc6.into_push_pull_output(&mut gpioc.crl);
-        //let dir = gpiob.pb15.into_push_pull_output(&mut gpiob.crl);
+        let step_pin = gpioc
+            .pc14
+            .into_push_pull_output_with_state(&mut gpioc.crh, PinState::Low);
 
         let mut en = gpioc.pc15.into_push_pull_output(&mut gpioc.crh);
         en.set_low();
-        let step = gpioc.pc14.into_push_pull_output(&mut gpioc.crh);
-        let mut dir = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
-        dir.set_low();
+
+        let clk = stm32f1xx_hal::pac::TIM1::timer_clock(&clocks);
+        defmt::debug!("clk.raw(): {}", clk.raw());
+        let psc = clk.raw() / TIMER_CLOCK_FREQ;
+        defmt::debug!("psc: {}", psc);
+        let xxx = u16::try_from(psc - 1).unwrap();
+        defmt::debug!("xxx: {}", xxx);
+
+        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>::new(
+            cx.device.TIM1,
+            &clocks,
+        );
+        let mut timer_1: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ> =
+            timer.counter();
+        timer_1.start(2000.nanos()).unwrap();
+        timer_1.listen(Event::Update);
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token); // default STM32F303 clock-rate is 36MHz
 
-        task::spawn().ok();
-
-        (Shared {}, Local { step_pin: step })
+        (
+            Shared {
+                nanos_between_steps: 800_000,
+            },
+            Local { step_pin, timer_1 },
+        )
     }
 
     // Optional idle, can be removed if not needed.
@@ -89,16 +112,21 @@ mod app {
         }
     }
 
-    #[task(priority = 3, local = [ step_pin ])]
-    async fn task(mut cx: task::Context) {
-        defmt::debug!("Move motor!");
-
-        loop {
-            cx.local.step_pin.set_high();
-            Systick::delay(2000.nanos()).await;
+    #[task(binds = TIM1_UP, priority = 3, local = [  timer_1, step_pin, is_step: bool = true], shared = [&nanos_between_steps])]
+    fn delay_task_1(mut cx: delay_task_1::Context) {
+        if *cx.local.is_step {
             cx.local.step_pin.set_low();
-            Systick::delay(2000.nanos()).await;
-            Systick::delay(1_000_000.nanos()).await;
+            *cx.local.is_step = false;
+            cx.local
+                .timer_1
+                .start(cx.shared.nanos_between_steps.nanos())
+                .unwrap();
+        } else {
+            cx.local.step_pin.set_high();
+            *cx.local.is_step = true;
+            cx.local.timer_1.start(2000.nanos()).unwrap();
         }
+
+        cx.local.timer_1.clear_interrupt(Event::Update);
     }
 }
