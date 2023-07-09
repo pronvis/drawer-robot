@@ -14,11 +14,14 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 mod app {
 
     use rtic_monotonics::systick::*;
+    use rtic_sync::{channel::*, make_channel};
     use stepper::{
         compat, fugit::NanosDurationU32 as Nanoseconds, motion_control,
         motion_control::SoftwareMotionControl, ramp_maker, Direction, Stepper,
     };
     use stm32f1xx_hal::{
+        adc::{self, Adc},
+        device::ADC1,
         gpio::PinState,
         pac,
         prelude::*,
@@ -30,16 +33,18 @@ mod app {
 
     const TIMER_CLOCK_FREQ: u32 = 1_000_000; // step = 1000 nanos
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
+    const CHANNEL_CAPACITY: usize = 1;
 
     #[shared]
-    struct Shared {
-        nanos_between_steps: u32,
-    }
+    struct Shared {}
 
     #[local]
     struct Local {
         step_pin: stm32f1xx_hal::gpio::Pin<'C', 14, stm32f1xx_hal::gpio::Output>,
         timer_1: Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>,
+        adc1: Adc<ADC1>,
+        pb0: stm32f1xx_hal::gpio::Pin<'B', 0, stm32f1xx_hal::gpio::Analog>,
+        receiver: Receiver<'static, u32, CHANNEL_CAPACITY>,
     }
 
     #[init]
@@ -75,6 +80,11 @@ mod app {
         let mut en = gpioc.pc15.into_push_pull_output(&mut gpioc.crh);
         en.set_low();
 
+        let mut adc1 = adc::Adc::adc1(cx.device.ADC1, clocks);
+        let mut gpiob = cx.device.GPIOB.split();
+        // Configure pb0 as an analog input
+        let mut pb0 = gpiob.pb0.into_analog(&mut gpiob.crl);
+
         let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>::new(
             cx.device.TIM1,
             &clocks,
@@ -85,13 +95,20 @@ mod app {
         timer_1.listen(Event::Update);
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
-        Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token); // default STM32F303 clock-rate is 36MHz
+        Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
 
+        let critical_section: rtic::export::CriticalSection = cx.cs;
+        let (sender, receiver) = make_channel!(u32, CHANNEL_CAPACITY);
+        task1::spawn(sender).ok();
         (
-            Shared {
-                nanos_between_steps: 800_000,
+            Shared {},
+            Local {
+                step_pin,
+                timer_1,
+                adc1,
+                pb0,
+                receiver,
             },
-            Local { step_pin, timer_1 },
         )
     }
 
@@ -105,14 +122,22 @@ mod app {
         }
     }
 
-    #[task(binds = TIM1_UP, priority = 3, local = [  timer_1, step_pin, is_step: bool = true], shared = [&nanos_between_steps])]
+    #[task(binds = TIM1_UP, priority = 3, local = [  timer_1, step_pin,receiver, is_step: bool = true, current_delay: u32 = 1_000_000])]
     fn delay_task_1(mut cx: delay_task_1::Context) {
+        if cx.local.receiver.is_full() {
+            let new_delay = cx.local.receiver.try_recv().unwrap();
+            if new_delay != *cx.local.current_delay {
+                *cx.local.current_delay = new_delay;
+                defmt::debug!("new delay: {}", new_delay);
+            }
+        }
+
         if *cx.local.is_step {
             cx.local.step_pin.set_low();
             *cx.local.is_step = false;
             cx.local
                 .timer_1
-                .start(cx.shared.nanos_between_steps.nanos())
+                .start(cx.local.current_delay.nanos())
                 .unwrap();
         } else {
             cx.local.step_pin.set_high();
@@ -121,5 +146,40 @@ mod app {
         }
 
         cx.local.timer_1.clear_interrupt(Event::Update);
+    }
+
+    #[task(priority = 1, local = [adc1, pb0])]
+    async fn task1(cx: task1::Context, mut sender: Sender<'static, u32, CHANNEL_CAPACITY>) {
+        // potentiometr min value: 0; max: 4100
+
+        loop {
+            let potent_value = read_potent(cx.local.adc1, cx.local.pb0).await;
+            let new_steps_delay = calc_steps_delay(potent_value);
+            if sender.is_empty() {
+                sender.send(new_steps_delay).await.unwrap();
+            }
+            Systick::delay(500.millis()).await;
+        }
+    }
+
+    async fn read_potent(
+        adc1: &mut Adc<ADC1>,
+        pb0: &mut stm32f1xx_hal::gpio::Pin<'B', 0, stm32f1xx_hal::gpio::Analog>,
+    ) -> u16 {
+        //sum 10 measurments - max value 4.1k, so 41k which can be still stored in u16
+        let mut sum: u16 = 0;
+        for _ in 0..10 {
+            let data: u16 = adc1.read(pb0).unwrap();
+            sum += data;
+            Systick::delay(10.millis()).await;
+        }
+
+        return sum / 10;
+    }
+
+    fn calc_steps_delay(potent_value: u16) -> u32 {
+        let min_delay: u32 = 700_000;
+        let potent_shift: u32 = u32::from(potent_value) / 100 * 30_000;
+        return min_delay + potent_shift;
     }
 }
