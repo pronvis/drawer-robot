@@ -219,6 +219,10 @@ mod app {
         }
     }
 
+    const max_val: u32 = 1500; // step = 100_000 nanos, 100 micros
+    const min_val: u32 = 200; // step = 100_000 nanos, 100 micros
+    const step_val: u32 = 100; // step = 100_000 nanos, 100 micros
+
     #[task(priority = 1, local = [ default_stepper_1, increasing: bool = true ])]
     async fn speed_changer(
         cx: speed_changer::Context,
@@ -228,22 +232,22 @@ mod app {
         mut sender_4: Sender<'static, u32, CHANNEL_CAPACITY>,
     ) {
         loop {
-            Systick::delay(100.millis()).await;
+            Systick::delay(1000.millis()).await;
 
             if *cx.local.increasing {
-                cx.local.default_stepper_1.micros_between_steps += 100;
+                cx.local.default_stepper_1.micros_between_steps += step_val;
             } else {
-                cx.local.default_stepper_1.micros_between_steps -= 100;
+                cx.local.default_stepper_1.micros_between_steps -= step_val;
             }
 
-            if cx.local.default_stepper_1.micros_between_steps > 1500 {
+            if cx.local.default_stepper_1.micros_between_steps > max_val {
                 *cx.local.increasing = false;
-                cx.local.default_stepper_1.micros_between_steps = 1400;
+                cx.local.default_stepper_1.micros_between_steps = max_val - step_val;
             }
 
-            if cx.local.default_stepper_1.micros_between_steps < 300 {
+            if cx.local.default_stepper_1.micros_between_steps < min_val {
                 *cx.local.increasing = true;
-                cx.local.default_stepper_1.micros_between_steps = 400;
+                cx.local.default_stepper_1.micros_between_steps = min_val + step_val;
             }
 
             sender_1
