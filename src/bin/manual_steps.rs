@@ -52,11 +52,12 @@ mod app {
         }
 
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
+        let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
 
-        let mut en = gpioc.pc15.into_push_pull_output(&mut gpioc.crh);
+        let mut en = gpioc.pc7.into_push_pull_output(&mut gpioc.crl);
         en.set_low();
-        let step = gpioc.pc14.into_push_pull_output(&mut gpioc.crh);
-        let mut dir = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
+        let step = gpioc.pc6.into_push_pull_output(&mut gpioc.crl);
+        let mut dir = gpiob.pb15.into_push_pull_output(&mut gpiob.crh);
         dir.set_low();
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
@@ -84,9 +85,9 @@ mod app {
         loop {
             cx.local.step_pin.set_high();
             // we dont need manual delay cause "legs" delay is enough here
-            // Systick::delay(4000.nanos()).await;
+            Systick::delay(2000.nanos()).await;
             cx.local.step_pin.set_low();
-            // Systick::delay(4000.nanos()).await;
+            Systick::delay(2000.nanos()).await;
             Systick::delay(1_000_000.nanos()).await;
         }
     }

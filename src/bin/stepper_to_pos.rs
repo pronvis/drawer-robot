@@ -104,10 +104,10 @@ mod app {
         // Motor Driver Configuration
 
         let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
-        let mut en = gpioc.pc15.into_push_pull_output(&mut gpioc.crh);
+        let mut en = gpioc.pc7.into_push_pull_output(&mut gpioc.crl);
         en.set_low();
-        let step = gpioc.pc14.into_push_pull_output(&mut gpioc.crh);
-        let mut dir = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
+        let step = gpioc.pc6.into_push_pull_output(&mut gpioc.crl);
+        let mut dir = gpiob.pb15.into_push_pull_output(&mut gpiob.crh);
         dir.set_low();
         // Define the numeric type we're going to use. We'll use a fixed-point type
         // here, as that's the most widely supported. If your target hardware has
