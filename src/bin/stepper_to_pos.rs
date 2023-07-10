@@ -20,6 +20,7 @@ mod app {
     };
     use stm32f1xx_hal::{pac, prelude::*, rcc, timer::Timer};
 
+    const TIMER_CLOCK_FREQ: u32 = 72_000_000;
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
 
     type Num = fixed::FixedI64<typenum::U32>;
@@ -56,10 +57,10 @@ mod app {
                 compat::Pin<stm32f1xx_hal::gpio::Pin<'C', 14, stm32f1xx_hal::gpio::Output>>, //step pin
                 compat::Pin<stm32f1xx_hal::gpio::Pin<'C', 13, stm32f1xx_hal::gpio::Output>>, //dir pin
             >,
-            stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, STEPPER_CLOCK_FREQ>,
+            stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>,
             Profile_Type,
             DelayToTicks,
-            STEPPER_CLOCK_FREQ,
+            TIMER_CLOCK_FREQ,
         >,
     >;
 
@@ -142,11 +143,11 @@ mod app {
         // they also don't require any hardware resources, which makes them easier
         // to use when you don't need all features.
         let mut timer =
-            stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM2, STEPPER_CLOCK_FREQ>::new(
+            stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>::new(
                 cx.device.TIM2,
                 &clocks,
             );
-        let mut timer: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, STEPPER_CLOCK_FREQ> =
+        let mut timer: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ> =
             timer.counter();
         let mut stepper: Stepper_Type =
             Stepper::from_driver(stepper::drivers::drv8825::DRV8825::new())

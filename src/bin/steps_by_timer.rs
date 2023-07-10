@@ -28,7 +28,7 @@ mod app {
         timer::{Counter, Event},
     };
 
-    const TIMER_CLOCK_FREQ: u32 = 1_000_000; // step = 1000 nanos
+    const TIMER_CLOCK_FREQ: u32 = 72_000_000; // step = 1000 nanos
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
 
     #[shared]
@@ -89,7 +89,7 @@ mod app {
 
         (
             Shared {
-                nanos_between_steps: 1_000_000,
+                nanos_between_steps: 910_000,
             },
             Local { step_pin, timer_1 },
         )
@@ -117,7 +117,7 @@ mod app {
         } else {
             cx.local.step_pin.set_high();
             *cx.local.is_step = true;
-            cx.local.timer_1.start(2000.nanos()).unwrap();
+            cx.local.timer_1.start(1900.nanos()).unwrap();
         }
 
         cx.local.timer_1.clear_interrupt(Event::Update);

@@ -95,9 +95,9 @@ mod app {
 
         loop {
             cx.local.step_pin.set_high();
-            Systick::delay(2000.nanos()).await;
+            // Systick::delay(4000.nanos()).await;
             cx.local.step_pin.set_low();
-            Systick::delay(2000.nanos()).await;
+            // Systick::delay(4000.nanos()).await;
             Systick::delay(1_000_000.nanos()).await;
         }
     }

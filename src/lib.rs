@@ -53,6 +53,6 @@ pub async fn read_potent(
 
 pub fn calc_steps_delay(potent_value: u16) -> u32 {
     let min_delay: u32 = 700_000;
-    let potent_shift: u32 = u32::from(potent_value) / 100 * 30_000;
+    let potent_shift: u32 = u32::from(potent_value) / 100 * 30_0000;
     return min_delay + potent_shift;
 }
