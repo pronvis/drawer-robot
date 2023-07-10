@@ -14,6 +14,19 @@ use panic_probe as _;
 
 use stm32f1xx_hal as _; // memory layout
 
+// BLUE PILL PINS
+pub type EnPin = stm32f1xx_hal::gpio::Pin<'C', 15, stm32f1xx_hal::gpio::Output>;
+pub type StepPin = stm32f1xx_hal::gpio::Pin<'C', 14, stm32f1xx_hal::gpio::Output>;
+pub type DirPin = stm32f1xx_hal::gpio::Pin<'C', 13, stm32f1xx_hal::gpio::Output>;
+pub type InternalLed = stm32f1xx_hal::gpio::Pin<'C', 13, stm32f1xx_hal::gpio::Output>;
+pub type OutLed = stm32f1xx_hal::gpio::Pin<'B', 12, stm32f1xx_hal::gpio::Output>;
+
+// BigTreeTech SKR E3-DIP v1.1
+// X-PINS
+// pub type EnPin = stm32f1xx_hal::gpio::Pin<'C', 7, stm32f1xx_hal::gpio::Output>;
+// pub type StepPin = stm32f1xx_hal::gpio::Pin<'C', 6, stm32f1xx_hal::gpio::Output>;
+// pub type DirPin = stm32f1xx_hal::gpio::Pin<'B', 15, stm32f1xx_hal::gpio::Output>;
+
 // same panicking *behavior* as `panic-probe` but doesn't print a panic message
 // this prevents the panic message being printed *twice* when `defmt::panic` is invoked
 #[defmt::panic_handler]

@@ -13,17 +13,14 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 )]
 mod app {
 
+    use drawer_robot::*;
     use rtic_monotonics::systick::*;
-    use stm32f1xx_hal::{pac, prelude::*, rcc, timer::Timer};
+    use stm32f1xx_hal::{prelude::*, rcc};
 
     // Shared resources go here
     #[shared]
     struct Shared {
-        // for BigTreeTech SKR E3-DIP v1.1
-        // led: stm32f1xx_hal::gpio::Pin<'C', 1, stm32f1xx_hal::gpio::Output>,
-
-        // for BluePill
-        led: stm32f1xx_hal::gpio::Pin<'B', 12, stm32f1xx_hal::gpio::Output>,
+        led: OutLed,
     }
 
     // Local resources go here
@@ -37,7 +34,7 @@ mod app {
         // Take ownership over the raw flash and rcc devices and convert them into the corresponding
         // HAL structs
         let mut flash: stm32f1xx_hal::flash::Parts = cx.device.FLASH.constrain();
-        let mut rcc: stm32f1xx_hal::rcc::Rcc = cx.device.RCC.constrain();
+        let rcc: stm32f1xx_hal::rcc::Rcc = cx.device.RCC.constrain();
 
         // Freeze the configuration of all the clocks in the system and store the frozen frequencies in
         // `clocks`
@@ -55,13 +52,11 @@ mod app {
         }
 
         // Acquire the GPIOC peripheral
-        let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
-        let mut gpiod: stm32f1xx_hal::gpio::gpiod::Parts = cx.device.GPIOD.split();
         let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
         let led = gpiob.pb12.into_push_pull_output(&mut gpiob.crh);
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
-        Systick::start(cx.core.SYST, 72_000_000, systick_mono_token); // default STM32F303 clock-rate is 36MHz
+        Systick::start(cx.core.SYST, 72_000_000, systick_mono_token);
 
         task1::spawn().ok();
         task2::spawn().ok();
@@ -79,7 +74,6 @@ mod app {
         }
     }
 
-    // TODO: Add tasks
     #[task(priority = 1, shared = [led])]
     async fn task1(mut cx: task1::Context) {
         loop {

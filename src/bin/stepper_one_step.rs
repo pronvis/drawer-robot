@@ -13,12 +13,13 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 )]
 mod app {
 
+    use drawer_robot::*;
     use rtic_monotonics::systick::*;
     use stepper::{
         compat, fugit::NanosDurationU32 as Nanoseconds, motion_control,
         motion_control::SoftwareMotionControl, ramp_maker, Direction, Stepper,
     };
-    use stm32f1xx_hal::{pac, prelude::*, rcc, timer::Timer};
+    use stm32f1xx_hal::{pac, prelude::*};
 
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
 
@@ -52,8 +53,8 @@ mod app {
             (),
             (),
             (),
-            compat::Pin<stm32f1xx_hal::gpio::Pin<'C', 14, stm32f1xx_hal::gpio::Output>>, //step pin
-            compat::Pin<stm32f1xx_hal::gpio::Pin<'C', 13, stm32f1xx_hal::gpio::Output>>, //dir pin
+            compat::Pin<StepPin>,
+            compat::Pin<DirPin>,
         >,
     >;
 
@@ -67,13 +68,13 @@ mod app {
     }
 
     #[init]
-    fn init(mut cx: init::Context) -> (Shared, Local) {
+    fn init(cx: init::Context) -> (Shared, Local) {
         defmt::info!("init");
 
         // Take ownership over the raw flash and rcc devices and convert them into the corresponding
         // HAL structs
         let mut flash: stm32f1xx_hal::flash::Parts = cx.device.FLASH.constrain();
-        let mut rcc: stm32f1xx_hal::rcc::Rcc = cx.device.RCC.constrain();
+        let rcc: stm32f1xx_hal::rcc::Rcc = cx.device.RCC.constrain();
 
         // Freeze the configuration of all the clocks in the system and store the frozen frequencies in
         // `clocks`
@@ -97,7 +98,7 @@ mod app {
         ////////////////////////////
         // Motor Driver Configuration
 
-        let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
+        let gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
         // let step = gpioc.pc6.into_push_pull_output(&mut gpioc.crl);
         //let dir = gpiob.pb15.into_push_pull_output(&mut gpiob.crl);
 
@@ -138,20 +139,19 @@ mod app {
             );
         let mut timer: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, STEPPER_CLOCK_FREQ> =
             timer.counter();
-        let mut stepper: Stepper_Type =
-            Stepper::from_driver(stepper::drivers::drv8825::DRV8825::new())
-                // Enable direction control
-                .enable_direction_control(compat::Pin { 0: dir }, Direction::Backward, &mut timer)
-                .unwrap()
-                // Enable step control
-                .enable_step_control(compat::Pin { 0: step });
+        let stepper: Stepper_Type = Stepper::from_driver(stepper::drivers::drv8825::DRV8825::new())
+            // Enable direction control
+            .enable_direction_control(compat::Pin { 0: dir }, Direction::Backward, &mut timer)
+            .unwrap()
+            // Enable step control
+            .enable_step_control(compat::Pin { 0: step });
 
         //////////////////////////
         //////////////////////////
         //////////////////////////
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
-        Systick::start(cx.core.SYST, 72_000_000, systick_mono_token); // default STM32F303 clock-rate is 36MHz
+        Systick::start(cx.core.SYST, 72_000_000, systick_mono_token);
 
         task3::spawn().ok();
 

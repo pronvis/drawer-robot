@@ -16,17 +16,11 @@ mod app {
     use drawer_robot::*;
     use rtic_monotonics::systick::*;
     use rtic_sync::{channel::*, make_channel};
-    use stepper::{
-        compat, fugit::NanosDurationU32 as Nanoseconds, motion_control,
-        motion_control::SoftwareMotionControl, ramp_maker, Direction, Stepper,
-    };
     use stm32f1xx_hal::{
         adc::{self, Adc},
         device::ADC1,
         pac,
         prelude::*,
-        rcc,
-        timer::Timer,
     };
 
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
@@ -37,7 +31,7 @@ mod app {
 
     #[local]
     struct Local {
-        step_pin: stm32f1xx_hal::gpio::Pin<'C', 14, stm32f1xx_hal::gpio::Output>,
+        step_pin: StepPin,
         adc1: Adc<ADC1>,
         pb0: stm32f1xx_hal::gpio::Pin<'B', 0, stm32f1xx_hal::gpio::Analog>,
     }
@@ -74,8 +68,6 @@ mod app {
         // Motor Driver Configuration
 
         let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
-        // let step = gpioc.pc6.into_push_pull_output(&mut gpioc.crl);
-        //let dir = gpiob.pb15.into_push_pull_output(&mut gpiob.crl);
 
         let mut en = gpioc.pc15.into_push_pull_output(&mut gpioc.crh);
         en.set_low();
@@ -88,7 +80,7 @@ mod app {
         let mut pb0 = gpiob.pb0.into_analog(&mut gpiob.crl);
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
-        Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token); // default STM32F303 clock-rate is 36MHz
+        Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
 
         let (sender, receiver) = make_channel!(u32, CHANNEL_CAPACITY);
         task::spawn(receiver).ok();

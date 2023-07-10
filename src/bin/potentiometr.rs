@@ -19,9 +19,6 @@ mod app {
         device::ADC1,
         pac,
         prelude::*,
-        prelude::*,
-        rcc,
-        timer::Timer,
     };
 
     // Shared resources go here
@@ -62,15 +59,15 @@ mod app {
             panic!("Clock parameter values are wrong!");
         }
 
-        let mut adc1 = adc::Adc::adc1(cx.device.ADC1, clocks);
+        let adc1 = adc::Adc::adc1(cx.device.ADC1, clocks);
         let mut gpiob = cx.device.GPIOB.split();
         // Configure pb0 as an analog input
-        let mut pb0 = gpiob.pb0.into_analog(&mut gpiob.crl);
+        let pb0 = gpiob.pb0.into_analog(&mut gpiob.crl);
 
         task1::spawn().ok();
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
-        Systick::start(cx.core.SYST, 72_000_000, systick_mono_token); // default STM32F303 clock-rate is 36MHz
+        Systick::start(cx.core.SYST, 72_000_000, systick_mono_token);
 
         (Shared {}, Local { adc1, pb0 })
     }

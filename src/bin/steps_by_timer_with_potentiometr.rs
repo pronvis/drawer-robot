@@ -26,13 +26,10 @@ mod app {
         gpio::PinState,
         pac,
         prelude::*,
-        rcc,
-        rcc::*,
-        timer::Timer,
         timer::{Counter, Event},
     };
 
-    const TIMER_CLOCK_FREQ: u32 = 1_000_000; // step = 1000 nanos
+    const TIMER_CLOCK_FREQ: u32 = 1_000_000;
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
     const CHANNEL_CAPACITY: usize = 1;
 
@@ -41,7 +38,7 @@ mod app {
 
     #[local]
     struct Local {
-        step_pin: stm32f1xx_hal::gpio::Pin<'C', 14, stm32f1xx_hal::gpio::Output>,
+        step_pin: StepPin,
         timer_1: Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>,
         adc1: Adc<ADC1>,
         pb0: stm32f1xx_hal::gpio::Pin<'B', 0, stm32f1xx_hal::gpio::Analog>,

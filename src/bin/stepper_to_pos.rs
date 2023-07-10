@@ -13,6 +13,7 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 )]
 mod app {
 
+    use drawer_robot::*;
     use rtic_monotonics::systick::*;
     use stepper::{
         compat, fugit::NanosDurationU32 as Nanoseconds, motion_control,
@@ -25,7 +26,6 @@ mod app {
 
     type Num = fixed::FixedI64<typenum::U32>;
 
-    // type Profile_Type = ramp_maker::Trapezoidal<fixed::FixedI64<Num>>;
     type Profile_Type = ramp_maker::Trapezoidal<
         fixed::FixedI64<
             typenum::UInt<
@@ -54,8 +54,8 @@ mod app {
                 (),
                 (),
                 (),
-                compat::Pin<stm32f1xx_hal::gpio::Pin<'C', 14, stm32f1xx_hal::gpio::Output>>, //step pin
-                compat::Pin<stm32f1xx_hal::gpio::Pin<'C', 13, stm32f1xx_hal::gpio::Output>>, //dir pin
+                compat::Pin<StepPin>,
+                compat::Pin<DirPin>,
             >,
             stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>,
             Profile_Type,
@@ -73,13 +73,13 @@ mod app {
     }
 
     #[init]
-    fn init(mut cx: init::Context) -> (Shared, Local) {
+    fn init(cx: init::Context) -> (Shared, Local) {
         defmt::info!("init");
 
         // Take ownership over the raw flash and rcc devices and convert them into the corresponding
         // HAL structs
         let mut flash: stm32f1xx_hal::flash::Parts = cx.device.FLASH.constrain();
-        let mut rcc: stm32f1xx_hal::rcc::Rcc = cx.device.RCC.constrain();
+        let rcc: stm32f1xx_hal::rcc::Rcc = cx.device.RCC.constrain();
 
         // Freeze the configuration of all the clocks in the system and store the frozen frequencies in
         // `clocks`
@@ -104,9 +104,6 @@ mod app {
         // Motor Driver Configuration
 
         let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
-        // let step = gpioc.pc6.into_push_pull_output(&mut gpioc.crl);
-        //let dir = gpiob.pb15.into_push_pull_output(&mut gpiob.crl);
-
         let mut en = gpioc.pc15.into_push_pull_output(&mut gpioc.crh);
         en.set_low();
         let step = gpioc.pc14.into_push_pull_output(&mut gpioc.crh);
@@ -164,7 +161,7 @@ mod app {
         //////////////////////////
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
-        Systick::start(cx.core.SYST, 72_000_000, systick_mono_token); // default STM32F303 clock-rate is 36MHz
+        Systick::start(cx.core.SYST, 72_000_000, systick_mono_token);
 
         task3::spawn().ok();
 

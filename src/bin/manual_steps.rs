@@ -13,12 +13,9 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 )]
 mod app {
 
+    use drawer_robot::*;
     use rtic_monotonics::systick::*;
-    use stepper::{
-        compat, fugit::NanosDurationU32 as Nanoseconds, motion_control,
-        motion_control::SoftwareMotionControl, ramp_maker, Direction, Stepper,
-    };
-    use stm32f1xx_hal::{pac, prelude::*, rcc, timer::Timer};
+    use stm32f1xx_hal::{pac, prelude::*};
 
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
 
@@ -27,7 +24,7 @@ mod app {
 
     #[local]
     struct Local {
-        step_pin: stm32f1xx_hal::gpio::Pin<'C', 14, stm32f1xx_hal::gpio::Output>,
+        step_pin: StepPin,
     }
 
     #[init]
@@ -54,16 +51,7 @@ mod app {
             panic!("Clock parameter values are wrong!");
         }
 
-        // Acquire the GPIOC peripheral
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
-
-        ////////////////////////////
-        ////////////////////////////
-        // Motor Driver Configuration
-
-        let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
-        // let step = gpioc.pc6.into_push_pull_output(&mut gpioc.crl);
-        //let dir = gpiob.pb15.into_push_pull_output(&mut gpiob.crl);
 
         let mut en = gpioc.pc15.into_push_pull_output(&mut gpioc.crh);
         en.set_low();
@@ -72,7 +60,7 @@ mod app {
         dir.set_low();
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
-        Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token); // default STM32F303 clock-rate is 36MHz
+        Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
 
         task::spawn().ok();
 
@@ -90,11 +78,12 @@ mod app {
     }
 
     #[task(priority = 3, local = [ step_pin ])]
-    async fn task(mut cx: task::Context) {
+    async fn task(cx: task::Context) {
         defmt::debug!("Move motor!");
 
         loop {
             cx.local.step_pin.set_high();
+            // we dont need manual delay cause "legs" delay is enough here
             // Systick::delay(4000.nanos()).await;
             cx.local.step_pin.set_low();
             // Systick::delay(4000.nanos()).await;

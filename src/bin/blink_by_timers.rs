@@ -13,6 +13,7 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 )]
 mod app {
 
+    use drawer_robot::*;
     use rtic_monotonics::systick::*;
     use stepper::{
         compat, fugit::NanosDurationU32 as Nanoseconds, motion_control,
@@ -22,8 +23,6 @@ mod app {
         gpio::PinState,
         pac,
         prelude::*,
-        rcc,
-        timer::Timer,
         timer::{Counter, Event},
     };
 
@@ -35,8 +34,8 @@ mod app {
 
     #[local]
     struct Local {
-        internal_led: stm32f1xx_hal::gpio::Pin<'C', 13, stm32f1xx_hal::gpio::Output>,
-        out_led: stm32f1xx_hal::gpio::Pin<'B', 12, stm32f1xx_hal::gpio::Output>,
+        internal_led: InternalLed,
+        out_led: OutLed,
         timer_1: Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>,
         timer_2: Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>,
     }
@@ -95,7 +94,7 @@ mod app {
         timer_2.listen(Event::Update);
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
-        Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token); // default STM32F303 clock-rate is 36MHz
+        Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
 
         (
             Shared {},
@@ -122,7 +121,6 @@ mod app {
     fn delay_task_1(mut cx: delay_task_1::Context) {
         defmt::debug!("delay1: timer task");
         if *cx.local.led_state {
-            // Uses resources managed by rtic to turn led off (on bluepill)
             cx.local.internal_led.set_high();
             *cx.local.led_state = false;
         } else {
@@ -130,16 +128,9 @@ mod app {
             *cx.local.led_state = true;
         }
 
-        // loop {
-        // Changes timer update frequency
         cx.local.timer_1.start(300.millis()).unwrap();
-        // Clears the update flag
         cx.local.timer_1.clear_interrupt(Event::Update);
         defmt::debug!("delay1: after 1 secs");
-        // cx.local.timer_1.start(1000.millis()).unwrap();
-        // cx.local.timer_1.clear_interrupt(Event::Update);
-        // defmt::debug!("delay1: after 500 millis");
-        // }
     }
 
     #[task(binds = TIM2, priority = 4, local = [  timer_2, out_led, led_state: bool = true ])]
@@ -147,17 +138,13 @@ mod app {
         defmt::debug!("delay2: timer task");
 
         if *cx.local.led_state {
-            // Uses resources managed by rtic to turn led off (on bluepill)
             cx.local.out_led.set_high();
             *cx.local.led_state = false;
         } else {
             cx.local.out_led.set_low();
             *cx.local.led_state = true;
         }
-        // loop {
-        // Changes timer update frequency
         cx.local.timer_2.start(700.millis()).unwrap();
-        // Clears the update flag
         cx.local.timer_2.clear_interrupt(Event::Update);
         defmt::debug!("delay2: after 1 secs");
     }
