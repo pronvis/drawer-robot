@@ -18,6 +18,7 @@ stm32f1xx-hal = { version = "0.10.0", features = ["rt", "stm32f103", "high", "st
 rtic-monotonics = { version = "1.0.0", features = [ "cortex-m-systick" ]}
 stepper = "0.6.0"
 ramp-maker = "0.2.0"
+embedded-hal = "0.2.7"
 
 # looks like we need that for stepper
 fugit = "0.3.5"

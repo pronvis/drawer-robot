@@ -35,6 +35,10 @@ mod app {
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
     const CHANNEL_CAPACITY: usize = 1;
 
+    pub type X_EnPin = stm32f1xx_hal::gpio::Pin<'C', 7, stm32f1xx_hal::gpio::Output>;
+    pub type X_StepPin = stm32f1xx_hal::gpio::Pin<'C', 6, stm32f1xx_hal::gpio::Output>;
+    pub type X_DirPin = stm32f1xx_hal::gpio::Pin<'B', 15, stm32f1xx_hal::gpio::Output>;
+
     pub type Y_EnPin = stm32f1xx_hal::gpio::Pin<'B', 16, stm32f1xx_hal::gpio::Output>;
     pub type Y_StepPin = stm32f1xx_hal::gpio::Pin<'B', 13, stm32f1xx_hal::gpio::Output>;
     pub type Y_DirPin = stm32f1xx_hal::gpio::Pin<'B', 12, stm32f1xx_hal::gpio::Output>;
@@ -54,33 +58,18 @@ mod app {
 
     #[local]
     struct Local {
-        step_pin: StepPin,
-        timer_1: Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>,
-        timer_2: Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>,
-        timer_3: Counter<stm32f1xx_hal::pac::TIM3, TIMER_CLOCK_FREQ>,
-        timer_4: Counter<stm32f1xx_hal::pac::TIM4, TIMER_CLOCK_FREQ>,
-        y_step_pin: Y_StepPin,
-        z_step_pin: Z_StepPin,
-        e_step_pin: E_StepPin,
-        default_stepper_1: MyStepperState,
-        default_stepper_2: MyStepperState,
-        default_stepper_3: MyStepperState,
-        default_stepper_4: MyStepperState,
-        default_stepper_5: MyStepperState,
-        stepper_receiver_1: Receiver<'static, u32, CHANNEL_CAPACITY>,
-        stepper_receiver_2: Receiver<'static, u32, CHANNEL_CAPACITY>,
-        stepper_receiver_3: Receiver<'static, u32, CHANNEL_CAPACITY>,
-        stepper_receiver_4: Receiver<'static, u32, CHANNEL_CAPACITY>,
+        micros_between_steps: u32,
+        stepper_1: MyStepper<stm32f1xx_hal::pac::TIM2, X_StepPin, TIMER_CLOCK_FREQ>,
+        stepper_2: MyStepper<stm32f1xx_hal::pac::TIM3, Y_StepPin, TIMER_CLOCK_FREQ>,
+        stepper_3: MyStepper<stm32f1xx_hal::pac::TIM4, Z_StepPin, TIMER_CLOCK_FREQ>,
+        stepper_4: MyStepper<stm32f1xx_hal::pac::TIM5, E_StepPin, TIMER_CLOCK_FREQ>,
     }
 
     #[init]
     fn init(mut cx: init::Context) -> (Shared, Local) {
         defmt::info!("init");
 
-        let mut stepper_state = MyStepperState {
-            micros_between_steps: 1500,
-            micros_pulse_duration: 200,
-        };
+        let mut stepper_state = MyStepperState::new(1500, 200);
 
         // Take ownership over the raw flash and rcc devices and convert them into the corresponding
         // HAL structs
@@ -105,7 +94,7 @@ mod app {
         // Acquire the GPIOC peripheral
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
         let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
-        let step_pin = gpioc
+        let x_step_pin = gpioc
             .pc6
             .into_push_pull_output_with_state(&mut gpioc.crl, PinState::Low);
         let y_step_pin = gpiob
@@ -118,8 +107,8 @@ mod app {
             .pb0
             .into_push_pull_output_with_state(&mut gpiob.crl, PinState::Low);
 
-        let mut en = gpioc.pc7.into_push_pull_output(&mut gpioc.crl);
-        en.set_low();
+        let mut x_en = gpioc.pc7.into_push_pull_output(&mut gpioc.crl);
+        x_en.set_low();
 
         let mut y_en = gpiob.pb14.into_push_pull_output(&mut gpiob.crh);
         y_en.set_low();
@@ -129,17 +118,6 @@ mod app {
 
         let mut e_en = gpiob.pb1.into_push_pull_output(&mut gpiob.crl);
         e_en.set_low();
-
-        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>::new(
-            cx.device.TIM1,
-            &clocks,
-        );
-        let mut timer_1: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ> =
-            timer.counter();
-        timer_1
-            .start(stepper_state.micros_pulse_duration.micros())
-            .unwrap();
-        timer_1.listen(Event::Update);
 
         let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>::new(
             cx.device.TIM2,
@@ -174,37 +152,69 @@ mod app {
             .unwrap();
         timer_4.listen(Event::Update);
 
+        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM5, TIMER_CLOCK_FREQ>::new(
+            cx.device.TIM5,
+            &clocks,
+        );
+        let mut timer_5: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM5, TIMER_CLOCK_FREQ> =
+            timer.counter();
+        timer_5
+            .start(stepper_state.micros_pulse_duration.micros())
+            .unwrap();
+        timer_5.listen(Event::Update);
+
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
 
-        let (sender_1, stepper_receiver_1) = make_channel!(u32, CHANNEL_CAPACITY);
-        let (sender_2, stepper_receiver_2) = make_channel!(u32, CHANNEL_CAPACITY);
-        let (sender_3, stepper_receiver_3) = make_channel!(u32, CHANNEL_CAPACITY);
-        let (sender_4, stepper_receiver_4) = make_channel!(u32, CHANNEL_CAPACITY);
+        let (sender_1, stepper_1_commands_receiver) =
+            make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
+        let (sender_2, stepper_2_commands_receiver) =
+            make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
+        let (sender_3, stepper_3_commands_receiver) =
+            make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
+        let (sender_4, stepper_4_commands_receiver) =
+            make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
         speed_changer::spawn(sender_1, sender_2, sender_3, sender_4).ok();
+
+        let stepper_1 = MyStepper::new(
+            1,
+            stepper_state.clone(),
+            timer_2,
+            x_step_pin,
+            stepper_1_commands_receiver,
+        );
+        let stepper_2 = MyStepper::new(
+            2,
+            stepper_state.clone(),
+            timer_3,
+            y_step_pin,
+            stepper_2_commands_receiver,
+        );
+        let stepper_3 = MyStepper::new(
+            3,
+            stepper_state.clone(),
+            timer_4,
+            z_step_pin,
+            stepper_3_commands_receiver,
+        );
+        let stepper_4 = MyStepper::new(
+            4,
+            stepper_state.clone(),
+            timer_5,
+            e_step_pin,
+            stepper_4_commands_receiver,
+        );
 
         (
             Shared {
                 stepper_state: stepper_state.clone(),
             },
             Local {
-                step_pin,
-                timer_1,
-                timer_2,
-                timer_3,
-                timer_4,
-                y_step_pin,
-                z_step_pin,
-                e_step_pin,
-                default_stepper_1: stepper_state.clone(),
-                default_stepper_2: stepper_state.clone(),
-                default_stepper_3: stepper_state.clone(),
-                default_stepper_4: stepper_state.clone(),
-                default_stepper_5: stepper_state.clone(),
-                stepper_receiver_1,
-                stepper_receiver_2,
-                stepper_receiver_3,
-                stepper_receiver_4,
+                micros_between_steps: MIN_DELAY_BETWEEN_STEPS,
+                stepper_1,
+                stepper_2,
+                stepper_3,
+                stepper_4,
             },
         )
     }
@@ -219,170 +229,76 @@ mod app {
         }
     }
 
-    const max_val: u32 = 1500; // step = 100_000 nanos, 100 micros
-    const min_val: u32 = 200; // step = 100_000 nanos, 100 micros
-    const step_val: u32 = 100; // step = 100_000 nanos, 100 micros
-
-    #[task(priority = 1, local = [ default_stepper_1, increasing: bool = true ])]
+    #[task(priority = 3, local = [ micros_between_steps, increasing: bool = true, stop_index: u8 = 0 ])]
     async fn speed_changer(
         cx: speed_changer::Context,
-        mut sender_1: Sender<'static, u32, CHANNEL_CAPACITY>,
-        mut sender_2: Sender<'static, u32, CHANNEL_CAPACITY>,
-        mut sender_3: Sender<'static, u32, CHANNEL_CAPACITY>,
-        mut sender_4: Sender<'static, u32, CHANNEL_CAPACITY>,
+        mut sender_1: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
+        mut sender_2: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
+        mut sender_3: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
+        mut sender_4: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
     ) {
         loop {
-            Systick::delay(1000.millis()).await;
+            Systick::delay(200.millis()).await;
+
+            if *cx.local.stop_index == 25 {
+                *cx.local.stop_index = 0;
+                let command = MyStepperCommands::Stay;
+
+                sender_1.send(command.clone()).await.unwrap();
+                sender_2.send(command.clone()).await.unwrap();
+                sender_3.send(command.clone()).await.unwrap();
+                sender_4.send(command.clone()).await.unwrap();
+
+                Systick::delay(500.millis()).await;
+                continue;
+            }
 
             if *cx.local.increasing {
-                cx.local.default_stepper_1.micros_between_steps += step_val;
+                *cx.local.micros_between_steps += DELAY_BETWEEN_STEPS_STEP;
             } else {
-                cx.local.default_stepper_1.micros_between_steps -= step_val;
+                *cx.local.micros_between_steps -= DELAY_BETWEEN_STEPS_STEP;
             }
 
-            if cx.local.default_stepper_1.micros_between_steps > max_val {
+            if *cx.local.micros_between_steps > MAX_DELAY_BETWEEN_STEPS {
                 *cx.local.increasing = false;
-                cx.local.default_stepper_1.micros_between_steps = max_val - step_val;
+                *cx.local.micros_between_steps = MAX_DELAY_BETWEEN_STEPS - DELAY_BETWEEN_STEPS_STEP;
             }
 
-            if cx.local.default_stepper_1.micros_between_steps < min_val {
+            if *cx.local.micros_between_steps < MIN_DELAY_BETWEEN_STEPS {
                 *cx.local.increasing = true;
-                cx.local.default_stepper_1.micros_between_steps = min_val + step_val;
+                *cx.local.micros_between_steps = MIN_DELAY_BETWEEN_STEPS + DELAY_BETWEEN_STEPS_STEP;
             }
 
-            sender_1
-                .send(cx.local.default_stepper_1.micros_between_steps)
-                .await
-                .unwrap();
-            sender_2
-                .send(cx.local.default_stepper_1.micros_between_steps)
-                .await
-                .unwrap();
-            sender_3
-                .send(cx.local.default_stepper_1.micros_between_steps)
-                .await
-                .unwrap();
-            sender_4
-                .send(cx.local.default_stepper_1.micros_between_steps)
-                .await
-                .unwrap();
+            let command = MyStepperCommands::Move(
+                (*cx.local.micros_between_steps / DELAY_BETWEEN_STEPS_STEP) as u8,
+            );
+
+            sender_1.send(command.clone()).await.unwrap();
+            sender_2.send(command.clone()).await.unwrap();
+            sender_3.send(command.clone()).await.unwrap();
+            sender_4.send(command.clone()).await.unwrap();
+
+            *cx.local.stop_index += 1;
         }
     }
 
-    #[task(binds = TIM1_UP, priority = 3, local = [  default_stepper_2, stepper_receiver_1, timer_1, step_pin, is_step: bool = true])]
+    #[task(binds = TIM2, priority = 3, local = [ stepper_1 ])]
     fn delay_task_1(cx: delay_task_1::Context) {
-        if !cx.local.stepper_receiver_1.is_empty() {
-            let new_micros_between_steps = cx.local.stepper_receiver_1.try_recv().unwrap();
-            cx.local.default_stepper_2.micros_between_steps = new_micros_between_steps;
-            defmt::info!(
-                "new speed on stepper_1: {}",
-                cx.local.default_stepper_2.micros_between_steps
-            );
-        }
-
-        if *cx.local.is_step {
-            cx.local.step_pin.set_low();
-            *cx.local.is_step = false;
-            cx.local
-                .timer_1
-                .start(cx.local.default_stepper_2.micros_between_steps.micros())
-                .unwrap();
-        } else {
-            cx.local.step_pin.set_high();
-            *cx.local.is_step = true;
-            cx.local
-                .timer_1
-                .start(cx.local.default_stepper_2.micros_pulse_duration.micros())
-                .unwrap();
-        }
-
-        cx.local.timer_1.clear_interrupt(Event::Update);
+        cx.local.stepper_1.work();
     }
 
-    #[task(binds = TIM2, priority = 3, local = [  default_stepper_3, stepper_receiver_2, timer_2, y_step_pin, is_step: bool = true])]
+    #[task(binds = TIM3, priority = 3, local = [ stepper_2 ])]
     fn delay_task_2(cx: delay_task_2::Context) {
-        if !cx.local.stepper_receiver_2.is_empty() {
-            let new_micros_between_steps = cx.local.stepper_receiver_2.try_recv().unwrap();
-            cx.local.default_stepper_3.micros_between_steps = new_micros_between_steps;
-            defmt::info!(
-                "new speed on stepper_2: {}",
-                cx.local.default_stepper_3.micros_between_steps
-            );
-        }
-        if *cx.local.is_step {
-            cx.local.y_step_pin.set_low();
-            *cx.local.is_step = false;
-            cx.local
-                .timer_2
-                .start(cx.local.default_stepper_3.micros_between_steps.micros())
-                .unwrap();
-        } else {
-            cx.local.y_step_pin.set_high();
-            *cx.local.is_step = true;
-            cx.local
-                .timer_2
-                .start(cx.local.default_stepper_3.micros_pulse_duration.micros())
-                .unwrap();
-        }
-
-        cx.local.timer_2.clear_interrupt(Event::Update);
+        cx.local.stepper_2.work();
     }
 
-    #[task(binds = TIM3, priority = 3, local = [  default_stepper_4, stepper_receiver_3, timer_3, z_step_pin, is_step: bool = true])]
+    #[task(binds = TIM4, priority = 3, local = [ stepper_3 ])]
     fn delay_task_3(cx: delay_task_3::Context) {
-        if !cx.local.stepper_receiver_3.is_empty() {
-            let new_micros_between_steps = cx.local.stepper_receiver_3.try_recv().unwrap();
-            cx.local.default_stepper_4.micros_between_steps = new_micros_between_steps;
-            defmt::info!(
-                "new speed on stepper_3: {}",
-                cx.local.default_stepper_4.micros_between_steps
-            );
-        }
-        if *cx.local.is_step {
-            cx.local.z_step_pin.set_low();
-            *cx.local.is_step = false;
-            cx.local
-                .timer_3
-                .start(cx.local.default_stepper_4.micros_between_steps.micros())
-                .unwrap();
-        } else {
-            cx.local.z_step_pin.set_high();
-            *cx.local.is_step = true;
-            cx.local
-                .timer_3
-                .start(cx.local.default_stepper_4.micros_pulse_duration.micros())
-                .unwrap();
-        }
-
-        cx.local.timer_3.clear_interrupt(Event::Update);
+        cx.local.stepper_3.work();
     }
 
-    #[task(binds = TIM4, priority = 3, local = [  default_stepper_5, stepper_receiver_4, timer_4, e_step_pin, is_step: bool = true])]
+    #[task(binds = TIM5, priority = 3, local = [ stepper_4 ])]
     fn delay_task_4(cx: delay_task_4::Context) {
-        if !cx.local.stepper_receiver_4.is_empty() {
-            let new_micros_between_steps = cx.local.stepper_receiver_4.try_recv().unwrap();
-            cx.local.default_stepper_5.micros_between_steps = new_micros_between_steps;
-            defmt::info!(
-                "new speed on stepper_4: {}",
-                cx.local.default_stepper_5.micros_between_steps
-            );
-        }
-        if *cx.local.is_step {
-            cx.local.e_step_pin.set_low();
-            *cx.local.is_step = false;
-            cx.local
-                .timer_4
-                .start(cx.local.default_stepper_5.micros_between_steps.micros())
-                .unwrap();
-        } else {
-            cx.local.e_step_pin.set_high();
-            *cx.local.is_step = true;
-            cx.local
-                .timer_4
-                .start(cx.local.default_stepper_5.micros_pulse_duration.micros())
-                .unwrap();
-        }
-
-        cx.local.timer_4.clear_interrupt(Event::Update);
+        cx.local.stepper_4.work();
     }
 }
