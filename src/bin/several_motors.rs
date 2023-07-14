@@ -58,7 +58,7 @@ mod app {
 
     #[local]
     struct Local {
-        micros_between_steps: u32,
+        speed: u8,
         stepper_1: MyStepper<stm32f1xx_hal::pac::TIM2, X_StepPin, TIMER_CLOCK_FREQ>,
         stepper_2: MyStepper<stm32f1xx_hal::pac::TIM3, Y_StepPin, TIMER_CLOCK_FREQ>,
         stepper_3: MyStepper<stm32f1xx_hal::pac::TIM4, Z_StepPin, TIMER_CLOCK_FREQ>,
@@ -210,7 +210,7 @@ mod app {
                 stepper_state: stepper_state.clone(),
             },
             Local {
-                micros_between_steps: MIN_DELAY_BETWEEN_STEPS,
+                speed: 0,
                 stepper_1,
                 stepper_2,
                 stepper_3,
@@ -229,7 +229,7 @@ mod app {
         }
     }
 
-    #[task(priority = 3, local = [ micros_between_steps, increasing: bool = true, stop_index: u8 = 0 ])]
+    #[task(priority = 3, local = [ speed, increasing: bool = true, stop_index: u8 = 0 ])]
     async fn speed_changer(
         cx: speed_changer::Context,
         mut sender_1: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
@@ -240,45 +240,43 @@ mod app {
         loop {
             Systick::delay(200.millis()).await;
 
-            if *cx.local.stop_index == 25 {
-                *cx.local.stop_index = 0;
-                let command = MyStepperCommands::Stay;
+            // if *cx.local.stop_index == 25 {
+            //     *cx.local.stop_index = 0;
+            //     let command = MyStepperCommands::Stay;
 
-                sender_1.send(command.clone()).await.unwrap();
-                sender_2.send(command.clone()).await.unwrap();
-                sender_3.send(command.clone()).await.unwrap();
-                sender_4.send(command.clone()).await.unwrap();
+            //     sender_1.send(command.clone()).await.unwrap();
+            //     sender_2.send(command.clone()).await.unwrap();
+            //     sender_3.send(command.clone()).await.unwrap();
+            //     sender_4.send(command.clone()).await.unwrap();
 
-                Systick::delay(500.millis()).await;
-                continue;
-            }
+            //     Systick::delay(500.millis()).await;
+            //     continue;
+            // }
 
             if *cx.local.increasing {
-                *cx.local.micros_between_steps += DELAY_BETWEEN_STEPS_STEP;
+                *cx.local.speed += 1;
             } else {
-                *cx.local.micros_between_steps -= DELAY_BETWEEN_STEPS_STEP;
+                *cx.local.speed -= 1;
             }
 
-            if *cx.local.micros_between_steps > MAX_DELAY_BETWEEN_STEPS {
+            if *cx.local.speed > MAX_SPEED_VAL {
                 *cx.local.increasing = false;
-                *cx.local.micros_between_steps = MAX_DELAY_BETWEEN_STEPS - DELAY_BETWEEN_STEPS_STEP;
+                *cx.local.speed = MAX_SPEED_VAL - 1;
             }
 
-            if *cx.local.micros_between_steps < MIN_DELAY_BETWEEN_STEPS {
+            if *cx.local.speed == 0 {
                 *cx.local.increasing = true;
-                *cx.local.micros_between_steps = MIN_DELAY_BETWEEN_STEPS + DELAY_BETWEEN_STEPS_STEP;
             }
 
-            let command = MyStepperCommands::Move(
-                (*cx.local.micros_between_steps / DELAY_BETWEEN_STEPS_STEP) as u8,
-            );
+            let command = MyStepperCommands::Move(*cx.local.speed);
+            defmt::debug!("command: {:?}", cx.local.speed);
 
             sender_1.send(command.clone()).await.unwrap();
             sender_2.send(command.clone()).await.unwrap();
             sender_3.send(command.clone()).await.unwrap();
             sender_4.send(command.clone()).await.unwrap();
 
-            *cx.local.stop_index += 1;
+            // *cx.local.stop_index += 1;
         }
     }
 
