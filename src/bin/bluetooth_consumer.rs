@@ -69,7 +69,7 @@ mod app {
 
         let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
         let tx_pin = gpiob.pb10.into_alternate_push_pull(&mut gpiob.crh);
-        let rx_pin = gpiob.pb11; //.into_pull_down_input(&mut gpiob.crh);
+        let rx_pin = gpiob.pb11;
 
         let channels = cx.device.DMA1.split();
         let mut afio = cx.device.AFIO.constrain();
@@ -87,10 +87,9 @@ mod app {
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
-        // bluetooth_reader::spawn().ok();
 
         serial.listen(stm32f1xx_hal::serial::Event::Rxne);
-        rx.listen();
+        let (tx, mut rx) = serial.split();
         (
             Shared {},
             Local {
