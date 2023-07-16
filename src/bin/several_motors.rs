@@ -269,8 +269,6 @@ mod app {
             }
 
             let command = MyStepperCommands::Move(*cx.local.speed);
-            defmt::debug!("command: {:?}", cx.local.speed);
-
             sender_1.send(command.clone()).await.unwrap();
             sender_2.send(command.clone()).await.unwrap();
             sender_3.send(command.clone()).await.unwrap();

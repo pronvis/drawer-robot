@@ -36,7 +36,7 @@ impl MyStepperState {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum MyStepperCommands {
     Stay,
     Move(u8),
