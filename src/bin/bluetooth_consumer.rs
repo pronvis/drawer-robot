@@ -73,7 +73,7 @@ mod app {
 
         let channels = cx.device.DMA1.split();
         let mut afio = cx.device.AFIO.constrain();
-        let serial = Serial::new(
+        let mut serial = Serial::new(
             cx.device.USART3,
             (tx_pin, rx_pin),
             &mut afio.mapr,
@@ -87,9 +87,10 @@ mod app {
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
-        bluetooth_reader::spawn().ok();
+        // bluetooth_reader::spawn().ok();
 
-        let (tx, rx) = serial.split();
+        serial.listen(stm32f1xx_hal::serial::Event::Rxne);
+        rx.listen();
         (
             Shared {},
             Local {
@@ -109,9 +110,8 @@ mod app {
         }
     }
 
-    // #[task(binds = USART3, priority = 3, local = [  rx_pin, tx_pin  ])]
-    #[task(priority = 3, local = [ rx_pin, tx_pin ])]
-    async fn bluetooth_reader(cx: bluetooth_reader::Context) {
+    #[task(binds = USART3, priority = 1, local = [  rx_pin, tx_pin  ])]
+    fn bluetooth_reader(cx: bluetooth_reader::Context) {
         let rx = cx.local.rx_pin;
         loop {
             // let sent = b'X';
@@ -130,10 +130,7 @@ mod app {
                         defmt::debug!("read err: {:?}", defmt::Debug2Format(&err));
                     }
                 }
-            } else {
-                defmt::debug!("is empty: true");
             }
-            Systick::delay(500.millis()).await;
         }
     }
 }
