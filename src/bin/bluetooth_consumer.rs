@@ -33,7 +33,6 @@ mod app {
     };
 
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
-    pub type TX_PIN = stm32f1xx_hal::gpio::Pin<'B', 10, stm32f1xx_hal::gpio::Alternate>;
 
     #[shared]
     struct Shared {}
@@ -45,7 +44,7 @@ mod app {
     }
 
     #[init]
-    fn init(mut cx: init::Context) -> (Shared, Local) {
+    fn init(cx: init::Context) -> (Shared, Local) {
         defmt::info!("init");
 
         // Take ownership over the raw flash and rcc devices and convert them into the corresponding
@@ -68,21 +67,20 @@ mod app {
             panic!("Clock parameter values are wrong!");
         }
 
-        // Acquire the GPIOC peripheral
-        let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
         let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
-
         let tx_pin = gpiob.pb10.into_alternate_push_pull(&mut gpiob.crh);
-        let rx = gpiob.pb11; //.into_pull_down_input(&mut gpiob.crh);
+        let rx_pin = gpiob.pb11; //.into_pull_down_input(&mut gpiob.crh);
 
+        let channels = cx.device.DMA1.split();
         let mut afio = cx.device.AFIO.constrain();
-        let mut serial = Serial::new(
+        let serial = Serial::new(
             cx.device.USART3,
-            (tx_pin, rx),
+            (tx_pin, rx_pin),
             &mut afio.mapr,
             Config::default()
                 .baudrate(9600.bps())
                 .wordlength_8bits()
+                .stopbits(stm32f1xx_hal::serial::StopBits::STOP1)
                 .parity_none(),
             &clocks,
         );
@@ -91,7 +89,7 @@ mod app {
         Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
         bluetooth_reader::spawn().ok();
 
-        let (mut tx, mut rx) = serial.split();
+        let (tx, rx) = serial.split();
         (
             Shared {},
             Local {
@@ -111,21 +109,29 @@ mod app {
         }
     }
 
+    // #[task(binds = USART3, priority = 3, local = [  rx_pin, tx_pin  ])]
     #[task(priority = 3, local = [ rx_pin, tx_pin ])]
     async fn bluetooth_reader(cx: bluetooth_reader::Context) {
         let rx = cx.local.rx_pin;
         loop {
-            let sent = b'X';
-            match cx.local.tx_pin.write(sent) {
-                Ok(_) => defmt::debug!("write successful"),
-                Err(_) => defmt::debug!("fail to write"),
-            }
-            defmt::debug!("is non empty: {}", rx.is_rx_not_empty());
-            let received = rx.read();
-            match received {
-                Ok(read) => defmt::debug!("receive: {}", read),
+            // let sent = b'X';
+            // match cx.local.tx_pin.write(sent) {
+            //     Ok(_) => defmt::debug!("write successful"),
+            //     Err(_) => defmt::debug!("fail to write"),
+            // }
 
-                Err(_) => defmt::debug!("read err"),
+            if rx.is_rx_not_empty() {
+                defmt::debug!("is empty: false");
+                let received = rx.read();
+                match received {
+                    Ok(read) => defmt::debug!("receive: {}", read),
+
+                    Err(err) => {
+                        defmt::debug!("read err: {:?}", defmt::Debug2Format(&err));
+                    }
+                }
+            } else {
+                defmt::debug!("is empty: true");
             }
             Systick::delay(500.millis()).await;
         }
