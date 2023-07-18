@@ -5,7 +5,9 @@ use stm32f1xx_hal::timer::{Counter, Event, Instance};
 
 pub const CHANNEL_CAPACITY: usize = 1;
 // I use 1/2 microstep mode, so min speed = 200
+// with delay = 200 speed of a thread on a coil with diameter 40mm = 7.85 mm/s
 pub const MIN_DELAY_BETWEEN_STEPS: u32 = 200;
+// with delay = 1500 speed of a thread on a coil with diameter 40mm = 1.84 mm/s
 pub const MAX_DELAY_BETWEEN_STEPS: u32 = 1500;
 pub const DELAY_BETWEEN_STEPS_STEP: u32 = 100;
 pub const MAX_SPEED_VAL: u8 =
