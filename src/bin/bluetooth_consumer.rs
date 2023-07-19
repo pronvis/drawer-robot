@@ -112,16 +112,14 @@ mod app {
     #[task(binds = USART3, priority = 1, local = [  rx_usart3, tx_usart3  ])]
     fn bluetooth_reader(cx: bluetooth_reader::Context) {
         let rx = cx.local.rx_usart3;
-        loop {
-            if rx.is_rx_not_empty() {
-                defmt::debug!("is empty: false");
-                let received = rx.read();
-                match received {
-                    Ok(read) => defmt::debug!("receive: {}", read),
+        if rx.is_rx_not_empty() {
+            defmt::debug!("is empty: false");
+            let received = rx.read();
+            match received {
+                Ok(read) => defmt::debug!("receive: {}", read),
 
-                    Err(err) => {
-                        defmt::debug!("read err: {:?}", defmt::Debug2Format(&err));
-                    }
+                Err(err) => {
+                    defmt::debug!("read err: {:?}", defmt::Debug2Format(&err));
                 }
             }
         }

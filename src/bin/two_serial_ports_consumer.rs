@@ -133,16 +133,14 @@ mod app {
     #[task(binds = USART2, priority = 1, local = [  rx_usart2, tx_usart2  ])]
     fn esp32_reader(cx: esp32_reader::Context) {
         let rx = cx.local.rx_usart2;
-        loop {
-            if rx.is_rx_not_empty() {
-                defmt::debug!("receive data from esp32");
-                let received = rx.read();
-                match received {
-                    Ok(read) => defmt::debug!("data from esp32: {}", read),
+        if rx.is_rx_not_empty() {
+            defmt::debug!("receive data from esp32");
+            let received = rx.read();
+            match received {
+                Ok(read) => defmt::debug!("data from esp32: {}", read),
 
-                    Err(err) => {
-                        defmt::debug!("data from esp32 read err: {:?}", defmt::Debug2Format(&err));
-                    }
+                Err(err) => {
+                    defmt::debug!("data from esp32 read err: {:?}", defmt::Debug2Format(&err));
                 }
             }
         }
@@ -151,19 +149,17 @@ mod app {
     #[task(binds = USART3, priority = 1, local = [  rx_usart3, tx_usart3  ])]
     fn bluetooth_reader(cx: bluetooth_reader::Context) {
         let rx = cx.local.rx_usart3;
-        loop {
-            if rx.is_rx_not_empty() {
-                defmt::debug!("receive data via bluetooth");
-                let received = rx.read();
-                match received {
-                    Ok(read) => defmt::debug!("data via bluetooth: {}", read),
+        if rx.is_rx_not_empty() {
+            defmt::debug!("receive data via bluetooth");
+            let received = rx.read();
+            match received {
+                Ok(read) => defmt::debug!("data via bluetooth: {}", read),
 
-                    Err(err) => {
-                        defmt::debug!(
-                            "data via bluetooth read err: {:?}",
-                            defmt::Debug2Format(&err)
-                        );
-                    }
+                Err(err) => {
+                    defmt::debug!(
+                        "data via bluetooth read err: {:?}",
+                        defmt::Debug2Format(&err)
+                    );
                 }
             }
         }
