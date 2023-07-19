@@ -39,8 +39,8 @@ mod app {
 
     #[local]
     struct Local {
-        tx_pin: stm32f1xx_hal::serial::Tx3,
-        rx_pin: stm32f1xx_hal::serial::Rx3,
+        tx_usart3: stm32f1xx_hal::serial::Tx3,
+        rx_usart3: stm32f1xx_hal::serial::Rx3,
     }
 
     #[init]
@@ -68,14 +68,15 @@ mod app {
         }
 
         let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
-        let tx_pin = gpiob.pb10.into_alternate_push_pull(&mut gpiob.crh);
-        let rx_pin = gpiob.pb11;
+        // USART3
+        let tx_usart3 = gpiob.pb10.into_alternate_push_pull(&mut gpiob.crh);
+        let rx_usart3 = gpiob.pb11;
 
         let channels = cx.device.DMA1.split();
         let mut afio = cx.device.AFIO.constrain();
-        let mut serial = Serial::new(
+        let mut serial_usart3 = Serial::new(
             cx.device.USART3,
-            (tx_pin, rx_pin),
+            (tx_usart3, rx_usart3),
             &mut afio.mapr,
             Config::default()
                 .baudrate(9600.bps())
@@ -88,13 +89,13 @@ mod app {
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
 
-        serial.listen(stm32f1xx_hal::serial::Event::Rxne);
-        let (tx, mut rx) = serial.split();
+        serial_usart3.listen(stm32f1xx_hal::serial::Event::Rxne);
+        let (tx_usart3, mut rx_usart3) = serial_usart3.split();
         (
             Shared {},
             Local {
-                rx_pin: rx,
-                tx_pin: tx,
+                rx_usart3,
+                tx_usart3,
             },
         )
     }
@@ -109,16 +110,10 @@ mod app {
         }
     }
 
-    #[task(binds = USART3, priority = 1, local = [  rx_pin, tx_pin  ])]
+    #[task(binds = USART3, priority = 1, local = [  rx_usart3, tx_usart3  ])]
     fn bluetooth_reader(cx: bluetooth_reader::Context) {
-        let rx = cx.local.rx_pin;
+        let rx = cx.local.rx_usart3;
         loop {
-            // let sent = b'X';
-            // match cx.local.tx_pin.write(sent) {
-            //     Ok(_) => defmt::debug!("write successful"),
-            //     Err(_) => defmt::debug!("fail to write"),
-            // }
-
             if rx.is_rx_not_empty() {
                 defmt::debug!("is empty: false");
                 let received = rx.read();
