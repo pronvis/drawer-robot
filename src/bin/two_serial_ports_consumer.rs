@@ -84,7 +84,7 @@ mod app {
             (tx_usart2, rx_usart2),
             &mut afio.mapr,
             Config::default()
-                .baudrate(57600.bps())
+                .baudrate(9600.bps())
                 .wordlength_8bits()
                 .stopbits(stm32f1xx_hal::serial::StopBits::STOP1)
                 .parity_none(),
