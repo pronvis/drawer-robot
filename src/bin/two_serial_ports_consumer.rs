@@ -73,10 +73,10 @@ mod app {
         let mut gpioa: stm32f1xx_hal::gpio::gpioa::Parts = cx.device.GPIOA.split();
         // USART2
         let tx_usart2 = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
-        let rx_usart2 = gpioa.pa3;
+        let rx_usart2 = gpioa.pa3.into_pull_up_input(&mut gpioa.crl);
         // USART3
         let tx_usart3 = gpiob.pb10.into_alternate_push_pull(&mut gpiob.crh);
-        let rx_usart3 = gpiob.pb11;
+        let rx_usart3 = gpiob.pb11.into_pull_up_input(&mut gpiob.crh);
 
         let mut afio = cx.device.AFIO.constrain();
         let mut serial_usart2 = Serial::new(
@@ -84,7 +84,7 @@ mod app {
             (tx_usart2, rx_usart2),
             &mut afio.mapr,
             Config::default()
-                .baudrate(9600.bps())
+                .baudrate(57600.bps())
                 .wordlength_8bits()
                 .stopbits(stm32f1xx_hal::serial::StopBits::STOP1)
                 .parity_none(),
@@ -134,7 +134,7 @@ mod app {
     fn esp32_reader(cx: esp32_reader::Context) {
         let rx = cx.local.rx_usart2;
         if rx.is_rx_not_empty() {
-            defmt::debug!("receive data from esp32");
+            // defmt::debug!("receive data from esp32");
             let received = rx.read();
             match received {
                 Ok(read) => defmt::debug!("data from esp32: {}", read),
@@ -150,7 +150,7 @@ mod app {
     fn bluetooth_reader(cx: bluetooth_reader::Context) {
         let rx = cx.local.rx_usart3;
         if rx.is_rx_not_empty() {
-            defmt::debug!("receive data via bluetooth");
+            // defmt::debug!("receive data via bluetooth");
             let received = rx.read();
             match received {
                 Ok(read) => defmt::debug!("data via bluetooth: {}", read),
