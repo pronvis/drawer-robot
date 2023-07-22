@@ -39,6 +39,8 @@ mod app {
 
     #[local]
     struct Local {
+        tx_usart1: stm32f1xx_hal::serial::Tx1,
+        rx_usart1: stm32f1xx_hal::serial::Rx1,
         tx_usart2: stm32f1xx_hal::serial::Tx2,
         rx_usart2: stm32f1xx_hal::serial::Rx2,
         tx_usart3: stm32f1xx_hal::serial::Tx3,
@@ -71,6 +73,9 @@ mod app {
 
         let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
         let mut gpioa: stm32f1xx_hal::gpio::gpioa::Parts = cx.device.GPIOA.split();
+        // USART1
+        let tx_usart1 = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
+        let rx_usart1 = gpioa.pa10.into_pull_up_input(&mut gpioa.crh);
         // USART2
         let tx_usart2 = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
         let rx_usart2 = gpioa.pa3.into_pull_up_input(&mut gpioa.crl);
@@ -79,6 +84,17 @@ mod app {
         let rx_usart3 = gpiob.pb11.into_pull_up_input(&mut gpiob.crh);
 
         let mut afio = cx.device.AFIO.constrain();
+        let mut serial_usart1 = Serial::new(
+            cx.device.USART1,
+            (tx_usart1, rx_usart1),
+            &mut afio.mapr,
+            Config::default()
+                .baudrate(9600.bps())
+                .wordlength_8bits()
+                .stopbits(stm32f1xx_hal::serial::StopBits::STOP1)
+                .parity_none(),
+            &clocks,
+        );
         let mut serial_usart2 = Serial::new(
             cx.device.USART2,
             (tx_usart2, rx_usart2),
@@ -105,13 +121,17 @@ mod app {
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
 
+        serial_usart1.listen(stm32f1xx_hal::serial::Event::Rxne);
         serial_usart2.listen(stm32f1xx_hal::serial::Event::Rxne);
         serial_usart3.listen(stm32f1xx_hal::serial::Event::Rxne);
-        let (tx_usart2, mut rx_usart2) = serial_usart2.split();
-        let (tx_usart3, mut rx_usart3) = serial_usart3.split();
+        let (tx_usart1, rx_usart1) = serial_usart1.split();
+        let (tx_usart2, rx_usart2) = serial_usart2.split();
+        let (tx_usart3, rx_usart3) = serial_usart3.split();
         (
             Shared {},
             Local {
+                rx_usart1,
+                tx_usart1,
                 rx_usart2,
                 tx_usart2,
                 rx_usart3,
@@ -134,7 +154,6 @@ mod app {
     fn esp32_reader(cx: esp32_reader::Context) {
         let rx = cx.local.rx_usart2;
         if rx.is_rx_not_empty() {
-            // defmt::debug!("receive data from esp32");
             let received = rx.read();
             match received {
                 Ok(read) => defmt::debug!("data from esp32: {}", read),
@@ -146,11 +165,10 @@ mod app {
         }
     }
 
-    #[task(binds = USART3, priority = 1, local = [  rx_usart3, tx_usart3  ])]
+    #[task(binds = USART1, priority = 1, local = [  rx_usart1, tx_usart1  ])]
     fn bluetooth_reader(cx: bluetooth_reader::Context) {
-        let rx = cx.local.rx_usart3;
+        let rx = cx.local.rx_usart1;
         if rx.is_rx_not_empty() {
-            // defmt::debug!("receive data via bluetooth");
             let received = rx.read();
             match received {
                 Ok(read) => defmt::debug!("data via bluetooth: {}", read),
