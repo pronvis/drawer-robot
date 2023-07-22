@@ -46,9 +46,11 @@ mod app {
         timer::{Counter, Event},
     };
 
+    const TIMER_CLOCK_FREQ: u32 = 10_000; // step = 100_000 nanos, 100 micros
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
+    const CHANNEL_CAPACITY: usize = 1;
 
-    type Ssd1306Display = Ssd1306<
+    pub type Ssd1306Display = Ssd1306<
         I2CInterface<
             BlockingI2c<
                 I2C1,
@@ -62,6 +64,22 @@ mod app {
         BufferedGraphicsMode<DisplaySize128x64>,
     >;
 
+    pub type X_EnPin = stm32f1xx_hal::gpio::Pin<'C', 7, stm32f1xx_hal::gpio::Output>;
+    pub type X_StepPin = stm32f1xx_hal::gpio::Pin<'C', 6, stm32f1xx_hal::gpio::Output>;
+    pub type X_DirPin = stm32f1xx_hal::gpio::Pin<'B', 15, stm32f1xx_hal::gpio::Output>;
+
+    pub type Y_EnPin = stm32f1xx_hal::gpio::Pin<'B', 16, stm32f1xx_hal::gpio::Output>;
+    pub type Y_StepPin = stm32f1xx_hal::gpio::Pin<'B', 13, stm32f1xx_hal::gpio::Output>;
+    pub type Y_DirPin = stm32f1xx_hal::gpio::Pin<'B', 12, stm32f1xx_hal::gpio::Output>;
+
+    pub type Z_EnPin = stm32f1xx_hal::gpio::Pin<'B', 11, stm32f1xx_hal::gpio::Output>;
+    pub type Z_StepPin = stm32f1xx_hal::gpio::Pin<'B', 10, stm32f1xx_hal::gpio::Output>;
+    pub type Z_DirPin = stm32f1xx_hal::gpio::Pin<'B', 2, stm32f1xx_hal::gpio::Output>;
+
+    pub type E_EnPin = stm32f1xx_hal::gpio::Pin<'B', 1, stm32f1xx_hal::gpio::Output>;
+    pub type E_StepPin = stm32f1xx_hal::gpio::Pin<'B', 0, stm32f1xx_hal::gpio::Output>;
+    pub type E_DirPin = stm32f1xx_hal::gpio::Pin<'C', 5, stm32f1xx_hal::gpio::Output>;
+
     #[shared]
     struct Shared {}
 
@@ -71,6 +89,8 @@ mod app {
         rx_usart1: stm32f1xx_hal::serial::Rx1,
         tx_usart2: stm32f1xx_hal::serial::Tx2,
         rx_usart2: stm32f1xx_hal::serial::Rx2,
+        stepper_1: MyStepper<stm32f1xx_hal::pac::TIM2, X_StepPin, TIMER_CLOCK_FREQ>,
+        stepper_1_sender: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
     }
 
     fn init_ssd1306(
@@ -192,9 +212,11 @@ mod app {
             panic!("Clock parameter values are wrong!");
         }
 
-        let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
         let mut gpioa: stm32f1xx_hal::gpio::gpioa::Parts = cx.device.GPIOA.split();
+        let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
+        let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
         let mut afio = cx.device.AFIO.constrain();
+
         // SSD1306 pins
         let scl: PB8<Alternate<OpenDrain>> = gpiob.pb8.into_alternate_open_drain(&mut gpiob.crh);
         let sda: PB9<Alternate<OpenDrain>> = gpiob.pb9.into_alternate_open_drain(&mut gpiob.crh);
@@ -203,16 +225,9 @@ mod app {
         draw_text(&mut display);
         display.flush().unwrap();
 
-        // USART1
+        // UART1
         let tx_usart1 = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
         let rx_usart1 = gpioa.pa10.into_pull_up_input(&mut gpioa.crh);
-        // USART2
-        let tx_usart2 = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
-        let rx_usart2 = gpioa.pa3.into_pull_up_input(&mut gpioa.crl);
-        // USART3
-        let tx_usart3 = gpiob.pb10.into_alternate_push_pull(&mut gpiob.crh);
-        let rx_usart3 = gpiob.pb11.into_pull_up_input(&mut gpiob.crh);
-
         let mut serial_usart1 = Serial::new(
             cx.device.USART1,
             (tx_usart1, rx_usart1),
@@ -224,6 +239,9 @@ mod app {
                 .parity_none(),
             &clocks,
         );
+        // UART2
+        let tx_usart2 = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
+        let rx_usart2 = gpioa.pa3.into_pull_up_input(&mut gpioa.crl);
         let mut serial_usart2 = Serial::new(
             cx.device.USART2,
             (tx_usart2, rx_usart2),
@@ -235,6 +253,122 @@ mod app {
                 .parity_none(),
             &clocks,
         );
+
+        //
+        //
+        // STEPPERS
+        let mut stepper_state = MyStepperState::new(1500, 200);
+
+        let x_step_pin = gpioc
+            .pc6
+            .into_push_pull_output_with_state(&mut gpioc.crl, PinState::Low);
+        let y_step_pin = gpiob
+            .pb13
+            .into_push_pull_output_with_state(&mut gpiob.crh, PinState::Low);
+        let z_step_pin = gpiob
+            .pb10
+            .into_push_pull_output_with_state(&mut gpiob.crh, PinState::Low);
+        let e_step_pin = gpiob
+            .pb0
+            .into_push_pull_output_with_state(&mut gpiob.crl, PinState::Low);
+
+        let mut x_en = gpioc.pc7.into_push_pull_output(&mut gpioc.crl);
+        x_en.set_low();
+
+        let mut y_en = gpiob.pb14.into_push_pull_output(&mut gpiob.crh);
+        y_en.set_low();
+
+        let mut z_en = gpiob.pb11.into_push_pull_output(&mut gpiob.crh);
+        z_en.set_low();
+
+        let mut e_en = gpiob.pb1.into_push_pull_output(&mut gpiob.crl);
+        e_en.set_low();
+
+        let tim2 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>::new(
+            cx.device.TIM2,
+            &clocks,
+        );
+        let mut timer_2: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ> =
+            tim2.counter();
+        timer_2
+            .start(stepper_state.micros_pulse_duration.micros())
+            .unwrap();
+        timer_2.listen(Event::Update);
+
+        let tim3 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM3, TIMER_CLOCK_FREQ>::new(
+            cx.device.TIM3,
+            &clocks,
+        );
+        let mut timer_3: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM3, TIMER_CLOCK_FREQ> =
+            tim3.counter();
+        timer_3
+            .start(stepper_state.micros_pulse_duration.micros())
+            .unwrap();
+        timer_3.listen(Event::Update);
+
+        let tim4 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM4, TIMER_CLOCK_FREQ>::new(
+            cx.device.TIM4,
+            &clocks,
+        );
+        let mut timer_4: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM4, TIMER_CLOCK_FREQ> =
+            tim4.counter();
+        timer_4
+            .start(stepper_state.micros_pulse_duration.micros())
+            .unwrap();
+        timer_4.listen(Event::Update);
+
+        let tim5 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM5, TIMER_CLOCK_FREQ>::new(
+            cx.device.TIM5,
+            &clocks,
+        );
+        let mut timer_5: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM5, TIMER_CLOCK_FREQ> =
+            tim5.counter();
+        timer_5
+            .start(stepper_state.micros_pulse_duration.micros())
+            .unwrap();
+        timer_5.listen(Event::Update);
+
+        let (sender_1, stepper_1_commands_receiver) =
+            make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
+        let (sender_2, stepper_2_commands_receiver) =
+            make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
+        let (sender_3, stepper_3_commands_receiver) =
+            make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
+        let (sender_4, stepper_4_commands_receiver) =
+            make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
+
+        let stepper_1 = MyStepper::new(
+            1,
+            stepper_state.clone(),
+            timer_2,
+            x_step_pin,
+            stepper_1_commands_receiver,
+        );
+        let stepper_2 = MyStepper::new(
+            2,
+            stepper_state.clone(),
+            timer_3,
+            y_step_pin,
+            stepper_2_commands_receiver,
+        );
+        let stepper_3 = MyStepper::new(
+            3,
+            stepper_state.clone(),
+            timer_4,
+            z_step_pin,
+            stepper_3_commands_receiver,
+        );
+        let stepper_4 = MyStepper::new(
+            4,
+            stepper_state.clone(),
+            timer_5,
+            e_step_pin,
+            stepper_4_commands_receiver,
+        );
+        //
+        //
+        //
+        //
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
@@ -250,6 +384,8 @@ mod app {
                 tx_usart1,
                 rx_usart2,
                 tx_usart2,
+                stepper_1,
+                stepper_1_sender: sender_1,
             },
         )
     }
@@ -264,13 +400,29 @@ mod app {
         }
     }
 
-    #[task(binds = USART2, priority = 1, local = [  rx_usart2, tx_usart2  ])]
+    #[task(binds = USART2, priority = 2, local = [ speed: u8 = 0, rx_usart2, tx_usart2, stepper_1_sender ])]
     fn esp32_reader(cx: esp32_reader::Context) {
         let rx = cx.local.rx_usart2;
         if rx.is_rx_not_empty() {
             let received = rx.read();
             match received {
-                Ok(read) => defmt::debug!("data from esp32: {}", read),
+                Ok(read) => {
+                    defmt::debug!("data from esp32: {}", read);
+                    let speed = cx.local.speed;
+                    let mut command = MyStepperCommands::Stay;
+
+                    *speed = *speed + 1;
+                    if *speed == MAX_SPEED_VAL + 1 {
+                        command = MyStepperCommands::Stay;
+                    } else if *speed > MAX_SPEED_VAL + 1 {
+                        *speed = 0;
+                        command = MyStepperCommands::Move(*speed);
+                    } else {
+                        command = MyStepperCommands::Move(*speed);
+                    }
+
+                    cx.local.stepper_1_sender.try_send(command).unwrap();
+                }
 
                 Err(err) => {
                     defmt::debug!("data from esp32 read err: {:?}", defmt::Debug2Format(&err));
@@ -279,7 +431,7 @@ mod app {
         }
     }
 
-    #[task(binds = USART1, priority = 1, local = [  rx_usart1, tx_usart1  ])]
+    #[task(binds = USART1, priority = 2, local = [  rx_usart1, tx_usart1  ])]
     fn bluetooth_reader(cx: bluetooth_reader::Context) {
         let rx = cx.local.rx_usart1;
         if rx.is_rx_not_empty() {
@@ -296,4 +448,24 @@ mod app {
             }
         }
     }
+
+    #[task(binds = TIM2, priority = 1, local = [ stepper_1 ])]
+    fn delay_task_1(cx: delay_task_1::Context) {
+        cx.local.stepper_1.work();
+    }
+
+    // #[task(binds = TIM3, priority = 3, local = [ stepper_2 ])]
+    // fn delay_task_2(cx: delay_task_2::Context) {
+    //     cx.local.stepper_2.work();
+    // }
+
+    // #[task(binds = TIM4, priority = 3, local = [ stepper_3 ])]
+    // fn delay_task_3(cx: delay_task_3::Context) {
+    //     cx.local.stepper_3.work();
+    // }
+
+    // #[task(binds = TIM5, priority = 3, local = [ stepper_4 ])]
+    // fn delay_task_4(cx: delay_task_4::Context) {
+    //     cx.local.stepper_4.work();
+    // }
 }

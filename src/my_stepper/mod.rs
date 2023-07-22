@@ -29,6 +29,7 @@ pub struct MyStepperState {
     step_phase: bool,
 }
 impl MyStepperState {
+    // TODO: change constructor - caller dont know about micros.
     pub fn new(micros_between_steps: u32, micros_pulse_duration: u32) -> Self {
         Self {
             micros_between_steps,
