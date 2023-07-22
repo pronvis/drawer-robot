@@ -1,6 +1,6 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
-# runner = "probe-run --chip STM32F103C8"
-runner = "probe-run --chip STM32F103RE"
+# runner = "probe-run --probe C296C294070132124647524B4E00 --chip STM32F103C8"
+runner = "probe-run --probe 15003200090000524A51544E --chip STM32F103RE"
 rustflags = [
   "-C", "linker=flip-link",
   "-C", "link-arg=-Tlink.x",
@@ -14,6 +14,7 @@ rustflags = [
 target = "thumbv7m-none-eabi"    # Cortex-M3
 
 [alias]
+rmain = "run --bin drawer-robot"
 rb = "run --bin"
 rrb = "run --release --bin"
 bbr = "build --release --bin"
