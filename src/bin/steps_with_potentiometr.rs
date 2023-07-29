@@ -12,6 +12,7 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
     // dispatchers = [PVD, WWDG, RTC, SPI1]
 )]
 mod app {
+    use fugit::ExtU32;
 
     use drawer_robot::*;
     use rtic_monotonics::systick::*;
@@ -22,6 +23,29 @@ mod app {
         pac,
         prelude::*,
     };
+
+    //COPYPASTE (same in src/bin/steps_by_timer_with_potentiometr.rs)
+    pub async fn read_potent(
+        adc1: &mut Adc<ADC1>,
+        pb0: &mut stm32f1xx_hal::gpio::Pin<'B', 0, stm32f1xx_hal::gpio::Analog>,
+    ) -> u16 {
+        //sum 10 measurments - max value 4.1k, so 41k which can be still stored in u16
+        let mut sum: u16 = 0;
+        for _ in 0..10 {
+            let data: u16 = adc1.read(pb0).unwrap();
+            sum += data;
+            Systick::delay(10.millis()).await;
+        }
+
+        return sum / 10;
+    }
+
+    pub fn calc_steps_delay(potent_value: u16) -> u32 {
+        let min_delay: u32 = 700_000;
+        let potent_shift: u32 = u32::from(potent_value) / 100 * 30_0000;
+        return min_delay + potent_shift;
+    }
+    /////////////////////////////////////////////////////////////////
 
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
     const CHANNEL_CAPACITY: usize = 1;

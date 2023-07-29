@@ -3,11 +3,13 @@
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 use defmt_brtt as _; // global logger
-use rtic_monotonics::systick::*;
+use ssd1306::{mode::BufferedGraphicsMode, prelude::*, Ssd1306};
 use stm32f1xx_hal::{
-    adc::{self, Adc},
-    device::ADC1,
-    prelude::*,
+    gpio::gpiob::{PB0, PB1, PB10, PB11, PB12, PB13, PB15, PB2, PB8, PB9},
+    gpio::gpioc::{PC13, PC5, PC6, PC7},
+    gpio::{Alternate, OpenDrain, Output, Pin},
+    i2c::BlockingI2c,
+    pac::I2C1,
 };
 
 pub mod my_stepper;
@@ -25,11 +27,37 @@ use stm32f1xx_hal as _; // memory layout
 
 // BigTreeTech SKR E3-DIP v1.1
 // X-PINS
-pub type EnPin = stm32f1xx_hal::gpio::Pin<'C', 7, stm32f1xx_hal::gpio::Output>;
-pub type StepPin = stm32f1xx_hal::gpio::Pin<'C', 6, stm32f1xx_hal::gpio::Output>;
-pub type DirPin = stm32f1xx_hal::gpio::Pin<'B', 15, stm32f1xx_hal::gpio::Output>;
-pub type InternalLed = stm32f1xx_hal::gpio::Pin<'C', 13, stm32f1xx_hal::gpio::Output>; // no led there
-pub type OutLed = stm32f1xx_hal::gpio::Pin<'B', 12, stm32f1xx_hal::gpio::Output>;
+
+pub type Scl1Pin = PB8<Alternate<OpenDrain>>;
+pub type Sda1Pin = PB9<Alternate<OpenDrain>>;
+pub type Ssd1306Display = Ssd1306<
+    I2CInterface<BlockingI2c<I2C1, (Scl1Pin, Sda1Pin)>>,
+    DisplaySize128x64,
+    BufferedGraphicsMode<DisplaySize128x64>,
+>;
+
+pub type XEnPin = PC7<Output>;
+pub type XStepPin = PC6<Output>;
+pub type XDirPin = PB15<Output>;
+
+pub type YEnPin = Pin<'B', 16, Output>;
+pub type YStepPin = PB13<Output>;
+pub type YDirPin = PB12<Output>;
+
+pub type ZEnPin = PB11<Output>;
+pub type ZStepPin = PB10<Output>;
+pub type ZDirPin = PB2<Output>;
+
+pub type EEnPin = PB1<Output>;
+pub type EStepPin = PB0<Output>;
+pub type EDirPin = PC5<Output>;
+
+//For ./bin files
+pub type EnPin = XEnPin;
+pub type StepPin = XStepPin;
+pub type DirPin = XDirPin;
+pub type InternalLed = PC13<Output>; // no led there
+pub type OutLed = PB12<Output>;
 
 // same panicking *behavior* as `panic-probe` but doesn't print a panic message
 // this prevents the panic message being printed *twice* when `defmt::panic` is invoked
@@ -51,25 +79,4 @@ pub fn exit() -> ! {
     loop {
         cortex_m::asm::bkpt();
     }
-}
-
-pub async fn read_potent(
-    adc1: &mut Adc<ADC1>,
-    pb0: &mut stm32f1xx_hal::gpio::Pin<'B', 0, stm32f1xx_hal::gpio::Analog>,
-) -> u16 {
-    //sum 10 measurments - max value 4.1k, so 41k which can be still stored in u16
-    let mut sum: u16 = 0;
-    for _ in 0..10 {
-        let data: u16 = adc1.read(pb0).unwrap();
-        sum += data;
-        Systick::delay(10.millis()).await;
-    }
-
-    return sum / 10;
-}
-
-pub fn calc_steps_delay(potent_value: u16) -> u32 {
-    let min_delay: u32 = 700_000;
-    let potent_shift: u32 = u32::from(potent_value) / 100 * 30_0000;
-    return min_delay + potent_shift;
 }

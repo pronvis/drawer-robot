@@ -30,7 +30,6 @@ mod app {
         compat, fugit::NanosDurationU32 as Nanoseconds, motion_control,
         motion_control::SoftwareMotionControl, ramp_maker, Direction, Stepper,
     };
-    use stm32f1xx_hal::gpio::gpiob::{PB8, PB9};
     use stm32f1xx_hal::i2c::{BlockingI2c, DutyCycle, Mode};
     use stm32f1xx_hal::{
         afio,
@@ -50,36 +49,6 @@ mod app {
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
     const CHANNEL_CAPACITY: usize = 1;
 
-    pub type Ssd1306Display = Ssd1306<
-        I2CInterface<
-            BlockingI2c<
-                I2C1,
-                (
-                    Pin<'B', 8, Alternate<OpenDrain>>,
-                    Pin<'B', 9, Alternate<OpenDrain>>,
-                ),
-            >,
-        >,
-        DisplaySize128x64,
-        BufferedGraphicsMode<DisplaySize128x64>,
-    >;
-
-    pub type X_EnPin = stm32f1xx_hal::gpio::Pin<'C', 7, stm32f1xx_hal::gpio::Output>;
-    pub type X_StepPin = stm32f1xx_hal::gpio::Pin<'C', 6, stm32f1xx_hal::gpio::Output>;
-    pub type X_DirPin = stm32f1xx_hal::gpio::Pin<'B', 15, stm32f1xx_hal::gpio::Output>;
-
-    pub type Y_EnPin = stm32f1xx_hal::gpio::Pin<'B', 16, stm32f1xx_hal::gpio::Output>;
-    pub type Y_StepPin = stm32f1xx_hal::gpio::Pin<'B', 13, stm32f1xx_hal::gpio::Output>;
-    pub type Y_DirPin = stm32f1xx_hal::gpio::Pin<'B', 12, stm32f1xx_hal::gpio::Output>;
-
-    pub type Z_EnPin = stm32f1xx_hal::gpio::Pin<'B', 11, stm32f1xx_hal::gpio::Output>;
-    pub type Z_StepPin = stm32f1xx_hal::gpio::Pin<'B', 10, stm32f1xx_hal::gpio::Output>;
-    pub type Z_DirPin = stm32f1xx_hal::gpio::Pin<'B', 2, stm32f1xx_hal::gpio::Output>;
-
-    pub type E_EnPin = stm32f1xx_hal::gpio::Pin<'B', 1, stm32f1xx_hal::gpio::Output>;
-    pub type E_StepPin = stm32f1xx_hal::gpio::Pin<'B', 0, stm32f1xx_hal::gpio::Output>;
-    pub type E_DirPin = stm32f1xx_hal::gpio::Pin<'C', 5, stm32f1xx_hal::gpio::Output>;
-
     #[shared]
     struct Shared {}
 
@@ -89,13 +58,13 @@ mod app {
         rx_usart1: stm32f1xx_hal::serial::Rx1,
         tx_usart2: stm32f1xx_hal::serial::Tx2,
         rx_usart2: stm32f1xx_hal::serial::Rx2,
-        stepper_1: MyStepper<stm32f1xx_hal::pac::TIM2, X_StepPin, TIMER_CLOCK_FREQ>,
+        stepper_1: MyStepper<stm32f1xx_hal::pac::TIM2, XStepPin, TIMER_CLOCK_FREQ>,
         stepper_1_sender: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
     }
 
     fn init_ssd1306(
-        scl: PB8<Alternate<OpenDrain>>,
-        sda: PB9<Alternate<OpenDrain>>,
+        scl: Scl1Pin,
+        sda: Sda1Pin,
         parts: &mut afio::Parts,
         clocks: Clocks,
         i2c1: I2C1,
@@ -218,8 +187,8 @@ mod app {
         let mut afio = cx.device.AFIO.constrain();
 
         // SSD1306 pins
-        let scl: PB8<Alternate<OpenDrain>> = gpiob.pb8.into_alternate_open_drain(&mut gpiob.crh);
-        let sda: PB9<Alternate<OpenDrain>> = gpiob.pb9.into_alternate_open_drain(&mut gpiob.crh);
+        let scl: Scl1Pin = gpiob.pb8.into_alternate_open_drain(&mut gpiob.crh);
+        let sda: Sda1Pin = gpiob.pb9.into_alternate_open_drain(&mut gpiob.crh);
         //init ssd1306 display
         let mut display = init_ssd1306(scl, sda, &mut afio, clocks.clone(), cx.device.I2C1);
         draw_text(&mut display);
