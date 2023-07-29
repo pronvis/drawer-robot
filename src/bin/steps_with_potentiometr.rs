@@ -71,7 +71,7 @@ mod app {
 
         let mut en = gpioc.pc15.into_push_pull_output(&mut gpioc.crh);
         en.set_low();
-        let step = gpioc.pc14.into_push_pull_output(&mut gpioc.crh);
+        let step = gpioc.pc6.into_push_pull_output(&mut gpioc.crl);
         let mut dir = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
         dir.set_low();
 

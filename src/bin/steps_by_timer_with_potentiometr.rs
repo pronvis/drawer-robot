@@ -72,8 +72,8 @@ mod app {
         // Acquire the GPIOC peripheral
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
         let step_pin = gpioc
-            .pc14
-            .into_push_pull_output_with_state(&mut gpioc.crh, PinState::Low);
+            .pc6
+            .into_push_pull_output_with_state(&mut gpioc.crl, PinState::Low);
 
         let mut en = gpioc.pc15.into_push_pull_output(&mut gpioc.crh);
         en.set_low();
