@@ -421,7 +421,16 @@ mod app {
                         command = MyStepperCommands::Move(*speed);
                     }
 
-                    cx.local.stepper_1_sender.try_send(command).unwrap();
+                    cx.local
+                        .stepper_1_sender
+                        .try_send(command)
+                        .err()
+                        .map(|err| {
+                            defmt::debug!(
+                                "fail to send command to stepper_1: {:?}",
+                                defmt::Debug2Format(&err)
+                            )
+                        });
                 }
 
                 Err(err) => {
