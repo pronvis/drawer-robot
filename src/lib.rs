@@ -12,11 +12,20 @@ use stm32f1xx_hal::{
     pac::I2C1,
 };
 
+use heapless::{
+    pool,
+    pool::singleton::{Box, Pool},
+};
+
+pub mod display;
 pub mod my_stepper;
 
 use panic_probe as _;
 
 use stm32f1xx_hal as _; // memory layout
+
+// Declare a pool of 21-byte memory blocks
+pool!(DisplayMemoryPool: [u8; 21]);
 
 // BLUE PILL PINS
 // pub type EnPin = stm32f1xx_hal::gpio::Pin<'C', 15, stm32f1xx_hal::gpio::Output>;

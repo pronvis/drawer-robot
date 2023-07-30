@@ -3,6 +3,10 @@
 #![feature(type_alias_impl_trait)]
 
 use drawer_robot as _; // global logger + panicking-behavior + memory layout
+use heapless::{
+    pool,
+    pool::singleton::{Box, Pool},
+};
 
 #[rtic::app(
     device = stm32f1xx_hal::pac,
@@ -13,24 +17,15 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 )]
 mod app {
 
-    use embedded_graphics::{
-        image::Image,
-        mono_font::{ascii::FONT_6X12, MonoTextStyle},
-        pixelcolor::BinaryColor,
-        prelude::*,
-        text::Text,
-    };
-
+    use drawer_robot::display::OledDisplay;
     use drawer_robot::my_stepper::*;
     use drawer_robot::*;
     use rtic_monotonics::systick::*;
     use rtic_sync::{channel::*, make_channel};
-    use ssd1306::{mode::BufferedGraphicsMode, prelude::*, I2CDisplayInterface, Ssd1306};
     use stepper::{
         compat, fugit::NanosDurationU32 as Nanoseconds, motion_control,
         motion_control::SoftwareMotionControl, ramp_maker, Direction, Stepper,
     };
-    use stm32f1xx_hal::i2c::{BlockingI2c, DutyCycle, Mode};
     use stm32f1xx_hal::{
         afio,
         gpio::PinState,
@@ -48,6 +43,14 @@ mod app {
     const TIMER_CLOCK_FREQ: u32 = 10_000; // step = 100_000 nanos, 100 micros
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
     const CHANNEL_CAPACITY: usize = 1;
+    static mut DISPLAY_MEMORY_POOL_MEMORY: [u8; 105] = [32u8; 105];
+
+    // Import the memory pool into scope
+    use drawer_robot::DisplayMemoryPool;
+    use heapless::{
+        pool,
+        pool::singleton::{Box, Pool},
+    };
 
     #[shared]
     struct Shared {}
@@ -60,106 +63,17 @@ mod app {
         rx_usart2: stm32f1xx_hal::serial::Rx2,
         stepper_1: MyStepper<stm32f1xx_hal::pac::TIM2, XStepPin, TIMER_CLOCK_FREQ>,
         stepper_1_sender: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
-    }
-
-    fn init_ssd1306(
-        scl: Scl1Pin,
-        sda: Sda1Pin,
-        parts: &mut afio::Parts,
-        clocks: Clocks,
-        i2c1: I2C1,
-    ) -> Ssd1306Display {
-        let i2c = BlockingI2c::i2c1(
-            i2c1,
-            (scl, sda),
-            &mut parts.mapr,
-            Mode::Fast {
-                frequency: 400_000.Hz(),
-                duty_cycle: DutyCycle::Ratio2to1,
-            },
-            clocks,
-            1000,
-            10,
-            1000,
-            1000,
-        );
-
-        let interface = I2CDisplayInterface::new(i2c);
-        let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
-            .into_buffered_graphics_mode();
-        display.init().unwrap();
-        display
-    }
-
-    fn draw_text(disp: &mut Ssd1306Display) {
-        // use core::unicode;
-        let mut buf = [0u8; 64];
-
-        let text_style_1 = MonoTextStyle::new(&FONT_6X12, BinaryColor::On);
-
-        let text_1: &str = write_to::show(&mut buf, format_args!("Hello world!")).unwrap();
-
-        let _ = Text::new(text_1, Point::new(0, 12), text_style_1)
-            .draw(disp)
-            .unwrap();
-    }
-
-    // from https://stackoverflow.com/questions/50200268/how-can-i-use-the-format-macro-in-a-no-std-environment
-    pub mod write_to {
-        use core::cmp::min;
-        use core::fmt;
-
-        pub struct WriteTo<'a> {
-            buffer: &'a mut [u8],
-            // on write error (i.e. not enough space in buffer) this grows beyond
-            // `buffer.len()`.
-            used: usize,
-        }
-
-        impl<'a> WriteTo<'a> {
-            pub fn new(buffer: &'a mut [u8]) -> Self {
-                WriteTo { buffer, used: 0 }
-            }
-
-            pub fn as_str(self) -> Option<&'a str> {
-                if self.used <= self.buffer.len() {
-                    // only successful concats of str - must be a valid str.
-                    use core::str::from_utf8_unchecked;
-                    Some(unsafe { from_utf8_unchecked(&self.buffer[..self.used]) })
-                } else {
-                    None
-                }
-            }
-        }
-
-        impl<'a> fmt::Write for WriteTo<'a> {
-            fn write_str(&mut self, s: &str) -> fmt::Result {
-                if self.used > self.buffer.len() {
-                    return Err(fmt::Error);
-                }
-                let remaining_buf = &mut self.buffer[self.used..];
-                let raw_s = s.as_bytes();
-                let write_num = min(raw_s.len(), remaining_buf.len());
-                remaining_buf[..write_num].copy_from_slice(&raw_s[..write_num]);
-                self.used += raw_s.len();
-                if write_num < raw_s.len() {
-                    Err(fmt::Error)
-                } else {
-                    Ok(())
-                }
-            }
-        }
-
-        pub fn show<'a>(buffer: &'a mut [u8], args: fmt::Arguments) -> Result<&'a str, fmt::Error> {
-            let mut w = WriteTo::new(buffer);
-            fmt::write(&mut w, args)?;
-            w.as_str().ok_or(fmt::Error)
-        }
+        display_receiver: Receiver<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
+        display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
+        display: OledDisplay,
     }
 
     #[init]
     fn init(cx: init::Context) -> (Shared, Local) {
         defmt::info!("init");
+        unsafe {
+            DisplayMemoryPool::grow(&mut DISPLAY_MEMORY_POOL_MEMORY);
+        }
 
         // Take ownership over the raw flash and rcc devices and convert them into the corresponding
         // HAL structs
@@ -186,13 +100,11 @@ mod app {
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
         let mut afio = cx.device.AFIO.constrain();
 
-        // SSD1306 pins
+        // SSD1306 display pins
         let scl: Scl1Pin = gpiob.pb8.into_alternate_open_drain(&mut gpiob.crh);
         let sda: Sda1Pin = gpiob.pb9.into_alternate_open_drain(&mut gpiob.crh);
         //init ssd1306 display
-        let mut display = init_ssd1306(scl, sda, &mut afio, clocks.clone(), cx.device.I2C1);
-        draw_text(&mut display);
-        display.flush().unwrap();
+        let mut display = OledDisplay::new(scl, sda, &mut afio, clocks.clone(), cx.device.I2C1);
 
         // UART1
         let tx_usart1 = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
@@ -305,6 +217,8 @@ mod app {
             make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
         let (sender_4, stepper_4_commands_receiver) =
             make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
+        let (mut display_sender, display_receiver) =
+            make_channel!(Box<DisplayMemoryPool>, CHANNEL_CAPACITY);
 
         let stepper_1 = MyStepper::new(
             1,
@@ -346,6 +260,9 @@ mod app {
         serial_usart2.listen(stm32f1xx_hal::serial::Event::Rxne);
         let (tx_usart1, rx_usart1) = serial_usart1.split();
         let (tx_usart2, rx_usart2) = serial_usart2.split();
+
+        display_task::spawn().unwrap();
+        display_task_writer::spawn().unwrap();
         (
             Shared {},
             Local {
@@ -355,6 +272,9 @@ mod app {
                 tx_usart2,
                 stepper_1,
                 stepper_1_sender: sender_1,
+                display_receiver,
+                display_sender,
+                display,
             },
         )
     }
@@ -446,4 +366,52 @@ mod app {
     // fn delay_task_4(cx: delay_task_4::Context) {
     //     cx.local.stepper_4.work();
     // }
+
+    #[task(priority = 8, local = [display_receiver, display])]
+    async fn display_task(cx: display_task::Context) {
+        loop {
+            let message = cx.local.display_receiver.recv().await.unwrap();
+            cx.local.display.print(message);
+
+            Systick::delay(1000.millis()).await;
+        }
+    }
+
+    #[task(priority = 9, local = [display_sender])]
+    async fn display_task_writer(mut cx: display_task_writer::Context) {
+        let mut index = 0;
+        loop {
+            // let text = format!(format_args!("Hello Vova {}", index_x));
+            let mut buf = [32u8; 21];
+            let text = drawer_robot::display::write_to::show(
+                &mut buf,
+                format_args!("Hello Vova {}", index),
+            )
+            .unwrap();
+            send_string_to_display(&mut cx.local.display_sender, text);
+            // let mut buf = [32u8; 21];
+            // buf.copy_from_slice("Hello Vova kak ti tam".as_bytes());
+            // let memory_pool = DisplayMemoryPool::alloc().unwrap().init(buf);
+            // display_sender.try_send(memory_pool);
+
+            Systick::delay(1000.millis()).await;
+            index += 1;
+        }
+    }
+
+    fn send_string_to_display(
+        display_channel: &mut Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
+        text: &str,
+    ) {
+        let text = if text.len() > 21 {
+            text.split_at(21).0
+        } else {
+            text
+        };
+
+        let mut buf = [32u8; 21];
+        buf[..text.len()].copy_from_slice(&text.as_bytes());
+        let memory_pool = DisplayMemoryPool::alloc().unwrap().init(buf);
+        display_channel.try_send(memory_pool);
+    }
 }
