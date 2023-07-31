@@ -25,9 +25,14 @@ use panic_probe as _;
 
 use stm32f1xx_hal as _; // memory layout
 
-// Declare a pool of 21-byte memory blocks
-pool!(DisplayMemoryPool: heapless::String::<21>);
-// pool!(DisplayMemoryPool: [u8; 21]);
+// Declare a pool of 24-byte memory blocks
+// actually we need only 21 bytes (oled display size limit),
+// but "word size" is 32, so 32 is a minimum. But we need
+// to store additional info, such as `vec: usize` in String.
+// And 4 bytes somewhere else, probably to link: Box<DisplayMemoryPool>
+// when send String into channel.
+pub type DisplayString = heapless::String<24>;
+pool!(DisplayMemoryPool: DisplayString);
 
 // BLUE PILL PINS
 // pub type EnPin = stm32f1xx_hal::gpio::Pin<'C', 15, stm32f1xx_hal::gpio::Output>;

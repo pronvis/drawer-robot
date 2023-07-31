@@ -382,7 +382,7 @@ mod app {
     async fn display_task_writer(mut cx: display_task_writer::Context) {
         let mut index: u32 = 0;
         loop {
-            let mut data_str = heapless::String::<21>::new();
+            let mut data_str = DisplayString::new();
             write!(data_str, "Hello world: {index}").expect("not written");
             display::display_str(data_str, &mut cx.local.display_sender)
                 .await

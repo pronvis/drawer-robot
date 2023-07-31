@@ -22,7 +22,7 @@ const FONT: embedded_graphics::mono_font::MonoFont = FONT_6X12;
 
 pub struct OledDisplay {
     disp: Ssd1306Display,
-    string_queue: Deque<heapless::String<21>, 5>,
+    string_queue: Deque<DisplayString, 5>,
 }
 
 impl OledDisplay {
@@ -58,11 +58,14 @@ impl OledDisplay {
         }
     }
 
-    pub fn print(&mut self, text: Box<DisplayMemoryPool>) {
+    pub fn print(&mut self, boxed_text: Box<DisplayMemoryPool>) {
+        let text = boxed_text.clone();
+        drop(boxed_text);
+
         if self.string_queue.is_full() {
             let _ = self.string_queue.pop_front();
         }
-        self.string_queue.push_back(text.clone()).unwrap();
+        self.string_queue.push_back(text).unwrap();
 
         self.disp.clear(BinaryColor::Off).unwrap();
         let text_style = MonoTextStyle::new(&FONT, BinaryColor::On);
@@ -81,7 +84,6 @@ impl OledDisplay {
             .unwrap();
         }
 
-        drop(text);
         self.disp.flush().unwrap();
     }
 }
@@ -96,7 +98,7 @@ impl OledDisplay {
 ///     .unwrap();
 /// ```
 pub async fn display_str(
-    text: heapless::String<21>,
+    text: DisplayString,
     display_sender: &mut Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
 ) -> Result<(), rtic_sync::channel::NoReceiver<Box<DisplayMemoryPool>>> {
     let memory_block = DisplayMemoryPool::alloc().unwrap().init(text);
