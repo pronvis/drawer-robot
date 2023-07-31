@@ -43,7 +43,9 @@ mod app {
 
     const TIMER_CLOCK_FREQ: u32 = 10_000; // step = 100_000 nanos, 100 micros
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
-    static mut DISPLAY_MEMORY_POOL_MEMORY: [u8; 105] = [32u8; 105];
+    // if `delay` is active in 'display_task_writer' function, then size of the pool could be 32
+    // for some reason. Why?
+    static mut DISPLAY_MEMORY_POOL_MEMORY: [u8; 96] = [32u8; 96];
 
     // Import the memory pool into scope
     use drawer_robot::DisplayMemoryPool;
@@ -381,11 +383,12 @@ mod app {
         let mut index: u32 = 0;
         loop {
             let mut data_str = heapless::String::<21>::new();
-            write!(data_str, "Hello R: {index}").expect("not written");
-            let memory_pool = DisplayMemoryPool::alloc().unwrap().init(data_str);
-            cx.local.display_sender.send(memory_pool).await;
+            write!(data_str, "Hello world: {index}").expect("not written");
+            display::display_str(data_str, &mut cx.local.display_sender)
+                .await
+                .unwrap();
 
-            Systick::delay(500.millis()).await;
+            // Systick::delay(500.millis()).await;
             index += 1;
         }
     }

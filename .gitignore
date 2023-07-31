@@ -6,6 +6,7 @@ target/
 
 # editor files
 .idea
+.DS_Store
 
 #all binary files
 *.bin

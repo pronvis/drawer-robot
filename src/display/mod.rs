@@ -18,6 +18,8 @@ use embedded_graphics::{
 use heapless::pool::singleton::Box;
 use heapless::Deque;
 
+const FONT: embedded_graphics::mono_font::MonoFont = FONT_6X12;
+
 pub struct OledDisplay {
     disp: Ssd1306Display,
     string_queue: Deque<heapless::String<21>, 5>,
@@ -63,13 +65,16 @@ impl OledDisplay {
         self.string_queue.push_back(text.clone()).unwrap();
 
         self.disp.clear(BinaryColor::Off).unwrap();
-        let text_style = MonoTextStyle::new(&FONT_6X12, BinaryColor::On);
+        let text_style = MonoTextStyle::new(&FONT, BinaryColor::On);
 
         let queue_len = self.string_queue.len();
         for (text, i) in self.string_queue.iter().zip(0..queue_len) {
             let _ = Text::new(
                 text,
-                Point::new(0, (12 * (queue_len - i)) as i32),
+                Point::new(
+                    0,
+                    (FONT.character_size.height as i32) * (queue_len - i) as i32,
+                ),
                 text_style,
             )
             .draw(&mut self.disp)
@@ -81,11 +86,19 @@ impl OledDisplay {
     }
 }
 
+/// to create String:
+/// ```
+/// let index: u32 = 0;
+/// let mut data_str = heapless::String::<21>::new();
+/// write!(data_str, "Hello world: {index}").expect("not written");
+/// display::display_str(data_str, &mut cx.local.display_sender)
+///     .await
+///     .unwrap();
+/// ```
 pub async fn display_str(
     text: heapless::String<21>,
     display_sender: &mut Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
-) {
+) -> Result<(), rtic_sync::channel::NoReceiver<Box<DisplayMemoryPool>>> {
     let memory_block = DisplayMemoryPool::alloc().unwrap().init(text);
-    // TODO: USE IT
-    display_sender.send(memory_block).await;
+    display_sender.send(memory_block).await
 }
