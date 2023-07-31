@@ -373,41 +373,21 @@ mod app {
         loop {
             let message = cx.local.display_receiver.recv().await.unwrap();
             cx.local.display.print(message);
-
-            Systick::delay(1000.millis()).await;
         }
     }
 
     use core::fmt::Write;
-    use numtoa::NumToA;
     #[task(priority = 9, local = [display_sender])]
     async fn display_task_writer(mut cx: display_task_writer::Context) {
         let mut index: u32 = 0;
         loop {
-            let mut buf = [0u8; 10];
             let mut data_str = heapless::String::<21>::new();
-            let index_str = index.numtoa_str(10, &mut buf);
-            write!(data_str, "Hello RustEmbed 42:{index_str}").expect("not written");
+            write!(data_str, "Hello R: {index}").expect("not written");
             let memory_pool = DisplayMemoryPool::alloc().unwrap().init(data_str);
             cx.local.display_sender.send(memory_pool).await;
 
-            Systick::delay(1000.millis()).await;
+            Systick::delay(500.millis()).await;
             index += 1;
         }
-    }
-
-    fn base_10_bytes(mut n: u32, buf: &mut [u8]) -> &[u8] {
-        if n == 0 {
-            return b"0";
-        }
-        let mut i = 0;
-        while n > 0 {
-            buf[i] = (n % 10) as u8 + b'0';
-            n /= 10;
-            i += 1;
-        }
-        let slice = &mut buf[..i];
-        slice.reverse();
-        &*slice
     }
 }
