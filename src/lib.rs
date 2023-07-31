@@ -19,6 +19,7 @@ use heapless::{
 
 pub mod display;
 pub mod my_stepper;
+pub const CHANNEL_CAPACITY: usize = 1;
 
 use panic_probe as _;
 

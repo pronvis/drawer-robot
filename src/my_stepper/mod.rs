@@ -3,7 +3,8 @@ use fugit::ExtU32;
 use rtic_sync::channel::*;
 use stm32f1xx_hal::timer::{Counter, Event, Instance};
 
-pub const CHANNEL_CAPACITY: usize = 1;
+use crate::CHANNEL_CAPACITY;
+
 // I use 1/2 microstep mode, so min speed = 200
 // with delay = 200 speed of a thread on a coil with diameter 40mm = 7.85 mm/s
 pub const MIN_DELAY_BETWEEN_STEPS: u32 = 200;

@@ -43,7 +43,6 @@ mod app {
 
     const TIMER_CLOCK_FREQ: u32 = 10_000; // step = 100_000 nanos, 100 micros
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
-    const CHANNEL_CAPACITY: usize = 1;
     static mut DISPLAY_MEMORY_POOL_MEMORY: [u8; 105] = [32u8; 105];
 
     // Import the memory pool into scope

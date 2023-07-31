@@ -1,9 +1,10 @@
-use crate::*;
+use crate::{CHANNEL_CAPACITY, *};
 use fugit::RateExtU32;
+use rtic_sync::channel::Sender;
 use ssd1306::{I2CDisplayInterface, Ssd1306};
 use stm32f1xx_hal::{
     afio,
-    i2c::{BlockingI2c, DutyCycle, Mode},
+    i2c::{BlockingI2c, Mode},
     rcc::Clocks,
 };
 
@@ -78,4 +79,13 @@ impl OledDisplay {
         drop(text);
         self.disp.flush().unwrap();
     }
+}
+
+pub async fn display_str(
+    text: heapless::String<21>,
+    display_sender: &mut Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
+) {
+    let memory_block = DisplayMemoryPool::alloc().unwrap().init(text);
+    // TODO: USE IT
+    display_sender.send(memory_block).await;
 }
