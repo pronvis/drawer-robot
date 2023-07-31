@@ -6,6 +6,7 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 use heapless::{
     pool,
     pool::singleton::{Box, Pool},
+    String,
 };
 
 #[rtic::app(
@@ -377,41 +378,18 @@ mod app {
         }
     }
 
+    use core::fmt::Write;
     #[task(priority = 9, local = [display_sender])]
     async fn display_task_writer(mut cx: display_task_writer::Context) {
-        let mut index = 0;
+        let mut index: u32 = 0;
         loop {
-            // let text = format!(format_args!("Hello Vova {}", index_x));
-            let mut buf = [32u8; 21];
-            let text = drawer_robot::display::write_to::show(
-                &mut buf,
-                format_args!("Hello Vova {}", index),
-            )
-            .unwrap();
-            send_string_to_display(&mut cx.local.display_sender, text);
-            // let mut buf = [32u8; 21];
-            // buf.copy_from_slice("Hello Vova kak ti tam".as_bytes());
-            // let memory_pool = DisplayMemoryPool::alloc().unwrap().init(buf);
-            // display_sender.try_send(memory_pool);
+            let mut data_str = heapless::String::<21>::new();
+            write!(data_str, "Hello RustEmbed 42:{index}").expect("not written");
+            let memory_pool = DisplayMemoryPool::alloc().unwrap().init(data_str);
+            cx.local.display_sender.send(memory_pool).await;
 
             Systick::delay(1000.millis()).await;
             index += 1;
         }
-    }
-
-    fn send_string_to_display(
-        display_channel: &mut Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
-        text: &str,
-    ) {
-        let text = if text.len() > 21 {
-            text.split_at(21).0
-        } else {
-            text
-        };
-
-        let mut buf = [32u8; 21];
-        buf[..text.len()].copy_from_slice(&text.as_bytes());
-        let memory_pool = DisplayMemoryPool::alloc().unwrap().init(buf);
-        display_channel.try_send(memory_pool);
     }
 }
