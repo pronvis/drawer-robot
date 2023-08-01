@@ -18,6 +18,8 @@ use heapless::{
 )]
 mod app {
 
+    use core::mem::MaybeUninit;
+    use cortex_m::singleton;
     use drawer_robot::display::OledDisplay;
     use drawer_robot::my_stepper::*;
     use drawer_robot::*;
@@ -29,6 +31,7 @@ mod app {
     };
     use stm32f1xx_hal::{
         afio,
+        dma::dma1,
         gpio::PinState,
         gpio::{Alternate, OpenDrain, Pin},
         pac,
@@ -46,6 +49,7 @@ mod app {
     // if `delay` is active in 'display_task_writer' function, then size of the pool could be 32
     // for some reason. Why?
     static mut DISPLAY_MEMORY_POOL_MEMORY: [u8; 96] = [32u8; 96];
+    static mut PS3_BUF: [u8; 4] = [0u8; 4];
 
     // Import the memory pool into scope
     use drawer_robot::DisplayMemoryPool;
@@ -59,10 +63,8 @@ mod app {
 
     #[local]
     struct Local {
-        tx_usart1: stm32f1xx_hal::serial::Tx1,
         rx_usart1: stm32f1xx_hal::serial::Rx1,
-        tx_usart2: stm32f1xx_hal::serial::Tx2,
-        rx_usart2: stm32f1xx_hal::serial::Rx2,
+        rx_usart2: Option<stm32f1xx_hal::serial::RxDma2>,
         stepper_1: MyStepper<stm32f1xx_hal::pac::TIM2, XStepPin, TIMER_CLOCK_FREQ>,
         stepper_1_sender: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
         display_receiver: Receiver<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
@@ -123,6 +125,7 @@ mod app {
             &clocks,
         );
         // UART2
+        let dma_channel_6: dma1::C6 = cx.device.DMA1.split().6;
         let tx_usart2 = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
         let rx_usart2 = gpioa.pa3.into_pull_up_input(&mut gpioa.crl);
         let mut serial_usart2 = Serial::new(
@@ -130,7 +133,7 @@ mod app {
             (tx_usart2, rx_usart2),
             &mut afio.mapr,
             Config::default()
-                .baudrate(9600.bps())
+                .baudrate(57600.bps())
                 .wordlength_8bits()
                 .stopbits(stm32f1xx_hal::serial::StopBits::STOP1)
                 .parity_none(),
@@ -260,8 +263,8 @@ mod app {
 
         serial_usart1.listen(stm32f1xx_hal::serial::Event::Rxne);
         serial_usart2.listen(stm32f1xx_hal::serial::Event::Rxne);
-        let (tx_usart1, rx_usart1) = serial_usart1.split();
-        let (tx_usart2, rx_usart2) = serial_usart2.split();
+        let (_, rx_usart1) = serial_usart1.split();
+        let (_, rx_usart2) = serial_usart2.split();
 
         display_task::spawn().unwrap();
         display_task_writer::spawn().unwrap();
@@ -269,9 +272,7 @@ mod app {
             Shared {},
             Local {
                 rx_usart1,
-                tx_usart1,
-                rx_usart2,
-                tx_usart2,
+                rx_usart2: Some(rx_usart2.with_dma(dma_channel_6)),
                 stepper_1,
                 stepper_1_sender: sender_1,
                 display_receiver,
@@ -291,47 +292,83 @@ mod app {
         }
     }
 
-    #[task(binds = USART2, priority = 2, local = [ speed: u8 = 0, rx_usart2, tx_usart2, stepper_1_sender ])]
+    //Task reads 4 bytes from PS3 controller that connected with ESP32 via bluetooth.
+    //ESP32 connected to 'motherboard' via UART.
+    #[task(binds = USART2, priority = 2, local = [ speed: u8 = 0, rx_usart2, stepper_1_sender ])]
     fn esp32_reader(cx: esp32_reader::Context) {
-        let rx = cx.local.rx_usart2;
-        if rx.is_rx_not_empty() {
-            let received = rx.read();
-            match received {
-                Ok(read) => {
-                    defmt::debug!("data from esp32: {}", read);
-                    let speed = cx.local.speed;
-                    let mut command = MyStepperCommands::Stay;
-
-                    *speed = *speed + 1;
-                    if *speed == MAX_SPEED_VAL + 1 {
-                        command = MyStepperCommands::Stay;
-                    } else if *speed > MAX_SPEED_VAL + 1 {
-                        *speed = 0;
-                        command = MyStepperCommands::Move(*speed);
-                    } else {
-                        command = MyStepperCommands::Move(*speed);
-                    }
-
-                    cx.local
-                        .stepper_1_sender
-                        .try_send(command)
-                        .err()
-                        .map(|err| {
-                            defmt::debug!(
-                                "fail to send command to stepper_1: {:?}",
-                                defmt::Debug2Format(&err)
-                            )
-                        });
-                }
-
-                Err(err) => {
-                    defmt::debug!("data from esp32 read err: {:?}", defmt::Debug2Format(&err));
-                }
-            }
+        if cx.local.rx_usart2.is_none() {
+            defmt::error!("rx_usart2 is None!");
+            return;
         }
+
+        let rx = cx.local.rx_usart2.take().unwrap();
+        let (buf, mut rx) = unsafe { rx.read(&mut PS3_BUF).wait() };
+        cx.local.rx_usart2.replace(rx);
+
+        unsafe {
+            defmt::debug!("data from esp32: {:?}", defmt::Debug2Format(&PS3_BUF));
+        }
+        // let speed = cx.local.speed;
+        // let mut command = MyStepperCommands::Stay;
+
+        // *speed = *speed + 1;
+        // if *speed == MAX_SPEED_VAL + 1 {
+        //     command = MyStepperCommands::Stay;
+        // } else if *speed > MAX_SPEED_VAL + 1 {
+        //     *speed = 0;
+        //     command = MyStepperCommands::Move(*speed);
+        // } else {
+        //     command = MyStepperCommands::Move(*speed);
+        // }
+
+        // cx.local
+        //     .stepper_1_sender
+        //     .try_send(command)
+        //     .err()
+        //     .map(|err| {
+        //         defmt::debug!(
+        //             "fail to send command to stepper_1: {:?}",
+        //             defmt::Debug2Format(&err)
+        //         )
+        //     });
+        // if rx.is_rx_not_empty() {
+        //     let received = rx.read();
+        //     match received {
+        //         Ok(read) => {
+        //             defmt::debug!("data from esp32: {}", read);
+        //             let speed = cx.local.speed;
+        //             let mut command = MyStepperCommands::Stay;
+
+        //             *speed = *speed + 1;
+        //             if *speed == MAX_SPEED_VAL + 1 {
+        //                 command = MyStepperCommands::Stay;
+        //             } else if *speed > MAX_SPEED_VAL + 1 {
+        //                 *speed = 0;
+        //                 command = MyStepperCommands::Move(*speed);
+        //             } else {
+        //                 command = MyStepperCommands::Move(*speed);
+        //             }
+
+        //             cx.local
+        //                 .stepper_1_sender
+        //                 .try_send(command)
+        //                 .err()
+        //                 .map(|err| {
+        //                     defmt::debug!(
+        //                         "fail to send command to stepper_1: {:?}",
+        //                         defmt::Debug2Format(&err)
+        //                     )
+        //                 });
+        //         }
+
+        //         Err(err) => {
+        //             defmt::debug!("data from esp32 read err: {:?}", defmt::Debug2Format(&err));
+        //         }
+        //     }
+        // }
     }
 
-    #[task(binds = USART1, priority = 2, local = [  rx_usart1, tx_usart1  ])]
+    #[task(binds = USART1, priority = 2, local = [ rx_usart1 ])]
     fn bluetooth_reader(cx: bluetooth_reader::Context) {
         let rx = cx.local.rx_usart1;
         if rx.is_rx_not_empty() {
@@ -388,7 +425,7 @@ mod app {
                 .await
                 .unwrap();
 
-            // Systick::delay(500.millis()).await;
+            Systick::delay(500.millis()).await;
             index += 1;
         }
     }
