@@ -12,10 +12,7 @@ use stm32f1xx_hal::{
     pac::I2C1,
 };
 
-use heapless::{
-    pool,
-    pool::singleton::{Box, Pool},
-};
+use heapless::{pool, pool::singleton::Pool};
 
 pub mod display;
 pub mod my_stepper;
