@@ -10,6 +10,8 @@ void notify()
 
     //--- Digital cross/square/triangle/circle button events ---
     if( Ps3.event.button_down.cross ) {
+      signal_to_send[0] = command_digital;
+      signal_to_send[1] = 0;
       signal_to_send[2] = 0x58; // 'X'
       Serial.write(signal_to_send, 4);
       Serial.flush();
@@ -17,6 +19,8 @@ void notify()
     }
         
     if( Ps3.event.button_up.cross ) {
+      signal_to_send[0] = command_digital;
+      signal_to_send[1] = 0;
       signal_to_send[2] = 0x78; // 'x'
       Serial.write(signal_to_send, 4);
       Serial.flush();
@@ -24,6 +28,8 @@ void notify()
     }
 
     if( Ps3.event.button_down.square ) {
+      signal_to_send[0] = command_digital;
+      signal_to_send[1] = 0;
       signal_to_send[2] = 0x53; // 'S'
       Serial.write(signal_to_send, 4);
       Serial.flush();
@@ -31,6 +37,8 @@ void notify()
     }
         
     if( Ps3.event.button_up.square ) {
+      signal_to_send[0] = command_digital;
+      signal_to_send[1] = 0;
       signal_to_send[2] = 0x73; // 's'
       Serial.write(signal_to_send, 4);
       Serial.flush();
@@ -38,6 +46,8 @@ void notify()
     }
 
     if( Ps3.event.button_down.triangle ) {
+      signal_to_send[0] = command_digital;
+      signal_to_send[1] = 0;
       signal_to_send[2] = 0x54; // 'T'
       Serial.write(signal_to_send, 4);
       Serial.flush();
@@ -45,6 +55,8 @@ void notify()
     }
         
     if( Ps3.event.button_up.triangle ) {
+      signal_to_send[0] = command_digital;
+      signal_to_send[1] = 0;
       signal_to_send[2] = 0x74; // 't'
       Serial.write(signal_to_send, 4);
       Serial.flush();
@@ -52,6 +64,8 @@ void notify()
     }   
 
     if( Ps3.event.button_down.circle ) {
+      signal_to_send[0] = command_digital;
+      signal_to_send[1] = 0;
       signal_to_send[2] = 0x43; // 'C'
       Serial.write(signal_to_send, 4);
       Serial.flush();
@@ -59,6 +73,8 @@ void notify()
     }
         
     if( Ps3.event.button_up.circle ) {
+      signal_to_send[0] = command_digital;
+      signal_to_send[1] = 0;
       signal_to_send[2] = 0x63; // 'c'
       Serial.write(signal_to_send, 4);
       Serial.flush();
@@ -67,6 +83,8 @@ void notify()
 
     //--------------- Digital D-pad button events --------------
     if( Ps3.event.button_down.up ) {
+      signal_to_send[0] = command_digital;
+      signal_to_send[1] = 0;
       signal_to_send[2] = 0x55; // 'U'
       Serial.write(signal_to_send, 4);
       Serial.flush();
@@ -74,6 +92,8 @@ void notify()
     }
         
     if( Ps3.event.button_up.up ) {
+      signal_to_send[0] = command_digital;
+      signal_to_send[1] = 0;
       signal_to_send[2] = 0x75; // 'u'
       Serial.write(signal_to_send, 4);
       Serial.flush();
@@ -81,6 +101,8 @@ void notify()
     }   
 
     if( Ps3.event.button_down.right ) {
+      signal_to_send[0] = command_digital;
+      signal_to_send[1] = 0;
       signal_to_send[2] = 0x52; // 'R'
       Serial.write(signal_to_send, 4);
       Serial.flush();
@@ -88,6 +110,8 @@ void notify()
     }
    
     if( Ps3.event.button_up.right ) {
+      signal_to_send[0] = command_digital;
+      signal_to_send[1] = 0;
       signal_to_send[2] = 0x72; // 'r'
       Serial.write(signal_to_send, 4);
       Serial.flush();
@@ -95,6 +119,8 @@ void notify()
     }        
 
     if( Ps3.event.button_down.down ) {
+      signal_to_send[0] = command_digital;
+      signal_to_send[1] = 0;
       signal_to_send[2] = 0x44; // 'D'
       Serial.write(signal_to_send, 4);
       Serial.flush();
@@ -102,6 +128,8 @@ void notify()
     }
         
     if( Ps3.event.button_up.down ) {
+      signal_to_send[0] = command_digital;
+      signal_to_send[1] = 0;
       signal_to_send[2] = 0x64; // 'd'
       Serial.write(signal_to_send, 4);
       Serial.flush();
@@ -109,6 +137,8 @@ void notify()
     }   
 
     if( Ps3.event.button_down.left ) {
+      signal_to_send[0] = command_digital;
+      signal_to_send[1] = 0;
       signal_to_send[2] = 0x4c; // 'L'
       Serial.write(signal_to_send, 4);
       Serial.flush();
@@ -116,6 +146,8 @@ void notify()
     }
         
     if( Ps3.event.button_up.left ) {
+      signal_to_send[0] = command_digital;
+      signal_to_send[1] = 0;
       signal_to_send[2] = 0x6c; // 'l'
       Serial.write(signal_to_send, 4);
       Serial.flush();

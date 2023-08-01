@@ -271,7 +271,7 @@ mod app {
         let (_, rx_usart2) = serial_usart2.split();
 
         display_task::spawn().unwrap();
-        display_task_writer::spawn().unwrap();
+        // display_task_writer::spawn().unwrap();
         (
             Shared {
                 rx_usart2: Some(rx_usart2.with_dma(dma1_channel_6)),
@@ -298,9 +298,10 @@ mod app {
         }
     }
 
+    static PS3_CROSS_DATA: &'static [u8] = &[0x10, 0, 0x54, 0xFF];
     // Only if priority > display_priority it works.
     // Otherwise stucks in some unknown place.
-    #[task(binds = DMA1_CHANNEL6, priority = 11, local = [], shared = [ rx_usart2, transfer ])]
+    #[task(binds = DMA1_CHANNEL6, priority = 11, local = [  speed: u8 = 0, stepper_1_sender ], shared = [ rx_usart2, transfer ])]
     fn esp32_reader_finish(mut cx: esp32_reader_finish::Context) {
         cx.shared.transfer.lock(|transfer| {
             if transfer.is_none() {
@@ -318,9 +319,74 @@ mod app {
                 rx_usart2.replace(rx);
             });
 
-            unsafe {
-                defmt::debug!("data from esp32: {:?}", defmt::Debug2Format(buf));
-            }
+            defmt::debug!("data from esp32: {:?}", defmt::Debug2Format(buf));
+
+            let buf_iter = buf.iter();
+            let is_cross_button: bool = buf_iter
+                .zip(PS3_CROSS_DATA.iter())
+                .map(|(e1, e2)| e1.eq(e2))
+                .all(|x| x == true);
+            defmt::debug!("is_cross_button: {}", is_cross_button);
+            if is_cross_button {
+                let speed = cx.local.speed;
+                let mut command = MyStepperCommands::Stay;
+
+                *speed = *speed + 1;
+                if *speed == MAX_SPEED_VAL + 1 {
+                    command = MyStepperCommands::Stay;
+                } else if *speed > MAX_SPEED_VAL + 1 {
+                    *speed = 0;
+                    command = MyStepperCommands::Move(*speed);
+                } else {
+                    command = MyStepperCommands::Move(*speed);
+                }
+
+                cx.local
+                    .stepper_1_sender
+                    .try_send(command)
+                    .err()
+                    .map(|err| {
+                        defmt::debug!(
+                            "fail to send command to stepper_1: {:?}",
+                            defmt::Debug2Format(&err)
+                        )
+                    });
+            };
+            // if rx.is_rx_not_empty() {
+            //     let received = rx.read();
+            //     match received {
+            //         Ok(read) => {
+            //             defmt::debug!("data from esp32: {}", read);
+            //             let speed = cx.local.speed;
+            //             let mut command = MyStepperCommands::Stay;
+
+            //             *speed = *speed + 1;
+            //             if *speed == MAX_SPEED_VAL + 1 {
+            //                 command = MyStepperCommands::Stay;
+            //             } else if *speed > MAX_SPEED_VAL + 1 {
+            //                 *speed = 0;
+            //                 command = MyStepperCommands::Move(*speed);
+            //             } else {
+            //                 command = MyStepperCommands::Move(*speed);
+            //             }
+
+            //             cx.local
+            //                 .stepper_1_sender
+            //                 .try_send(command)
+            //                 .err()
+            //                 .map(|err| {
+            //                     defmt::debug!(
+            //                         "fail to send command to stepper_1: {:?}",
+            //                         defmt::Debug2Format(&err)
+            //                     )
+            //                 });
+            //         }
+
+            //         Err(err) => {
+            //             defmt::debug!("data from esp32 read err: {:?}", defmt::Debug2Format(&err));
+            //         }
+            //     }
+            // }
         });
     }
 
@@ -328,7 +394,7 @@ mod app {
     // Otherwise stucks in some unknown place.
     //Task reads 4 bytes from PS3 controller that connected with ESP32 via bluetooth.
     //ESP32 connected to 'motherboard' via UART.
-    #[task(binds = USART2, priority = 12, local = [ speed: u8 = 0, stepper_1_sender ], shared = [ rx_usart2, transfer ])]
+    #[task(binds = USART2, priority = 12, local = [], shared = [ rx_usart2, transfer ])]
     fn esp32_reader(mut cx: esp32_reader::Context) {
         cx.shared.rx_usart2.lock(|rx_usart2| {
             if rx_usart2.is_none() {
@@ -348,65 +414,6 @@ mod app {
                 transfer.replace(new_transfer);
             });
         });
-
-        // let speed = cx.local.speed;
-        // let mut command = MyStepperCommands::Stay;
-
-        // *speed = *speed + 1;
-        // if *speed == MAX_SPEED_VAL + 1 {
-        //     command = MyStepperCommands::Stay;
-        // } else if *speed > MAX_SPEED_VAL + 1 {
-        //     *speed = 0;
-        //     command = MyStepperCommands::Move(*speed);
-        // } else {
-        //     command = MyStepperCommands::Move(*speed);
-        // }
-
-        // cx.local
-        //     .stepper_1_sender
-        //     .try_send(command)
-        //     .err()
-        //     .map(|err| {
-        //         defmt::debug!(
-        //             "fail to send command to stepper_1: {:?}",
-        //             defmt::Debug2Format(&err)
-        //         )
-        //     });
-        // if rx.is_rx_not_empty() {
-        //     let received = rx.read();
-        //     match received {
-        //         Ok(read) => {
-        //             defmt::debug!("data from esp32: {}", read);
-        //             let speed = cx.local.speed;
-        //             let mut command = MyStepperCommands::Stay;
-
-        //             *speed = *speed + 1;
-        //             if *speed == MAX_SPEED_VAL + 1 {
-        //                 command = MyStepperCommands::Stay;
-        //             } else if *speed > MAX_SPEED_VAL + 1 {
-        //                 *speed = 0;
-        //                 command = MyStepperCommands::Move(*speed);
-        //             } else {
-        //                 command = MyStepperCommands::Move(*speed);
-        //             }
-
-        //             cx.local
-        //                 .stepper_1_sender
-        //                 .try_send(command)
-        //                 .err()
-        //                 .map(|err| {
-        //                     defmt::debug!(
-        //                         "fail to send command to stepper_1: {:?}",
-        //                         defmt::Debug2Format(&err)
-        //                     )
-        //                 });
-        //         }
-
-        //         Err(err) => {
-        //             defmt::debug!("data from esp32 read err: {:?}", defmt::Debug2Format(&err));
-        //         }
-        //     }
-        // }
     }
 
     #[task(binds = USART1, priority = 2, local = [ rx_usart1 ])]
@@ -427,10 +434,10 @@ mod app {
         }
     }
 
-    // #[task(binds = TIM2, priority = 1, local = [ stepper_1 ])]
-    // fn delay_task_1(cx: delay_task_1::Context) {
-    //     cx.local.stepper_1.work();
-    // }
+    #[task(binds = TIM2, priority = 1, local = [ stepper_1 ])]
+    fn delay_task_1(cx: delay_task_1::Context) {
+        cx.local.stepper_1.work();
+    }
 
     // #[task(binds = TIM3, priority = 3, local = [ stepper_2 ])]
     // fn delay_task_2(cx: delay_task_2::Context) {
