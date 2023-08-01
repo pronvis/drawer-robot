@@ -29,9 +29,10 @@ mod app {
         compat, fugit::NanosDurationU32 as Nanoseconds, motion_control,
         motion_control::SoftwareMotionControl, ramp_maker, Direction, Stepper,
     };
+
     use stm32f1xx_hal::{
-        afio,
-        dma::dma1,
+        afio, dma,
+        dma::{dma1, RxDma, Transfer},
         gpio::PinState,
         gpio::{Alternate, OpenDrain, Pin},
         pac,
@@ -39,7 +40,7 @@ mod app {
         prelude::*,
         rcc,
         rcc::*,
-        serial::{Config, Serial},
+        serial::{Config, Rx, RxDma2, Serial},
         timer::Timer,
         timer::{Counter, Event},
     };
@@ -59,12 +60,14 @@ mod app {
     };
 
     #[shared]
-    struct Shared {}
+    struct Shared {
+        rx_usart2: Option<RxDma2>,
+        transfer: Option<Transfer<dma::W, &'static mut [u8; 4], RxDma<Rx<pac::USART2>, dma1::C6>>>,
+    }
 
     #[local]
     struct Local {
         rx_usart1: stm32f1xx_hal::serial::Rx1,
-        rx_usart2: Option<stm32f1xx_hal::serial::RxDma2>,
         stepper_1: MyStepper<stm32f1xx_hal::pac::TIM2, XStepPin, TIMER_CLOCK_FREQ>,
         stepper_1_sender: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
         display_receiver: Receiver<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
@@ -270,10 +273,12 @@ mod app {
         display_task::spawn().unwrap();
         display_task_writer::spawn().unwrap();
         (
-            Shared {},
+            Shared {
+                rx_usart2: Some(rx_usart2.with_dma(dma1_channel_6)),
+                transfer: None,
+            },
             Local {
                 rx_usart1,
-                rx_usart2: Some(rx_usart2.with_dma(dma1_channel_6)),
                 stepper_1,
                 stepper_1_sender: sender_1,
                 display_receiver,
@@ -293,25 +298,56 @@ mod app {
         }
     }
 
-    #[task(binds = DMA1_CHANNEL6, priority = 2, local = [])]
-    fn esp32_reader_finish(cx: esp32_reader_finish::Context) {
-        unsafe {
-            defmt::debug!("data from esp32: {:?}", defmt::Debug2Format(&PS3_BUF));
-        }
+    // Only if priority > display_priority it works.
+    // Otherwise stucks in some unknown place.
+    #[task(binds = DMA1_CHANNEL6, priority = 11, local = [], shared = [ rx_usart2, transfer ])]
+    fn esp32_reader_finish(mut cx: esp32_reader_finish::Context) {
+        cx.shared.transfer.lock(|transfer| {
+            if transfer.is_none() {
+                defmt::error!("esp32_reader_finish: transfer is None!");
+                return;
+            }
+            let (buf, mut rx) = transfer.take().unwrap().wait();
+            cx.shared.rx_usart2.lock(|rx_usart2| {
+                // changing registr for nothing. Try to avoid that part.
+                // here you only want to stop listening for UART2
+                let (mut rx, c6) = rx.release();
+                rx.listen();
+                let rx = rx.with_dma(c6);
+                ////////////////////////
+                rx_usart2.replace(rx);
+            });
+
+            unsafe {
+                defmt::debug!("data from esp32: {:?}", defmt::Debug2Format(buf));
+            }
+        });
     }
 
+    // Only if priority > display_priority it works.
+    // Otherwise stucks in some unknown place.
     //Task reads 4 bytes from PS3 controller that connected with ESP32 via bluetooth.
     //ESP32 connected to 'motherboard' via UART.
-    #[task(binds = USART2, priority = 2, local = [ speed: u8 = 0, rx_usart2, stepper_1_sender ])]
-    fn esp32_reader(cx: esp32_reader::Context) {
-        if cx.local.rx_usart2.is_none() {
-            defmt::error!("rx_usart2 is None!");
-            return;
-        }
+    #[task(binds = USART2, priority = 12, local = [ speed: u8 = 0, stepper_1_sender ], shared = [ rx_usart2, transfer ])]
+    fn esp32_reader(mut cx: esp32_reader::Context) {
+        cx.shared.rx_usart2.lock(|rx_usart2| {
+            if rx_usart2.is_none() {
+                defmt::error!("esp32_reader: rx_usart2 is None!");
+                return;
+            }
 
-        let rx = cx.local.rx_usart2.take().unwrap();
-        let (buf, mut rx) = unsafe { rx.read(&mut PS3_BUF).wait() };
-        cx.local.rx_usart2.replace(rx);
+            let rx = rx_usart2.take().unwrap();
+            // changing registr for nothing. Try to avoid that part.
+            // here you only want to stop listening for UART2
+            let (mut rx, c6) = rx.release();
+            rx.unlisten();
+            let rx = rx.with_dma(c6);
+            ////////////////////////
+            let new_transfer = unsafe { rx.read(&mut PS3_BUF) };
+            cx.shared.transfer.lock(|transfer| {
+                transfer.replace(new_transfer);
+            });
+        });
 
         // let speed = cx.local.speed;
         // let mut command = MyStepperCommands::Stay;
@@ -391,10 +427,10 @@ mod app {
         }
     }
 
-    #[task(binds = TIM2, priority = 1, local = [ stepper_1 ])]
-    fn delay_task_1(cx: delay_task_1::Context) {
-        cx.local.stepper_1.work();
-    }
+    // #[task(binds = TIM2, priority = 1, local = [ stepper_1 ])]
+    // fn delay_task_1(cx: delay_task_1::Context) {
+    //     cx.local.stepper_1.work();
+    // }
 
     // #[task(binds = TIM3, priority = 3, local = [ stepper_2 ])]
     // fn delay_task_2(cx: delay_task_2::Context) {
@@ -414,6 +450,7 @@ mod app {
     #[task(priority = 8, local = [display_receiver, display])]
     async fn display_task(cx: display_task::Context) {
         loop {
+            defmt::debug!("in 'display_task' loop");
             let message = cx.local.display_receiver.recv().await.unwrap();
             cx.local.display.print(message);
         }
@@ -424,13 +461,14 @@ mod app {
     async fn display_task_writer(mut cx: display_task_writer::Context) {
         let mut index: u32 = 0;
         loop {
+            defmt::debug!("in 'display_task_writer' loop");
             let mut data_str = DisplayString::new();
             write!(data_str, "Hello world: {index}").expect("not written");
             display::display_str(data_str, &mut cx.local.display_sender)
                 .await
                 .unwrap();
 
-            Systick::delay(500.millis()).await;
+            Systick::delay(1000.millis()).await;
             index += 1;
         }
     }
