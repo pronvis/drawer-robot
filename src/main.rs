@@ -125,7 +125,7 @@ mod app {
             &clocks,
         );
         // UART2
-        let dma_channel_6: dma1::C6 = cx.device.DMA1.split().6;
+        let mut dma1_channel_6: dma1::C6 = cx.device.DMA1.split().6;
         let tx_usart2 = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
         let rx_usart2 = gpioa.pa3.into_pull_up_input(&mut gpioa.crl);
         let mut serial_usart2 = Serial::new(
@@ -263,6 +263,7 @@ mod app {
 
         serial_usart1.listen(stm32f1xx_hal::serial::Event::Rxne);
         serial_usart2.listen(stm32f1xx_hal::serial::Event::Rxne);
+        dma1_channel_6.listen(stm32f1xx_hal::dma::Event::TransferComplete);
         let (_, rx_usart1) = serial_usart1.split();
         let (_, rx_usart2) = serial_usart2.split();
 
@@ -272,7 +273,7 @@ mod app {
             Shared {},
             Local {
                 rx_usart1,
-                rx_usart2: Some(rx_usart2.with_dma(dma_channel_6)),
+                rx_usart2: Some(rx_usart2.with_dma(dma1_channel_6)),
                 stepper_1,
                 stepper_1_sender: sender_1,
                 display_receiver,
@@ -292,6 +293,13 @@ mod app {
         }
     }
 
+    #[task(binds = DMA1_CHANNEL6, priority = 2, local = [])]
+    fn esp32_reader_finish(cx: esp32_reader_finish::Context) {
+        unsafe {
+            defmt::debug!("data from esp32: {:?}", defmt::Debug2Format(&PS3_BUF));
+        }
+    }
+
     //Task reads 4 bytes from PS3 controller that connected with ESP32 via bluetooth.
     //ESP32 connected to 'motherboard' via UART.
     #[task(binds = USART2, priority = 2, local = [ speed: u8 = 0, rx_usart2, stepper_1_sender ])]
@@ -305,9 +313,6 @@ mod app {
         let (buf, mut rx) = unsafe { rx.read(&mut PS3_BUF).wait() };
         cx.local.rx_usart2.replace(rx);
 
-        unsafe {
-            defmt::debug!("data from esp32: {:?}", defmt::Debug2Format(&PS3_BUF));
-        }
         // let speed = cx.local.speed;
         // let mut command = MyStepperCommands::Stay;
 
