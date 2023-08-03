@@ -297,7 +297,7 @@ mod app {
         loop {
             defmt::debug!("'display_task' loop start");
             let message = cx.local.display_receiver.recv().await.unwrap();
-            cx.local.display.print(message).await;
+            cx.local.display.print(message);
             defmt::debug!("'display_task' loop finish");
         }
     }

@@ -60,7 +60,7 @@ impl OledDisplay {
     }
 
     //wrap into the Future
-    pub async fn print(&mut self, boxed_text: Box<DisplayMemoryPool>) {
+    pub fn print(&mut self, boxed_text: Box<DisplayMemoryPool>) {
         let text = boxed_text.clone();
         drop(boxed_text);
 
