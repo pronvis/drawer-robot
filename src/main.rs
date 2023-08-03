@@ -312,18 +312,15 @@ mod app {
     // ESP32 connected to 'motherboard' via UART.
     #[task(binds = USART2, priority = 7, local = [rx_usart2], shared = [])]
     fn esp32_reader(mut cx: esp32_reader::Context) {
-        //TODO: even 'interrupt::free' doesnt help
-        cortex_m::interrupt::free(|_| {
-            defmt::debug!("esp32_reader start");
-            match cx.local.rx_usart2.read() {
-                Ok(b) => {
-                    defmt::debug!("byte readed: {}", b);
-                }
-                Err(_) => {
-                    defmt::error!("byte read ERROR");
-                }
-            };
-        });
+        defmt::debug!("esp32_reader start");
+        match cx.local.rx_usart2.read() {
+            Ok(b) => {
+                defmt::debug!("byte readed: {}", b);
+            }
+            Err(err) => {
+                defmt::error!("byte read ERROR: {:?}", defmt::Debug2Format(&err));
+            }
+        };
         defmt::debug!("esp32_reader finish");
     }
 
