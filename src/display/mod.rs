@@ -9,6 +9,7 @@ use stm32f1xx_hal::{
 };
 
 use crate::DisplayMemoryPool;
+use core::future::Future;
 use embedded_graphics::{
     mono_font::{ascii::FONT_6X12, MonoTextStyle},
     pixelcolor::BinaryColor,
@@ -49,7 +50,7 @@ impl OledDisplay {
 
         let interface = I2CDisplayInterface::new(i2c);
         let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
-            .into_buffered_graphics_mode();
+            .into_terminal_mode();
         display.init().unwrap();
 
         OledDisplay {
@@ -58,7 +59,8 @@ impl OledDisplay {
         }
     }
 
-    pub fn print(&mut self, boxed_text: Box<DisplayMemoryPool>) {
+    //wrap into the Future
+    pub async fn print(&mut self, boxed_text: Box<DisplayMemoryPool>) {
         let text = boxed_text.clone();
         drop(boxed_text);
 
@@ -67,24 +69,16 @@ impl OledDisplay {
         }
         self.string_queue.push_back(text).unwrap();
 
-        self.disp.clear(BinaryColor::Off).unwrap();
+        self.disp.clear().unwrap();
         let text_style = MonoTextStyle::new(&FONT, BinaryColor::On);
 
         let queue_len = self.string_queue.len();
         for (text, i) in self.string_queue.iter().zip(0..queue_len) {
-            let _ = Text::new(
-                text,
-                Point::new(
-                    0,
-                    (FONT.character_size.height as i32) * (queue_len - i) as i32,
-                ),
-                text_style,
-            )
-            .draw(&mut self.disp)
-            .unwrap();
+            for ch in text.chars() {
+                self.disp.print_char(ch).unwrap();
+            }
+            self.disp.print_char('\n').unwrap();
         }
-
-        self.disp.flush().unwrap();
     }
 }
 

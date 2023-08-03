@@ -61,8 +61,8 @@ mod app {
 
     #[shared]
     struct Shared {
-        rx_usart2: Option<RxDma2>,
-        transfer: Option<Transfer<dma::W, &'static mut [u8; 4], RxDma<Rx<pac::USART2>, dma1::C6>>>,
+        rx_usart2: Option<Rx<pac::USART2>>,
+        // transfer: Option<Transfer<dma::W, &'static mut [u8; 4], RxDma<>>>,
     }
 
     #[local]
@@ -271,11 +271,11 @@ mod app {
         let (_, rx_usart2) = serial_usart2.split();
 
         display_task::spawn().unwrap();
-        // display_task_writer::spawn().unwrap();
+        display_task_writer::spawn().unwrap();
         (
             Shared {
-                rx_usart2: Some(rx_usart2.with_dma(dma1_channel_6)),
-                transfer: None,
+                rx_usart2: Some(rx_usart2),
+                // transfer: None,
             },
             Local {
                 rx_usart1,
@@ -298,122 +298,166 @@ mod app {
         }
     }
 
-    static PS3_CROSS_DATA: &'static [u8] = &[0x10, 0, 0x54, 0xFF];
-    // Only if priority > display_priority it works.
-    // Otherwise stucks in some unknown place.
-    #[task(binds = DMA1_CHANNEL6, priority = 11, local = [  speed: u8 = 0, stepper_1_sender ], shared = [ rx_usart2, transfer ])]
-    fn esp32_reader_finish(mut cx: esp32_reader_finish::Context) {
-        cx.shared.transfer.lock(|transfer| {
-            if transfer.is_none() {
-                defmt::error!("esp32_reader_finish: transfer is None!");
-                return;
-            }
-            let (buf, mut rx) = transfer.take().unwrap().wait();
-            cx.shared.rx_usart2.lock(|rx_usart2| {
-                // changing registr for nothing. Try to avoid that part.
-                // here you only want to stop listening for UART2
-                let (mut rx, c6) = rx.release();
-                rx.listen();
-                let rx = rx.with_dma(c6);
-                ////////////////////////
-                rx_usart2.replace(rx);
-            });
-
-            defmt::debug!("data from esp32: {:?}", defmt::Debug2Format(buf));
-
-            let buf_iter = buf.iter();
-            let is_cross_button: bool = buf_iter
-                .zip(PS3_CROSS_DATA.iter())
-                .map(|(e1, e2)| e1.eq(e2))
-                .all(|x| x == true);
-            defmt::debug!("is_cross_button: {}", is_cross_button);
-            if is_cross_button {
-                let speed = cx.local.speed;
-                let mut command = MyStepperCommands::Stay;
-
-                *speed = *speed + 1;
-                if *speed == MAX_SPEED_VAL + 1 {
-                    command = MyStepperCommands::Stay;
-                } else if *speed > MAX_SPEED_VAL + 1 {
-                    *speed = 0;
-                    command = MyStepperCommands::Move(*speed);
-                } else {
-                    command = MyStepperCommands::Move(*speed);
-                }
-
-                cx.local
-                    .stepper_1_sender
-                    .try_send(command)
-                    .err()
-                    .map(|err| {
-                        defmt::debug!(
-                            "fail to send command to stepper_1: {:?}",
-                            defmt::Debug2Format(&err)
-                        )
-                    });
-            };
-            // if rx.is_rx_not_empty() {
-            //     let received = rx.read();
-            //     match received {
-            //         Ok(read) => {
-            //             defmt::debug!("data from esp32: {}", read);
-            //             let speed = cx.local.speed;
-            //             let mut command = MyStepperCommands::Stay;
-
-            //             *speed = *speed + 1;
-            //             if *speed == MAX_SPEED_VAL + 1 {
-            //                 command = MyStepperCommands::Stay;
-            //             } else if *speed > MAX_SPEED_VAL + 1 {
-            //                 *speed = 0;
-            //                 command = MyStepperCommands::Move(*speed);
-            //             } else {
-            //                 command = MyStepperCommands::Move(*speed);
-            //             }
-
-            //             cx.local
-            //                 .stepper_1_sender
-            //                 .try_send(command)
-            //                 .err()
-            //                 .map(|err| {
-            //                     defmt::debug!(
-            //                         "fail to send command to stepper_1: {:?}",
-            //                         defmt::Debug2Format(&err)
-            //                     )
-            //                 });
-            //         }
-
-            //         Err(err) => {
-            //             defmt::debug!("data from esp32 read err: {:?}", defmt::Debug2Format(&err));
-            //         }
-            //     }
-            // }
-        });
+    #[task(priority = 8, local = [display_receiver, display])]
+    async fn display_task(cx: display_task::Context) {
+        loop {
+            defmt::debug!("'display_task' loop start");
+            let message = cx.local.display_receiver.recv().await.unwrap();
+            cx.local.display.print(message).await;
+            defmt::debug!("'display_task' loop finish");
+        }
     }
+
+    static PS3_CROSS_DATA: &'static [u8] = &[0x10, 0, 0x54, 0xFF];
+    // TODO: WHY???
+    // TODO: WHY???
+    // TODO: WHY???
+    // TODO: WHY???
+    // TODO: WHY???
+    // TODO: WHY???
+    // Only if priority > 'display_task' priority it works.
+    // Otherwise stucks in some unknown place.
+    //#[task(binds = DMA1_CHANNEL6, priority = 7, local = [  speed: u8 = 0, stepper_1_sender ], shared = [ rx_usart2, transfer ])]
+    //fn esp32_reader_finish(mut cx: esp32_reader_finish::Context) {
+    //    defmt::debug!("esp32_reader_finish start");
+    //    cx.shared.transfer.lock(|transfer| {
+    //        if transfer.is_none() {
+    //            defmt::error!("esp32_reader_finish: transfer is None!");
+    //            return;
+    //        }
+    //        let (buf, mut rx) = transfer.take().unwrap().wait();
+    //        cx.shared.rx_usart2.lock(|rx_usart2| {
+    //            // changing registr for nothing. Try to avoid that part.
+    //            // here you only want to stop listening for UART2
+    //            let (mut rx, c6) = rx.release();
+    //            let is_DMA_complete = c6.isr().tcif6().is_complete();
+    //            defmt::debug!("esp32_reader_finish:: is DMA complete: {}", is_DMA_complete);
+    //            rx.listen();
+    //            let rx = rx.with_dma(c6);
+    //            ////////////////////////
+
+    //            // rx.channel.isr().tcif6().is_complete();
+    //            // rx.channel.ifcr().as_ptr().read()
+
+    //            // stm32f1xx_hal::pac::dma1::isr::R.call(args)
+
+    //            rx_usart2.replace(rx);
+    //        });
+
+    //        defmt::debug!("data from esp32: {:?}", defmt::Debug2Format(buf));
+
+    //        let buf_iter = buf.iter();
+    //        let is_cross_button: bool = buf_iter
+    //            .zip(PS3_CROSS_DATA.iter())
+    //            .map(|(e1, e2)| e1.eq(e2))
+    //            .all(|x| x == true);
+    //        defmt::debug!("is_cross_button: {}", is_cross_button);
+    //        if is_cross_button {
+    //            let speed = cx.local.speed;
+    //            let mut command = MyStepperCommands::Stay;
+
+    //            *speed = *speed + 1;
+    //            if *speed == MAX_SPEED_VAL + 1 {
+    //                command = MyStepperCommands::Stay;
+    //            } else if *speed > MAX_SPEED_VAL + 1 {
+    //                *speed = 0;
+    //                command = MyStepperCommands::Move(*speed);
+    //            } else {
+    //                command = MyStepperCommands::Move(*speed);
+    //            }
+
+    //            cx.local
+    //                .stepper_1_sender
+    //                .try_send(command)
+    //                .err()
+    //                .map(|err| {
+    //                    defmt::debug!(
+    //                        "fail to send command to stepper_1: {:?}",
+    //                        defmt::Debug2Format(&err)
+    //                    )
+    //                });
+    //        };
+    //        // if rx.is_rx_not_empty() {
+    //        //     let received = rx.read();
+    //        //     match received {
+    //        //         Ok(read) => {
+    //        //             defmt::debug!("data from esp32: {}", read);
+    //        //             let speed = cx.local.speed;
+    //        //             let mut command = MyStepperCommands::Stay;
+
+    //        //             *speed = *speed + 1;
+    //        //             if *speed == MAX_SPEED_VAL + 1 {
+    //        //                 command = MyStepperCommands::Stay;
+    //        //             } else if *speed > MAX_SPEED_VAL + 1 {
+    //        //                 *speed = 0;
+    //        //                 command = MyStepperCommands::Move(*speed);
+    //        //             } else {
+    //        //                 command = MyStepperCommands::Move(*speed);
+    //        //             }
+
+    //        //             cx.local
+    //        //                 .stepper_1_sender
+    //        //                 .try_send(command)
+    //        //                 .err()
+    //        //                 .map(|err| {
+    //        //                     defmt::debug!(
+    //        //                         "fail to send command to stepper_1: {:?}",
+    //        //                         defmt::Debug2Format(&err)
+    //        //                     )
+    //        //                 });
+    //        //         }
+
+    //        //         Err(err) => {
+    //        //             defmt::debug!("data from esp32 read err: {:?}", defmt::Debug2Format(&err));
+    //        //         }
+    //        //     }
+    //        // }
+    //    });
+    //    defmt::debug!("esp32_reader_finish finish");
+    //}
 
     // Only if priority > display_priority it works.
     // Otherwise stucks in some unknown place.
     //Task reads 4 bytes from PS3 controller that connected with ESP32 via bluetooth.
     //ESP32 connected to 'motherboard' via UART.
-    #[task(binds = USART2, priority = 12, local = [], shared = [ rx_usart2, transfer ])]
+    #[task(binds = USART2, priority = 12, local = [], shared = [ rx_usart2 ])]
     fn esp32_reader(mut cx: esp32_reader::Context) {
-        cx.shared.rx_usart2.lock(|rx_usart2| {
-            if rx_usart2.is_none() {
-                defmt::error!("esp32_reader: rx_usart2 is None!");
-                return;
-            }
-
-            let rx = rx_usart2.take().unwrap();
-            // changing registr for nothing. Try to avoid that part.
-            // here you only want to stop listening for UART2
-            let (mut rx, c6) = rx.release();
-            rx.unlisten();
-            let rx = rx.with_dma(c6);
-            ////////////////////////
-            let new_transfer = unsafe { rx.read(&mut PS3_BUF) };
-            cx.shared.transfer.lock(|transfer| {
-                transfer.replace(new_transfer);
+        cortex_m::interrupt::free(|_| {
+            defmt::debug!("esp32_reader start");
+            cx.shared.rx_usart2.lock(|rx_usart2| {
+                if rx_usart2.is_none() {
+                    defmt::error!("esp32_reader: rx_usart2 is None!");
+                    return;
+                }
+                rx_usart2.as_mut().map(|rx| match rx.read() {
+                    Ok(b) => {
+                        defmt::debug!("byte readed: {}", b);
+                    }
+                    Err(_) => {
+                        defmt::error!("byte read ERROR");
+                    }
+                });
             });
+            //if rx.channel.isr().gif6().is_event() {
+            //    defmt::debug!("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+            //}
+            //if rx.channel.isr().tcif6().is_complete() {
+            //    defmt::debug!(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+            //}
+            //// changing registr for nothing. Try to avoid that part.
+            //// here you only want to stop listening for UART2
+            //let (mut rx, c6) = rx.release();
+            //let is_DMA_complete = c6.isr().tcif6().is_complete();
+            //defmt::debug!("esp32_reader:: is DMA complete: {}", is_DMA_complete);
+            //// rx.unlisten();
+            //let rx = rx.with_dma(c6);
+            //////////////////////////
+            //let new_transfer = unsafe { rx.read(&mut PS3_BUF) };
+            //cx.shared.transfer.lock(|transfer| {
+            //    transfer.replace(new_transfer);
+            //});
         });
+        defmt::debug!("esp32_reader finish");
     }
 
     #[task(binds = USART1, priority = 2, local = [ rx_usart1 ])]
@@ -453,15 +497,6 @@ mod app {
     // fn delay_task_4(cx: delay_task_4::Context) {
     //     cx.local.stepper_4.work();
     // }
-
-    #[task(priority = 8, local = [display_receiver, display])]
-    async fn display_task(cx: display_task::Context) {
-        loop {
-            defmt::debug!("in 'display_task' loop");
-            let message = cx.local.display_receiver.recv().await.unwrap();
-            cx.local.display.print(message);
-        }
-    }
 
     use core::fmt::Write;
     #[task(priority = 9, local = [display_sender])]

@@ -3,7 +3,7 @@
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 use defmt_brtt as _; // global logger
-use ssd1306::{mode::BufferedGraphicsMode, prelude::*, Ssd1306};
+use ssd1306::{mode::TerminalMode, prelude::*, Ssd1306};
 use stm32f1xx_hal::{
     gpio::gpiob::{PB0, PB1, PB10, PB11, PB12, PB13, PB15, PB2, PB8, PB9},
     gpio::gpioc::{PC13, PC5, PC6, PC7},
@@ -43,11 +43,8 @@ pool!(DisplayMemoryPool: DisplayString);
 
 pub type Scl1Pin = PB8<Alternate<OpenDrain>>;
 pub type Sda1Pin = PB9<Alternate<OpenDrain>>;
-pub type Ssd1306Display = Ssd1306<
-    I2CInterface<BlockingI2c<I2C1, (Scl1Pin, Sda1Pin)>>,
-    DisplaySize128x64,
-    BufferedGraphicsMode<DisplaySize128x64>,
->;
+pub type Ssd1306Display =
+    Ssd1306<I2CInterface<BlockingI2c<I2C1, (Scl1Pin, Sda1Pin)>>, DisplaySize128x64, TerminalMode>;
 
 pub type XEnPin = PC7<Output>;
 pub type XStepPin = PC6<Output>;
