@@ -60,14 +60,12 @@ mod app {
     };
 
     #[shared]
-    struct Shared {
-        rx_usart2: Option<Rx<pac::USART2>>,
-        // transfer: Option<Transfer<dma::W, &'static mut [u8; 4], RxDma<>>>,
-    }
+    struct Shared {}
 
     #[local]
     struct Local {
         rx_usart1: stm32f1xx_hal::serial::Rx1,
+        rx_usart2: stm32f1xx_hal::serial::Rx2,
         stepper_1: MyStepper<stm32f1xx_hal::pac::TIM2, XStepPin, TIMER_CLOCK_FREQ>,
         stepper_1_sender: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
         display_receiver: Receiver<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
@@ -128,7 +126,6 @@ mod app {
             &clocks,
         );
         // UART2
-        let mut dma1_channel_6: dma1::C6 = cx.device.DMA1.split().6;
         let tx_usart2 = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
         let rx_usart2 = gpioa.pa3.into_pull_up_input(&mut gpioa.crl);
         let mut serial_usart2 = Serial::new(
@@ -266,19 +263,16 @@ mod app {
 
         serial_usart1.listen(stm32f1xx_hal::serial::Event::Rxne);
         serial_usart2.listen(stm32f1xx_hal::serial::Event::Rxne);
-        dma1_channel_6.listen(stm32f1xx_hal::dma::Event::TransferComplete);
         let (_, rx_usart1) = serial_usart1.split();
         let (_, rx_usart2) = serial_usart2.split();
 
         display_task::spawn().unwrap();
         display_task_writer::spawn().unwrap();
         (
-            Shared {
-                rx_usart2: Some(rx_usart2),
-                // transfer: None,
-            },
+            Shared {},
             Local {
                 rx_usart1,
+                rx_usart2,
                 stepper_1,
                 stepper_1_sender: sender_1,
                 display_receiver,
@@ -309,32 +303,26 @@ mod app {
     }
 
     //
-    // TODO: WHY Software task with higher priority
+    // TODO: WHY Software task with higher priority ('display_task')
     // bring in Error in reading UART?
     //
     // Only if priority > display_priority it works.
     // Otherwise stucks in some unknown place.
     // Task reads 4 bytes from PS3 controller that connected with ESP32 via bluetooth.
     // ESP32 connected to 'motherboard' via UART.
-    #[task(binds = USART2, priority = 7, local = [], shared = [ rx_usart2 ])]
+    #[task(binds = USART2, priority = 7, local = [rx_usart2], shared = [])]
     fn esp32_reader(mut cx: esp32_reader::Context) {
         //TODO: even 'interrupt::free' doesnt help
         cortex_m::interrupt::free(|_| {
             defmt::debug!("esp32_reader start");
-            cx.shared.rx_usart2.lock(|rx_usart2| {
-                if rx_usart2.is_none() {
-                    defmt::error!("esp32_reader: rx_usart2 is None!");
-                    return;
+            match cx.local.rx_usart2.read() {
+                Ok(b) => {
+                    defmt::debug!("byte readed: {}", b);
                 }
-                rx_usart2.as_mut().map(|rx| match rx.read() {
-                    Ok(b) => {
-                        defmt::debug!("byte readed: {}", b);
-                    }
-                    Err(_) => {
-                        defmt::error!("byte read ERROR");
-                    }
-                });
-            });
+                Err(_) => {
+                    defmt::error!("byte read ERROR");
+                }
+            };
         });
         defmt::debug!("esp32_reader finish");
     }
