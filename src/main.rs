@@ -299,6 +299,10 @@ mod app {
     }
 
     static PS3_CROSS_DATA: &'static [u8] = &[0x10, 0, 0x54, 0xFF];
+    //
+    // TODO: WHY Software task with higher priority
+    // bring in Error in reading UART?
+    //
     // Only if priority > 'display_task' priority it works.
     // Otherwise stucks in some unknown place.
     #[task(binds = DMA1_CHANNEL6, priority = 7, local = [  speed: u8 = 0, stepper_1_sender ], shared = [ rx_usart2, transfer ])]
@@ -352,41 +356,6 @@ mod app {
                         )
                     });
             };
-            // if rx.is_rx_not_empty() {
-            //     let received = rx.read();
-            //     match received {
-            //         Ok(read) => {
-            //             defmt::debug!("data from esp32: {}", read);
-            //             let speed = cx.local.speed;
-            //             let mut command = MyStepperCommands::Stay;
-
-            //             *speed = *speed + 1;
-            //             if *speed == MAX_SPEED_VAL + 1 {
-            //                 command = MyStepperCommands::Stay;
-            //             } else if *speed > MAX_SPEED_VAL + 1 {
-            //                 *speed = 0;
-            //                 command = MyStepperCommands::Move(*speed);
-            //             } else {
-            //                 command = MyStepperCommands::Move(*speed);
-            //             }
-
-            //             cx.local
-            //                 .stepper_1_sender
-            //                 .try_send(command)
-            //                 .err()
-            //                 .map(|err| {
-            //                     defmt::debug!(
-            //                         "fail to send command to stepper_1: {:?}",
-            //                         defmt::Debug2Format(&err)
-            //                     )
-            //                 });
-            //         }
-
-            //         Err(err) => {
-            //             defmt::debug!("data from esp32 read err: {:?}", defmt::Debug2Format(&err));
-            //         }
-            //     }
-            // }
         });
     }
 
