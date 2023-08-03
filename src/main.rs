@@ -311,7 +311,7 @@ mod app {
             let (buf, mut rx) = transfer.take().unwrap().wait();
             cx.shared.rx_usart2.lock(|rx_usart2| {
                 // changing registr for nothing. Try to avoid that part.
-                // here you only want to stop listening for UART2
+                // here you only want to start listening for UART2
                 let (mut rx, c6) = rx.release();
                 rx.listen();
                 let rx = rx.with_dma(c6);
