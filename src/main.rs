@@ -271,7 +271,7 @@ mod app {
         let (_, rx_usart2) = serial_usart2.split();
 
         display_task::spawn().unwrap();
-        // display_task_writer::spawn().unwrap();
+        display_task_writer::spawn().unwrap();
         (
             Shared {
                 rx_usart2: Some(rx_usart2.with_dma(dma1_channel_6)),
@@ -299,9 +299,9 @@ mod app {
     }
 
     static PS3_CROSS_DATA: &'static [u8] = &[0x10, 0, 0x54, 0xFF];
-    // Only if priority > display_priority it works.
+    // Only if priority > 'display_task' priority it works.
     // Otherwise stucks in some unknown place.
-    #[task(binds = DMA1_CHANNEL6, priority = 11, local = [  speed: u8 = 0, stepper_1_sender ], shared = [ rx_usart2, transfer ])]
+    #[task(binds = DMA1_CHANNEL6, priority = 7, local = [  speed: u8 = 0, stepper_1_sender ], shared = [ rx_usart2, transfer ])]
     fn esp32_reader_finish(mut cx: esp32_reader_finish::Context) {
         cx.shared.transfer.lock(|transfer| {
             if transfer.is_none() {
