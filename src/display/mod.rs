@@ -107,7 +107,6 @@ pub async fn display_str(
             display_sender.send(memory_block).await
         }
         None => {
-            drop(text);
             defmt::error!("fail to alloc DisplayMemoryPool");
             Result::Ok(())
         }
