@@ -133,7 +133,7 @@ mod app {
             (tx_usart2, rx_usart2),
             &mut afio.mapr,
             Config::default()
-                .baudrate(9600.bps())
+                .baudrate(57600.bps())
                 .wordlength_8bits()
                 .stopbits(stm32f1xx_hal::serial::StopBits::STOP1)
                 .parity_none(),
@@ -273,6 +273,9 @@ mod app {
 
         display_task::spawn().unwrap();
         display_task_writer::spawn().unwrap();
+        ps3_events_reader::spawn().unwrap();
+        ps3_reader_task::spawn().unwrap();
+
         (
             Shared {},
             Local {
@@ -304,20 +307,24 @@ mod app {
 
     #[task( priority = 4, local = [  ps3_events_receiver  ])]
     async fn ps3_events_reader(mut cx: ps3_events_reader::Context) {
-        let ps3_event = cx.local.ps3_events_receiver.recv().await;
-        match ps3_event {
-            Ok(ps3_event) => {
-                defmt::debug!("receive ps3_event: {:?}", defmt::Debug2Format(&ps3_event));
-            }
-            Err(err) => {
-                defmt::error!("fail to receive ps3 event: {:?}", defmt::Debug2Format(&err));
+        loop {
+            let ps3_event = cx.local.ps3_events_receiver.recv().await;
+            match ps3_event {
+                Ok(ps3_event) => {
+                    defmt::debug!("receive ps3_event: {:?}", defmt::Debug2Format(&ps3_event));
+                }
+                Err(err) => {
+                    defmt::error!("fail to receive ps3 event: {:?}", defmt::Debug2Format(&err));
+                }
             }
         }
     }
 
     #[task( priority = 4, local = [  ps3_reader  ])]
     async fn ps3_reader_task(mut cx: ps3_reader_task::Context) {
-        cx.local.ps3_reader.work().await;
+        loop {
+            cx.local.ps3_reader.work().await;
+        }
     }
 
     #[task(binds = USART2, priority = 12, local = [ speed: u8 = 0, rx_usart2, tx_usart2, stepper_1_sender, ps3_bytes_sender ])]
@@ -327,7 +334,6 @@ mod app {
             let received = rx.read();
             match received {
                 Ok(read) => {
-                    defmt::debug!("data from esp32: {}", read);
                     cx.local.ps3_bytes_sender.try_send(read);
                     // let speed = cx.local.speed;
                     // let mut command = MyStepperCommands::Stay;
