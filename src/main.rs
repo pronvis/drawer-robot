@@ -68,6 +68,9 @@ mod app {
         display_receiver: Receiver<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
         display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
         display: OledDisplay,
+        ps3_bytes_sender: Sender<'static, u8, PS3_CHANNEL_CAPACITY>,
+        ps3_reader: ps3_reader::Ps3Reader,
+        ps3_events_receiver: Receiver<'static, ps3_reader::Ps3Event, PS3_CHANNEL_CAPACITY>,
     }
 
     #[init]
@@ -219,8 +222,6 @@ mod app {
             make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
         let (sender_4, stepper_4_commands_receiver) =
             make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
-        let (mut display_sender, display_receiver) =
-            make_channel!(Box<DisplayMemoryPool>, CHANNEL_CAPACITY);
 
         let stepper_1 = MyStepper::new(
             1,
@@ -254,6 +255,13 @@ mod app {
         //
         //
         //
+        let (mut display_sender, display_receiver) =
+            make_channel!(Box<DisplayMemoryPool>, CHANNEL_CAPACITY);
+
+        let (mut ps3_bytes_sender, ps3_bytes_receiver) = make_channel!(u8, PS3_CHANNEL_CAPACITY);
+        let (mut ps3_events_sender, ps3_events_receiver) =
+            make_channel!(ps3_reader::Ps3Event, PS3_CHANNEL_CAPACITY);
+        let ps3_reader = ps3_reader::Ps3Reader::new(ps3_bytes_receiver, ps3_events_sender);
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
@@ -277,6 +285,9 @@ mod app {
                 display_receiver,
                 display_sender,
                 display,
+                ps3_bytes_sender,
+                ps3_reader,
+                ps3_events_receiver,
             },
         )
     }
@@ -291,7 +302,25 @@ mod app {
         }
     }
 
-    #[task(binds = USART2, priority = 2, local = [ speed: u8 = 0, rx_usart2, tx_usart2, stepper_1_sender ])]
+    #[task( priority = 4, local = [  ps3_events_receiver  ])]
+    async fn ps3_events_reader(mut cx: ps3_events_reader::Context) {
+        let ps3_event = cx.local.ps3_events_receiver.recv().await;
+        match ps3_event {
+            Ok(ps3_event) => {
+                defmt::debug!("receive ps3_event: {:?}", defmt::Debug2Format(&ps3_event));
+            }
+            Err(err) => {
+                defmt::error!("fail to receive ps3 event: {:?}", defmt::Debug2Format(&err));
+            }
+        }
+    }
+
+    #[task( priority = 4, local = [  ps3_reader  ])]
+    async fn ps3_reader_task(mut cx: ps3_reader_task::Context) {
+        cx.local.ps3_reader.work().await;
+    }
+
+    #[task(binds = USART2, priority = 12, local = [ speed: u8 = 0, rx_usart2, tx_usart2, stepper_1_sender, ps3_bytes_sender ])]
     fn esp32_reader(cx: esp32_reader::Context) {
         let rx = cx.local.rx_usart2;
         if rx.is_rx_not_empty() {
@@ -299,29 +328,30 @@ mod app {
             match received {
                 Ok(read) => {
                     defmt::debug!("data from esp32: {}", read);
-                    let speed = cx.local.speed;
-                    let mut command = MyStepperCommands::Stay;
+                    cx.local.ps3_bytes_sender.try_send(read);
+                    // let speed = cx.local.speed;
+                    // let mut command = MyStepperCommands::Stay;
 
-                    *speed = *speed + 1;
-                    if *speed == MAX_SPEED_VAL + 1 {
-                        command = MyStepperCommands::Stay;
-                    } else if *speed > MAX_SPEED_VAL + 1 {
-                        *speed = 0;
-                        command = MyStepperCommands::Move(*speed);
-                    } else {
-                        command = MyStepperCommands::Move(*speed);
-                    }
+                    // *speed = *speed + 1;
+                    // if *speed == MAX_SPEED_VAL + 1 {
+                    //     command = MyStepperCommands::Stay;
+                    // } else if *speed > MAX_SPEED_VAL + 1 {
+                    //     *speed = 0;
+                    //     command = MyStepperCommands::Move(*speed);
+                    // } else {
+                    //     command = MyStepperCommands::Move(*speed);
+                    // }
 
-                    cx.local
-                        .stepper_1_sender
-                        .try_send(command)
-                        .err()
-                        .map(|err| {
-                            defmt::debug!(
-                                "fail to send command to stepper_1: {:?}",
-                                defmt::Debug2Format(&err)
-                            )
-                        });
+                    // cx.local
+                    //     .stepper_1_sender
+                    //     .try_send(command)
+                    //     .err()
+                    //     .map(|err| {
+                    //         defmt::debug!(
+                    //             "fail to send command to stepper_1: {:?}",
+                    //             defmt::Debug2Format(&err)
+                    //         )
+                    //     });
                 }
 
                 Err(err) => {
@@ -331,7 +361,7 @@ mod app {
         }
     }
 
-    #[task(binds = USART1, priority = 2, local = [  rx_usart1, tx_usart1  ])]
+    #[task(binds = USART1, priority = 8, local = [  rx_usart1, tx_usart1  ])]
     fn bluetooth_reader(cx: bluetooth_reader::Context) {
         let rx = cx.local.rx_usart1;
         if rx.is_rx_not_empty() {
@@ -349,27 +379,27 @@ mod app {
         }
     }
 
-    #[task(binds = TIM2, priority = 1, local = [ stepper_1 ])]
+    #[task(binds = TIM2, priority = 10, local = [ stepper_1 ])]
     fn delay_task_1(cx: delay_task_1::Context) {
         cx.local.stepper_1.work();
     }
 
-    // #[task(binds = TIM3, priority = 3, local = [ stepper_2 ])]
+    // #[task(binds = TIM3, priority = 10, local = [ stepper_2 ])]
     // fn delay_task_2(cx: delay_task_2::Context) {
     //     cx.local.stepper_2.work();
     // }
 
-    // #[task(binds = TIM4, priority = 3, local = [ stepper_3 ])]
+    // #[task(binds = TIM4, priority = 10, local = [ stepper_3 ])]
     // fn delay_task_3(cx: delay_task_3::Context) {
     //     cx.local.stepper_3.work();
     // }
 
-    // #[task(binds = TIM5, priority = 3, local = [ stepper_4 ])]
+    // #[task(binds = TIM5, priority = 10, local = [ stepper_4 ])]
     // fn delay_task_4(cx: delay_task_4::Context) {
     //     cx.local.stepper_4.work();
     // }
 
-    #[task(priority = 8, local = [display_receiver, display])]
+    #[task(priority = 1, local = [display_receiver, display])]
     async fn display_task(cx: display_task::Context) {
         loop {
             let message = cx.local.display_receiver.recv().await.unwrap();
@@ -378,7 +408,7 @@ mod app {
     }
 
     use core::fmt::Write;
-    #[task(priority = 9, local = [display_sender])]
+    #[task(priority = 2, local = [display_sender])]
     async fn display_task_writer(mut cx: display_task_writer::Context) {
         let mut index: u32 = 0;
         loop {
@@ -388,7 +418,7 @@ mod app {
                 .await
                 .unwrap();
 
-            // Systick::delay(500.millis()).await;
+            Systick::delay(500.millis()).await;
             index += 1;
         }
     }

@@ -87,9 +87,11 @@ impl<TIM: Instance, STEP_PIN: OutputPin, const FREQ: u32> MyStepper<TIM, STEP_PI
         }
 
         if !self.is_moving {
+            self.timer.clear_interrupt(Event::Update);
             return;
         }
 
+        // self.timer.start have 'clear_interrupt' inside
         if self.state.step_phase {
             self.step_pin.set_low().ok();
             self.state.step_phase = false;
@@ -102,8 +104,6 @@ impl<TIM: Instance, STEP_PIN: OutputPin, const FREQ: u32> MyStepper<TIM, STEP_PI
             self.timer
                 .start(self.state.micros_pulse_duration.micros())
                 .unwrap(); //TODO: unwrap
-
-            self.timer.clear_interrupt(Event::Update);
         }
     }
 
