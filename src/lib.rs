@@ -16,7 +16,7 @@ use heapless::{pool, pool::singleton::Pool};
 
 pub mod display;
 pub mod my_stepper;
-pub mod ps3_reader;
+pub mod ps3;
 pub const CHANNEL_CAPACITY: usize = 1;
 pub const PS3_CHANNEL_CAPACITY: usize = 8;
 

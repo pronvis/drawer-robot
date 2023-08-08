@@ -69,8 +69,8 @@ mod app {
         display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
         display: OledDisplay,
         ps3_bytes_sender: Sender<'static, u8, PS3_CHANNEL_CAPACITY>,
-        ps3_reader: ps3_reader::Ps3Reader,
-        ps3_events_receiver: Receiver<'static, ps3_reader::Ps3Event, PS3_CHANNEL_CAPACITY>,
+        ps3_reader: ps3::Ps3Reader,
+        ps3_event_parser: ps3::Ps3EventParser,
     }
 
     #[init]
@@ -260,8 +260,10 @@ mod app {
 
         let (mut ps3_bytes_sender, ps3_bytes_receiver) = make_channel!(u8, PS3_CHANNEL_CAPACITY);
         let (mut ps3_events_sender, ps3_events_receiver) =
-            make_channel!(ps3_reader::Ps3Event, PS3_CHANNEL_CAPACITY);
-        let ps3_reader = ps3_reader::Ps3Reader::new(ps3_bytes_receiver, ps3_events_sender);
+            make_channel!(ps3::Ps3Event, PS3_CHANNEL_CAPACITY);
+        let ps3_reader = ps3::Ps3Reader::new(ps3_bytes_receiver, ps3_events_sender);
+        let ps3_event_parser =
+            ps3::Ps3EventParser::new(ps3_events_receiver, display_sender.clone());
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
@@ -272,7 +274,7 @@ mod app {
         let (tx_usart2, rx_usart2) = serial_usart2.split();
 
         display_task::spawn().unwrap();
-        display_task_writer::spawn().unwrap();
+        // display_task_writer::spawn().unwrap();
         ps3_events_reader::spawn().unwrap();
         ps3_reader_task::spawn().unwrap();
 
@@ -290,7 +292,7 @@ mod app {
                 display,
                 ps3_bytes_sender,
                 ps3_reader,
-                ps3_events_receiver,
+                ps3_event_parser,
             },
         )
     }
@@ -305,18 +307,10 @@ mod app {
         }
     }
 
-    #[task( priority = 4, local = [  ps3_events_receiver  ])]
+    #[task( priority = 4, local = [ ps3_event_parser ])]
     async fn ps3_events_reader(mut cx: ps3_events_reader::Context) {
         loop {
-            let ps3_event = cx.local.ps3_events_receiver.recv().await;
-            match ps3_event {
-                Ok(ps3_event) => {
-                    defmt::debug!("receive ps3_event: {:?}", defmt::Debug2Format(&ps3_event));
-                }
-                Err(err) => {
-                    defmt::error!("fail to receive ps3 event: {:?}", defmt::Debug2Format(&err));
-                }
-            }
+            cx.local.ps3_event_parser.work().await;
         }
     }
 
@@ -334,7 +328,13 @@ mod app {
             let received = rx.read();
             match received {
                 Ok(read) => {
-                    cx.local.ps3_bytes_sender.try_send(read);
+                    cx.local.ps3_bytes_sender.try_send(read).err().map(|err| {
+                        defmt::debug!(
+                            "fail to send bytes to ps3_reader: {:?}",
+                            defmt::Debug2Format(&err)
+                        );
+                    });
+
                     // let speed = cx.local.speed;
                     // let mut command = MyStepperCommands::Stay;
 

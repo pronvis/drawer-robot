@@ -101,6 +101,15 @@ pub async fn display_str(
     text: DisplayString,
     display_sender: &mut Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
 ) -> Result<(), rtic_sync::channel::NoReceiver<Box<DisplayMemoryPool>>> {
-    let memory_block = DisplayMemoryPool::alloc().unwrap().init(text);
-    display_sender.send(memory_block).await
+    match DisplayMemoryPool::alloc() {
+        Some(allocated_memory) => {
+            let memory_block = allocated_memory.init(text);
+            display_sender.send(memory_block).await
+        }
+        None => {
+            drop(text);
+            defmt::error!("fail to alloc DisplayMemoryPool");
+            Result::Ok(())
+        }
+    }
 }

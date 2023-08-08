@@ -171,7 +171,7 @@ void notify()
 }
 
 void onConnect(){
-    byte signal_to_send[4] = {command_connect, 0, 0, 0xff};
+    byte signal_to_send[4] = {header_byte, header_byte, command_connect, end_byte};
     Serial.write(signal_to_send, 4);
     Serial.flush();
     Ps3.setPlayer(1);
