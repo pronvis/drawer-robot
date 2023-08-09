@@ -43,24 +43,29 @@ impl MyStepperState {
 #[derive(Debug, Clone)]
 pub enum MyStepperCommands {
     Stay,
+    Direction(bool),
     Move(u8),
 }
 
-pub struct MyStepper<TIM, STEP_PIN, const FREQ: u32> {
+pub struct MyStepper<TIM, STEP_PIN, DIR_PIN, const FREQ: u32> {
     index: u8, // need for logging
     state: MyStepperState,
     timer: Counter<TIM, FREQ>,
     step_pin: STEP_PIN,
+    direction_pin: DIR_PIN,
     commands_channel: Receiver<'static, MyStepperCommands, CHANNEL_CAPACITY>,
     is_moving: bool, //TODO: move to state
 }
 
-impl<TIM: Instance, STEP_PIN: OutputPin, const FREQ: u32> MyStepper<TIM, STEP_PIN, FREQ> {
+impl<TIM: Instance, STEP_PIN: OutputPin, DIR_PIN: OutputPin, const FREQ: u32>
+    MyStepper<TIM, STEP_PIN, DIR_PIN, FREQ>
+{
     pub fn new(
         index: u8,
         state: MyStepperState,
         timer: Counter<TIM, FREQ>,
         step_pin: STEP_PIN,
+        dir_pin: DIR_PIN,
         commands_channel: Receiver<'static, MyStepperCommands, CHANNEL_CAPACITY>,
     ) -> Self {
         Self {
@@ -68,6 +73,7 @@ impl<TIM: Instance, STEP_PIN: OutputPin, const FREQ: u32> MyStepper<TIM, STEP_PI
             state,
             timer,
             step_pin,
+            direction_pin: dir_pin,
             commands_channel,
             is_moving: false,
         }
@@ -110,6 +116,13 @@ impl<TIM: Instance, STEP_PIN: OutputPin, const FREQ: u32> MyStepper<TIM, STEP_PI
     fn handle_command(&mut self, command: MyStepperCommands) {
         match command {
             MyStepperCommands::Stay => self.is_moving = false,
+            MyStepperCommands::Direction(is_right) => {
+                if is_right {
+                    self.direction_pin.set_low().ok();
+                } else {
+                    self.direction_pin.set_high().ok();
+                }
+            }
             MyStepperCommands::Move(speed) => {
                 self.is_moving = true;
                 self.state.micros_between_steps = speed_to_delays(speed);
@@ -125,6 +138,7 @@ impl<TIM: Instance, STEP_PIN: OutputPin, const FREQ: u32> MyStepper<TIM, STEP_PI
 
 fn speed_to_delays(speed: u8) -> u32 {
     let new_speed = core::cmp::min(speed, MAX_SPEED_VAL);
-    let new_delays: u32 = MIN_DELAY_BETWEEN_STEPS + DELAY_BETWEEN_STEPS_STEP * u32::from(new_speed);
+    let new_delays: u32 =
+        MIN_DELAY_BETWEEN_STEPS + DELAY_BETWEEN_STEPS_STEP * u32::from(MAX_SPEED_VAL - new_speed);
     new_delays
 }

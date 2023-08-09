@@ -1,4 +1,7 @@
-use crate::{display, DisplayMemoryPool, DisplayString, CHANNEL_CAPACITY, PS3_CHANNEL_CAPACITY};
+use crate::{
+    display, robot::RobotCommand, DisplayMemoryPool, DisplayString, CHANNEL_CAPACITY,
+    PS3_CHANNEL_CAPACITY,
+};
 use heapless::pool::singleton::Box;
 use rtic_sync::channel::{Receiver, Sender};
 
@@ -26,16 +29,19 @@ use core::fmt::Write;
 
 pub struct Ps3EventParser {
     ps3_events_receiver: Receiver<'static, Ps3Event, PS3_CHANNEL_CAPACITY>,
+    robot_commands_sender: Sender<'static, RobotCommand, CHANNEL_CAPACITY>,
     display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
 }
 
 impl Ps3EventParser {
     pub fn new(
         ps3_events_receiver: Receiver<'static, Ps3Event, PS3_CHANNEL_CAPACITY>,
+        robot_commands_sender: Sender<'static, RobotCommand, CHANNEL_CAPACITY>,
         display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
     ) -> Self {
         Ps3EventParser {
             ps3_events_receiver,
+            robot_commands_sender,
             display_sender,
         }
     }
@@ -78,13 +84,40 @@ impl Ps3EventParser {
                     true => "left",
                     false => "right",
                 };
+                defmt::debug!(
+                    "sticker event:\t{}\tx: {}\ty: {}",
+                    right_left_str,
+                    x_axis,
+                    y_axis
+                );
 
-                let mut data_str = DisplayString::new();
-                write!(data_str, "{right_left_str}: {x_axis} : {y_axis}").expect("not written");
-                display::display_str(data_str, &mut self.display_sender)
-                    .await
-                    .unwrap();
+                let robot_command = analog_signal_to_robot_command(data[0], x_axis, y_axis);
+                self.robot_commands_sender.send(robot_command).await.ok();
+
+                // let mut data_str = DisplayString::new();
+                // write!(data_str, "{right_left_str}: {x_axis} : {y_axis}").expect("not written");
+                // display::display_str(data_str, &mut self.display_sender)
+                //     .await
+                //     .unwrap();
             }
         }
     }
+}
+
+fn analog_signal_to_robot_command(byte_0: u8, byte_1: i8, byte_2: i8) -> RobotCommand {
+    let mut robot_command = RobotCommand::Stay;
+    if byte_0 == 0x01 {
+        if byte_1 == -1 && byte_2 == -1 {
+            return RobotCommand::Stay;
+        }
+
+        let speed = byte_1 / 10;
+        if speed < 0 {
+            robot_command = RobotCommand::MoveToLeft(speed.abs() as u8);
+        } else {
+            robot_command = RobotCommand::MoveToRight(speed as u8);
+        }
+    }
+
+    robot_command
 }

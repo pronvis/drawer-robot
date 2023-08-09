@@ -63,7 +63,7 @@ mod app {
         rx_usart1: stm32f1xx_hal::serial::Rx1,
         tx_usart2: stm32f1xx_hal::serial::Tx2,
         rx_usart2: stm32f1xx_hal::serial::Rx2,
-        stepper_1: MyStepper<stm32f1xx_hal::pac::TIM2, XStepPin, TIMER_CLOCK_FREQ>,
+        stepper_1: MyStepper<stm32f1xx_hal::pac::TIM2, XStepPin, XDirPin, TIMER_CLOCK_FREQ>,
         stepper_1_sender: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
         display_receiver: Receiver<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
         display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
@@ -71,6 +71,7 @@ mod app {
         ps3_bytes_sender: Sender<'static, u8, PS3_CHANNEL_CAPACITY>,
         ps3_reader: ps3::Ps3Reader,
         ps3_event_parser: ps3::Ps3EventParser,
+        robot: robot::Robot,
     }
 
     #[init]
@@ -148,15 +149,27 @@ mod app {
         let x_step_pin = gpioc
             .pc6
             .into_push_pull_output_with_state(&mut gpioc.crl, PinState::Low);
+        let x_dir_pin = gpiob
+            .pb15
+            .into_push_pull_output_with_state(&mut gpiob.crh, PinState::Low);
         let y_step_pin = gpiob
             .pb13
+            .into_push_pull_output_with_state(&mut gpiob.crh, PinState::Low);
+        let y_dir_pin = gpiob
+            .pb12
             .into_push_pull_output_with_state(&mut gpiob.crh, PinState::Low);
         let z_step_pin = gpiob
             .pb10
             .into_push_pull_output_with_state(&mut gpiob.crh, PinState::Low);
+        let z_dir_pin = gpiob
+            .pb2
+            .into_push_pull_output_with_state(&mut gpiob.crl, PinState::Low);
         let e_step_pin = gpiob
             .pb0
             .into_push_pull_output_with_state(&mut gpiob.crl, PinState::Low);
+        let e_dir_pin = gpioc
+            .pc5
+            .into_push_pull_output_with_state(&mut gpioc.crl, PinState::Low);
 
         let mut x_en = gpioc.pc7.into_push_pull_output(&mut gpioc.crl);
         x_en.set_low();
@@ -228,6 +241,7 @@ mod app {
             stepper_state.clone(),
             timer_2,
             x_step_pin,
+            x_dir_pin,
             stepper_1_commands_receiver,
         );
         let stepper_2 = MyStepper::new(
@@ -235,6 +249,7 @@ mod app {
             stepper_state.clone(),
             timer_3,
             y_step_pin,
+            y_dir_pin,
             stepper_2_commands_receiver,
         );
         let stepper_3 = MyStepper::new(
@@ -242,6 +257,7 @@ mod app {
             stepper_state.clone(),
             timer_4,
             z_step_pin,
+            z_dir_pin,
             stepper_3_commands_receiver,
         );
         let stepper_4 = MyStepper::new(
@@ -249,6 +265,7 @@ mod app {
             stepper_state.clone(),
             timer_5,
             e_step_pin,
+            e_dir_pin,
             stepper_4_commands_receiver,
         );
         //
@@ -261,9 +278,14 @@ mod app {
         let (mut ps3_bytes_sender, ps3_bytes_receiver) = make_channel!(u8, PS3_CHANNEL_CAPACITY);
         let (mut ps3_events_sender, ps3_events_receiver) =
             make_channel!(ps3::Ps3Event, PS3_CHANNEL_CAPACITY);
+        let (mut robot_commands_sender, robot_commands_receiver) =
+            make_channel!(robot::RobotCommand, CHANNEL_CAPACITY);
         let ps3_reader = ps3::Ps3Reader::new(ps3_bytes_receiver, ps3_events_sender);
-        let ps3_event_parser =
-            ps3::Ps3EventParser::new(ps3_events_receiver, display_sender.clone());
+        let ps3_event_parser = ps3::Ps3EventParser::new(
+            ps3_events_receiver,
+            robot_commands_sender,
+            display_sender.clone(),
+        );
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
@@ -273,10 +295,19 @@ mod app {
         let (tx_usart1, rx_usart1) = serial_usart1.split();
         let (tx_usart2, rx_usart2) = serial_usart2.split();
 
+        let robot = robot::Robot::new(
+            sender_1.clone(),
+            sender_2,
+            sender_3,
+            sender_4,
+            robot_commands_receiver,
+        );
+
         display_task::spawn().unwrap();
         // display_task_writer::spawn().unwrap();
         ps3_events_reader::spawn().unwrap();
         ps3_reader_task::spawn().unwrap();
+        robot_task::spawn().unwrap();
 
         (
             Shared {},
@@ -293,6 +324,7 @@ mod app {
                 ps3_bytes_sender,
                 ps3_reader,
                 ps3_event_parser,
+                robot,
             },
         )
     }
@@ -318,6 +350,13 @@ mod app {
     async fn ps3_reader_task(mut cx: ps3_reader_task::Context) {
         loop {
             cx.local.ps3_reader.work().await;
+        }
+    }
+
+    #[task( priority = 5, local = [  robot  ])]
+    async fn robot_task(mut cx: robot_task::Context) {
+        loop {
+            cx.local.robot.work().await;
         }
     }
 
