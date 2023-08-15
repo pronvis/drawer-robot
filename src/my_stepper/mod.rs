@@ -27,6 +27,7 @@ pub type MyStepper1 = MyStepper<stm32f1xx_hal::pac::TIM2, XStepPin, XDirPin>;
 pub type MyStepper2 = MyStepper<stm32f1xx_hal::pac::TIM3, YStepPin, YDirPin>;
 pub type MyStepper3 = MyStepper<stm32f1xx_hal::pac::TIM4, ZStepPin, ZDirPin>;
 pub type MyStepper4 = MyStepper<stm32f1xx_hal::pac::TIM5, EStepPin, EDirPin>;
+pub type MyStepperCommandsSender = Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>;
 
 #[derive(Clone)]
 pub struct MyStepperState {
@@ -180,22 +181,10 @@ pub fn create_steppers(
     tim4: TIM4,
     tim5: TIM5,
 ) -> (
-    (
-        MyStepper1,
-        Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
-    ),
-    (
-        MyStepper2,
-        Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
-    ),
-    (
-        MyStepper3,
-        Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
-    ),
-    (
-        MyStepper4,
-        Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
-    ),
+    (MyStepper1, MyStepperCommandsSender),
+    (MyStepper2, MyStepperCommandsSender),
+    (MyStepper3, MyStepperCommandsSender),
+    (MyStepper4, MyStepperCommandsSender),
 ) {
     let stepper_state = MyStepperState::new();
 

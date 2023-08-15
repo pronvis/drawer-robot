@@ -228,7 +228,6 @@ mod app {
         )
     }
 
-    // Optional idle, can be removed if not needed.
     #[idle(local = [display_receiver, display])]
     fn idle(cx: idle::Context) -> ! {
         loop {

@@ -1,6 +1,11 @@
-use rtic_sync::channel::{Receiver, Sender};
+use rtic_sync::channel::Receiver;
 
-use crate::{my_stepper::MyStepperCommands, CHANNEL_CAPACITY};
+use crate::{
+    my_stepper::{MyStepperCommands, MyStepperCommandsSender},
+    CHANNEL_CAPACITY,
+};
+
+pub type RobotCommandsReceiver = Receiver<'static, RobotCommand, CHANNEL_CAPACITY>;
 
 //TODO: improve
 pub enum RobotCommand {
@@ -10,20 +15,20 @@ pub enum RobotCommand {
 }
 
 pub struct Robot {
-    stepper_1: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
-    stepper_2: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
-    stepper_3: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
-    stepper_4: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
-    commands_receiver: Receiver<'static, RobotCommand, CHANNEL_CAPACITY>,
+    stepper_1: MyStepperCommandsSender,
+    stepper_2: MyStepperCommandsSender,
+    stepper_3: MyStepperCommandsSender,
+    stepper_4: MyStepperCommandsSender,
+    commands_receiver: RobotCommandsReceiver,
 }
 
 impl Robot {
     pub fn new(
-        stepper_1: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
-        stepper_2: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
-        stepper_3: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
-        stepper_4: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
-        commands_receiver: Receiver<'static, RobotCommand, CHANNEL_CAPACITY>,
+        stepper_1: MyStepperCommandsSender,
+        stepper_2: MyStepperCommandsSender,
+        stepper_3: MyStepperCommandsSender,
+        stepper_4: MyStepperCommandsSender,
+        commands_receiver: RobotCommandsReceiver,
     ) -> Self {
         Robot {
             stepper_1,
