@@ -67,7 +67,8 @@ impl MyStepperState {
 #[derive(Debug, Clone)]
 pub enum MyStepperCommands {
     Stay,
-    Step(u32),
+    StartMove,
+    AddSteps(u32),
     ReduceSpeed,
     IncreaseSpeed,
     Direction(bool),
@@ -155,6 +156,7 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
     fn handle_command(&mut self, command: MyStepperCommands) {
         match command {
             MyStepperCommands::Stay => self.state.is_moving = false,
+            MyStepperCommands::StartMove => self.state.is_moving = true,
             MyStepperCommands::ReduceSpeed => {
                 if self.state.micros_between_steps > MIN_DELAY_BETWEEN_STEPS {
                     self.state.micros_between_steps -= DELAY_BETWEEN_STEPS_STEP;
@@ -175,10 +177,14 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
                     self.state.micros_between_steps
                 );
             }
-            MyStepperCommands::Step(steps) => {
-                self.state.is_moving = true;
+            MyStepperCommands::AddSteps(steps) => {
                 self.state.steps_mode = true;
                 self.state.steps_amount += steps;
+                defmt::debug!(
+                    "stepper #{}: update steps_amount = {}",
+                    self.index,
+                    self.state.steps_amount
+                );
             }
             MyStepperCommands::Direction(is_right) => {
                 if is_right {

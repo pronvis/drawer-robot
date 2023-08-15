@@ -11,7 +11,8 @@ pub type RobotCommandsReceiver = Receiver<'static, RobotCommand, CHANNEL_CAPACIT
 //TODO: improve
 pub enum RobotCommand {
     Stay,
-    Step(u32),
+    StartMove,
+    AddSteps(u32),
     ReduceSpeed,
     IncreaseSpeed,
     MoveToRight(u8),
@@ -88,8 +89,8 @@ impl Robot {
                 self.send_command_2(stepper_dir_command, stepper_speed_command).await;
             },
 
-            RobotCommand::Step(steps_amount) => {
-                let command = MyStepperCommands::Step(steps_amount);
+            RobotCommand::AddSteps(steps_amount) => {
+                let command = MyStepperCommands::AddSteps(steps_amount);
                 self.send_command(command).await;
             },
 
@@ -107,6 +108,11 @@ impl Robot {
                 self.state.separate_mode = true;
                 self.state.stepper_index = index;
             },
+
+            RobotCommand::StartMove => {
+                let command = MyStepperCommands::StartMove;
+                self.send_command(command).await;
+            }
 
             RobotCommand::AllMode => {
                 self.state.separate_mode = false;

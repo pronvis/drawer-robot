@@ -116,7 +116,7 @@ fn digital_signal_to_robot_command(signal: u8) -> Option<RobotCommand> {
     let mut robot_command = None;
     if signal == 0x55 {
         // up button
-        robot_command.replace(RobotCommand::Step(100));
+        robot_command.replace(RobotCommand::AddSteps(10));
     } else if signal == 0x53 {
         // square button
         robot_command.replace(RobotCommand::SelectStepper(0));
@@ -140,6 +140,9 @@ fn digital_signal_to_robot_command(signal: u8) -> Option<RobotCommand> {
         robot_command.replace(RobotCommand::Stay);
     } else if signal == 0x57 {
         // Start button
+        robot_command.replace(RobotCommand::StartMove);
+    } else if signal == 0x59 {
+        // Select button
         robot_command.replace(RobotCommand::AllMode);
     }
 
