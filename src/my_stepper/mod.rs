@@ -23,6 +23,11 @@ pub const DELAY_BETWEEN_STEPS_STEP: u32 = 100;
 pub const MAX_SPEED_VAL: u8 =
     ((MAX_DELAY_BETWEEN_STEPS - MIN_DELAY_BETWEEN_STEPS) / DELAY_BETWEEN_STEPS_STEP) as u8;
 
+pub type MyStepper1 = MyStepper<stm32f1xx_hal::pac::TIM2, XStepPin, XDirPin>;
+pub type MyStepper2 = MyStepper<stm32f1xx_hal::pac::TIM3, YStepPin, YDirPin>;
+pub type MyStepper3 = MyStepper<stm32f1xx_hal::pac::TIM4, ZStepPin, ZDirPin>;
+pub type MyStepper4 = MyStepper<stm32f1xx_hal::pac::TIM5, EStepPin, EDirPin>;
+
 #[derive(Clone)]
 pub struct MyStepperState {
     //Regulate Speed with that value.
@@ -176,19 +181,19 @@ pub fn create_steppers(
     tim5: TIM5,
 ) -> (
     (
-        MyStepper<stm32f1xx_hal::pac::TIM2, XStepPin, XDirPin>,
+        MyStepper1,
         Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
     ),
     (
-        MyStepper<stm32f1xx_hal::pac::TIM3, YStepPin, YDirPin>,
+        MyStepper2,
         Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
     ),
     (
-        MyStepper<stm32f1xx_hal::pac::TIM4, ZStepPin, ZDirPin>,
+        MyStepper3,
         Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
     ),
     (
-        MyStepper<stm32f1xx_hal::pac::TIM5, EStepPin, EDirPin>,
+        MyStepper4,
         Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
     ),
 ) {

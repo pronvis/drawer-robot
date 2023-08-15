@@ -62,7 +62,10 @@ mod app {
         rx_usart1: stm32f1xx_hal::serial::Rx1,
         tx_usart2: stm32f1xx_hal::serial::Tx2,
         rx_usart2: stm32f1xx_hal::serial::Rx2,
-        stepper_1: MyStepper<stm32f1xx_hal::pac::TIM2, XStepPin, XDirPin>,
+        stepper_1: MyStepper1,
+        stepper_2: MyStepper2,
+        stepper_3: MyStepper3,
+        stepper_4: MyStepper4,
         display_receiver: Receiver<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
         display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
         display: OledDisplay,
@@ -198,7 +201,6 @@ mod app {
             robot_commands_receiver,
         );
 
-        // display_task::spawn().unwrap();
         // display_task_writer::spawn().unwrap();
         ps3_events_reader::spawn().unwrap();
         ps3_reader_task::spawn().unwrap();
@@ -212,6 +214,9 @@ mod app {
                 rx_usart2,
                 tx_usart2,
                 stepper_1,
+                stepper_2,
+                stepper_3,
+                stepper_4,
                 display_receiver,
                 display_sender,
                 display,
@@ -299,20 +304,20 @@ mod app {
         cx.local.stepper_1.work();
     }
 
-    // #[task(binds = TIM3, priority = 10, local = [ stepper_2 ])]
-    // fn delay_task_2(cx: delay_task_2::Context) {
-    //     cx.local.stepper_2.work();
-    // }
+    #[task(binds = TIM3, priority = 10, local = [ stepper_2 ])]
+    fn delay_task_2(cx: delay_task_2::Context) {
+        cx.local.stepper_2.work();
+    }
 
-    // #[task(binds = TIM4, priority = 10, local = [ stepper_3 ])]
-    // fn delay_task_3(cx: delay_task_3::Context) {
-    //     cx.local.stepper_3.work();
-    // }
+    #[task(binds = TIM4, priority = 10, local = [ stepper_3 ])]
+    fn delay_task_3(cx: delay_task_3::Context) {
+        cx.local.stepper_3.work();
+    }
 
-    // #[task(binds = TIM5, priority = 10, local = [ stepper_4 ])]
-    // fn delay_task_4(cx: delay_task_4::Context) {
-    //     cx.local.stepper_4.work();
-    // }
+    #[task(binds = TIM5, priority = 10, local = [ stepper_4 ])]
+    fn delay_task_4(cx: delay_task_4::Context) {
+        cx.local.stepper_4.work();
+    }
 
     use core::fmt::Write;
     #[task(priority = 2, local = [display_sender])]

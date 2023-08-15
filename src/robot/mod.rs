@@ -51,19 +51,36 @@ impl Robot {
         match event {
             RobotCommand::Stay => {
                 let stepper_1_command = MyStepperCommands::Stay;
-                self.stepper_1.send(stepper_1_command).await.ok();
+                self.stepper_1.send(stepper_1_command.clone()).await.ok();
+                self.stepper_2.send(stepper_1_command.clone()).await.ok();
+                self.stepper_3.send(stepper_1_command.clone()).await.ok();
+                self.stepper_4.send(stepper_1_command.clone()).await.ok();
             }
+            #[rustfmt::skip]
             RobotCommand::MoveToLeft(speed) => {
                 let stepper_1_dir_command = MyStepperCommands::Direction(false);
                 let stepper_1_speed_command = MyStepperCommands::Move(speed);
-                self.stepper_1.send(stepper_1_dir_command).await.ok();
-                self.stepper_1.send(stepper_1_speed_command).await.ok();
+                self.stepper_1.send(stepper_1_dir_command.clone()).await.ok();
+                self.stepper_1.send(stepper_1_speed_command.clone()).await.ok();
+                self.stepper_2.send(stepper_1_dir_command.clone()).await.ok();
+                self.stepper_2.send(stepper_1_speed_command.clone()).await.ok();
+                self.stepper_3.send(stepper_1_dir_command.clone()).await.ok();
+                self.stepper_3.send(stepper_1_speed_command.clone()).await.ok();
+                self.stepper_4.send(stepper_1_dir_command.clone()).await.ok();
+                self.stepper_4.send(stepper_1_speed_command.clone()).await.ok();
             }
+            #[rustfmt::skip]
             RobotCommand::MoveToRight(speed) => {
                 let stepper_1_dir_command = MyStepperCommands::Direction(true);
                 let stepper_1_speed_command = MyStepperCommands::Move(speed);
-                self.stepper_1.send(stepper_1_dir_command).await.ok();
-                self.stepper_1.send(stepper_1_speed_command).await.ok();
+                self.stepper_1.send(stepper_1_dir_command.clone()).await.ok();
+                self.stepper_1.send(stepper_1_speed_command.clone()).await.ok();
+                self.stepper_2.send(stepper_1_dir_command.clone()).await.ok();
+                self.stepper_2.send(stepper_1_speed_command.clone()).await.ok();
+                self.stepper_3.send(stepper_1_dir_command.clone()).await.ok();
+                self.stepper_3.send(stepper_1_speed_command.clone()).await.ok();
+                self.stepper_4.send(stepper_1_dir_command.clone()).await.ok();
+                self.stepper_4.send(stepper_1_speed_command.clone()).await.ok();
             }
         }
     }
