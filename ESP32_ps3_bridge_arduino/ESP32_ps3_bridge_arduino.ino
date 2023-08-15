@@ -164,9 +164,10 @@ void notify()
    }
 
     if(Ps3.event.button_up.start){
-       Serial.write('S');
-       Serial.flush();
-       return;
+      byte* signal_to_send = send_digital_signal(0x57);
+      Serial.write(signal_to_send, 5);
+      Serial.flush();
+      return;
    }
 }
 

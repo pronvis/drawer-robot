@@ -1,17 +1,28 @@
-use rtic_sync::channel::Receiver;
+use rtic_sync::channel::{Receiver, Sender};
 
 use crate::{
     my_stepper::{MyStepperCommands, MyStepperCommandsSender},
     CHANNEL_CAPACITY,
 };
 
+pub type RobotCommandsSender = Sender<'static, RobotCommand, CHANNEL_CAPACITY>;
 pub type RobotCommandsReceiver = Receiver<'static, RobotCommand, CHANNEL_CAPACITY>;
 
 //TODO: improve
 pub enum RobotCommand {
     Stay,
+    Step(u32),
+    ReduceSpeed,
+    IncreaseSpeed,
     MoveToRight(u8),
     MoveToLeft(u8),
+    SelectStepper(u8),
+    AllMode,
+}
+
+struct RobotState {
+    separate_mode: bool,
+    stepper_index: u8,
 }
 
 pub struct Robot {
@@ -20,6 +31,7 @@ pub struct Robot {
     stepper_3: MyStepperCommandsSender,
     stepper_4: MyStepperCommandsSender,
     commands_receiver: RobotCommandsReceiver,
+    state: RobotState,
 }
 
 impl Robot {
@@ -36,6 +48,10 @@ impl Robot {
             stepper_3,
             stepper_4,
             commands_receiver,
+            state: RobotState {
+                separate_mode: false,
+                stepper_index: 0,
+            },
         }
     }
 
@@ -52,41 +68,93 @@ impl Robot {
         };
     }
 
+    #[rustfmt::skip]
     async fn receive_command(&mut self, event: RobotCommand) {
         match event {
             RobotCommand::Stay => {
-                let stepper_1_command = MyStepperCommands::Stay;
-                self.stepper_1.send(stepper_1_command.clone()).await.ok();
-                self.stepper_2.send(stepper_1_command.clone()).await.ok();
-                self.stepper_3.send(stepper_1_command.clone()).await.ok();
-                self.stepper_4.send(stepper_1_command.clone()).await.ok();
-            }
-            #[rustfmt::skip]
+                let command = MyStepperCommands::Stay;
+                self.send_command(command).await;
+            },
+
             RobotCommand::MoveToLeft(speed) => {
-                let stepper_1_dir_command = MyStepperCommands::Direction(false);
-                let stepper_1_speed_command = MyStepperCommands::Move(speed);
-                self.stepper_1.send(stepper_1_dir_command.clone()).await.ok();
-                self.stepper_1.send(stepper_1_speed_command.clone()).await.ok();
-                self.stepper_2.send(stepper_1_dir_command.clone()).await.ok();
-                self.stepper_2.send(stepper_1_speed_command.clone()).await.ok();
-                self.stepper_3.send(stepper_1_dir_command.clone()).await.ok();
-                self.stepper_3.send(stepper_1_speed_command.clone()).await.ok();
-                self.stepper_4.send(stepper_1_dir_command.clone()).await.ok();
-                self.stepper_4.send(stepper_1_speed_command.clone()).await.ok();
-            }
-            #[rustfmt::skip]
+                let stepper_dir_command = MyStepperCommands::Direction(false);
+                let stepper_speed_command = MyStepperCommands::Move(speed);
+                self.send_command_2(stepper_dir_command, stepper_speed_command).await;
+            },
+
             RobotCommand::MoveToRight(speed) => {
-                let stepper_1_dir_command = MyStepperCommands::Direction(true);
-                let stepper_1_speed_command = MyStepperCommands::Move(speed);
-                self.stepper_1.send(stepper_1_dir_command.clone()).await.ok();
-                self.stepper_1.send(stepper_1_speed_command.clone()).await.ok();
-                self.stepper_2.send(stepper_1_dir_command.clone()).await.ok();
-                self.stepper_2.send(stepper_1_speed_command.clone()).await.ok();
-                self.stepper_3.send(stepper_1_dir_command.clone()).await.ok();
-                self.stepper_3.send(stepper_1_speed_command.clone()).await.ok();
-                self.stepper_4.send(stepper_1_dir_command.clone()).await.ok();
-                self.stepper_4.send(stepper_1_speed_command.clone()).await.ok();
+                let stepper_dir_command = MyStepperCommands::Direction(true);
+                let stepper_speed_command = MyStepperCommands::Move(speed);
+                self.send_command_2(stepper_dir_command, stepper_speed_command).await;
+            },
+
+            RobotCommand::Step(steps_amount) => {
+                let command = MyStepperCommands::Step(steps_amount);
+                self.send_command(command).await;
+            },
+
+            RobotCommand::ReduceSpeed => {
+                let command = MyStepperCommands::ReduceSpeed;
+                self.send_command(command).await;
+            },
+
+            RobotCommand::IncreaseSpeed => {
+                let command = MyStepperCommands::IncreaseSpeed;
+                self.send_command(command).await;
+            },
+
+            RobotCommand::SelectStepper(index) => {
+                self.state.separate_mode = true;
+                self.state.stepper_index = index;
+            },
+
+            RobotCommand::AllMode => {
+                self.state.separate_mode = false;
             }
         }
+    }
+
+    async fn send_command(&mut self, command: MyStepperCommands) {
+        if self.state.separate_mode {
+            let stepper = self.get_stepper_sender();
+            stepper.send(command).await.ok();
+        } else {
+            self.stepper_1.send(command.clone()).await.ok();
+            self.stepper_2.send(command.clone()).await.ok();
+            self.stepper_3.send(command.clone()).await.ok();
+            self.stepper_4.send(command.clone()).await.ok();
+        }
+    }
+
+    async fn send_command_2(&mut self, command: MyStepperCommands, command_2: MyStepperCommands) {
+        if self.state.separate_mode {
+            let stepper = self.get_stepper_sender();
+            stepper.send(command).await.ok();
+            stepper.send(command_2).await.ok();
+        } else {
+            self.stepper_1.send(command.clone()).await.ok();
+            self.stepper_1.send(command_2.clone()).await.ok();
+            self.stepper_2.send(command.clone()).await.ok();
+            self.stepper_2.send(command_2.clone()).await.ok();
+            self.stepper_3.send(command.clone()).await.ok();
+            self.stepper_3.send(command_2.clone()).await.ok();
+            self.stepper_4.send(command.clone()).await.ok();
+            self.stepper_4.send(command_2.clone()).await.ok();
+        }
+    }
+
+    fn get_stepper_sender(&mut self) -> &mut MyStepperCommandsSender {
+        let index = self.state.stepper_index;
+        if index == 0 {
+            return &mut self.stepper_1;
+        } else if index == 1 {
+            return &mut self.stepper_2;
+        } else if index == 2 {
+            return &mut self.stepper_3;
+        } else if index == 3 {
+            return &mut self.stepper_4;
+        }
+
+        return &mut self.stepper_1;
     }
 }

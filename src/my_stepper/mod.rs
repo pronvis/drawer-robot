@@ -43,6 +43,9 @@ pub struct MyStepperState {
     micros_pulse_duration: u32,
 
     step_phase: bool,
+    is_moving: bool,
+    steps_mode: bool,
+    steps_amount: u32,
 }
 impl MyStepperState {
     pub fn new() -> Self {
@@ -50,6 +53,9 @@ impl MyStepperState {
             micros_between_steps: MAX_DELAY_BETWEEN_STEPS,
             micros_pulse_duration: 200,
             step_phase: false,
+            is_moving: false,
+            steps_mode: false,
+            steps_amount: 0,
         }
     }
 
@@ -61,6 +67,9 @@ impl MyStepperState {
 #[derive(Debug, Clone)]
 pub enum MyStepperCommands {
     Stay,
+    Step(u32),
+    ReduceSpeed,
+    IncreaseSpeed,
     Direction(bool),
     Move(u8),
 }
@@ -72,7 +81,6 @@ pub struct MyStepper<Tim, StepPin, DirPin> {
     step_pin: StepPin,
     direction_pin: DirPin,
     commands_channel: Receiver<'static, MyStepperCommands, CHANNEL_CAPACITY>,
-    is_moving: bool, //TODO: move to state
 }
 
 impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPin, DirPin> {
@@ -91,7 +99,6 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
             step_pin,
             direction_pin: dir_pin,
             commands_channel,
-            is_moving: false,
         }
     }
 
@@ -100,7 +107,7 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
             Err(err) => match err {
                 ReceiveError::NoSender => {
                     defmt::error!("stepper #{}: commands sender dropped", self.index);
-                    self.is_moving = false;
+                    self.state.is_moving = false;
                 }
                 ReceiveError::Empty => (),
             },
@@ -108,11 +115,27 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
             Ok(new_command) => self.handle_command(new_command),
         }
 
-        if !self.is_moving {
+        if !self.state.is_moving {
             self.timer.clear_interrupt(Event::Update);
             return;
         }
 
+        if self.state.steps_mode {
+            if self.state.steps_amount == 0 {
+                self.state.is_moving = false;
+                self.timer.clear_interrupt(Event::Update);
+                return;
+            } else {
+                if self.state.step_phase {
+                    self.state.steps_amount -= 1;
+                }
+            }
+        }
+
+        self.step_logic();
+    }
+
+    fn step_logic(&mut self) {
         // self.timer.start have 'clear_interrupt' inside
         if self.state.step_phase {
             self.step_pin.set_low().ok();
@@ -131,7 +154,32 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
 
     fn handle_command(&mut self, command: MyStepperCommands) {
         match command {
-            MyStepperCommands::Stay => self.is_moving = false,
+            MyStepperCommands::Stay => self.state.is_moving = false,
+            MyStepperCommands::ReduceSpeed => {
+                if self.state.micros_between_steps > MIN_DELAY_BETWEEN_STEPS {
+                    self.state.micros_between_steps -= DELAY_BETWEEN_STEPS_STEP;
+                }
+                defmt::debug!(
+                    "stepper #{}: update micros_between_steps = {}",
+                    self.index,
+                    self.state.micros_between_steps
+                );
+            }
+            MyStepperCommands::IncreaseSpeed => {
+                if self.state.micros_between_steps < MAX_DELAY_BETWEEN_STEPS {
+                    self.state.micros_between_steps += DELAY_BETWEEN_STEPS_STEP;
+                }
+                defmt::debug!(
+                    "stepper #{}: update micros_between_steps = {}",
+                    self.index,
+                    self.state.micros_between_steps
+                );
+            }
+            MyStepperCommands::Step(steps) => {
+                self.state.is_moving = true;
+                self.state.steps_mode = true;
+                self.state.steps_amount += steps;
+            }
             MyStepperCommands::Direction(is_right) => {
                 if is_right {
                     self.direction_pin.set_low().ok();
@@ -140,7 +188,8 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
                 }
             }
             MyStepperCommands::Move(speed) => {
-                self.is_moving = true;
+                self.state.is_moving = true;
+                self.state.steps_mode = false;
                 self.state.micros_between_steps = speed_to_delays(speed);
                 defmt::debug!(
                     "stepper #{}: update micros_between_steps = {}",
