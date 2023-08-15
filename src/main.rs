@@ -41,8 +41,7 @@ mod app {
         timer::{Counter, Event},
     };
 
-    const TIMER_CLOCK_FREQ: u32 = 10_000; // step = 100_000 nanos, 100 micros
-    const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
+    const MAIN_CLOCK_FREQ: u32 = 72_000_000;
     // if `delay` is active in 'display_task_writer' function, then size of the pool could be 32
     // for some reason. Why?
     static mut DISPLAY_MEMORY_POOL_MEMORY: [u8; 96] = [32u8; 96];
@@ -63,8 +62,7 @@ mod app {
         rx_usart1: stm32f1xx_hal::serial::Rx1,
         tx_usart2: stm32f1xx_hal::serial::Tx2,
         rx_usart2: stm32f1xx_hal::serial::Rx2,
-        stepper_1: MyStepper<stm32f1xx_hal::pac::TIM2, XStepPin, XDirPin, TIMER_CLOCK_FREQ>,
-        stepper_1_sender: Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>,
+        stepper_1: MyStepper<stm32f1xx_hal::pac::TIM2, XStepPin, XDirPin>,
         display_receiver: Receiver<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
         display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
         display: OledDisplay,
@@ -141,137 +139,34 @@ mod app {
             &clocks,
         );
 
-        //
-        //
-        // STEPPERS
-        let mut stepper_state = MyStepperState::new(1500, 200);
-
-        let x_step_pin = gpioc
-            .pc6
-            .into_push_pull_output_with_state(&mut gpioc.crl, PinState::Low);
-        let x_dir_pin = gpiob
-            .pb15
-            .into_push_pull_output_with_state(&mut gpiob.crh, PinState::Low);
-        let y_step_pin = gpiob
-            .pb13
-            .into_push_pull_output_with_state(&mut gpiob.crh, PinState::Low);
-        let y_dir_pin = gpiob
-            .pb12
-            .into_push_pull_output_with_state(&mut gpiob.crh, PinState::Low);
-        let z_step_pin = gpiob
-            .pb10
-            .into_push_pull_output_with_state(&mut gpiob.crh, PinState::Low);
-        let z_dir_pin = gpiob
-            .pb2
-            .into_push_pull_output_with_state(&mut gpiob.crl, PinState::Low);
-        let e_step_pin = gpiob
-            .pb0
-            .into_push_pull_output_with_state(&mut gpiob.crl, PinState::Low);
-        let e_dir_pin = gpioc
-            .pc5
-            .into_push_pull_output_with_state(&mut gpioc.crl, PinState::Low);
-
-        let mut x_en = gpioc.pc7.into_push_pull_output(&mut gpioc.crl);
-        x_en.set_low();
-
-        let mut y_en = gpiob.pb14.into_push_pull_output(&mut gpiob.crh);
-        y_en.set_low();
-
-        let mut z_en = gpiob.pb11.into_push_pull_output(&mut gpiob.crh);
-        z_en.set_low();
-
-        let mut e_en = gpiob.pb1.into_push_pull_output(&mut gpiob.crl);
-        e_en.set_low();
-
-        let tim2 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>::new(
+        let (
+            (stepper_1, stepper_1_sender),
+            (stepper_2, stepper_2_sender),
+            (stepper_3, stepper_3_sender),
+            (stepper_4, stepper_4_sender),
+        ) = create_steppers(
+            &clocks,
+            gpioc.pc5,
+            gpioc.pc6,
+            gpioc.pc7,
+            gpiob.pb0,
+            gpiob.pb1,
+            gpiob.pb2,
+            gpiob.pb10,
+            gpiob.pb11,
+            gpiob.pb12,
+            gpiob.pb13,
+            gpiob.pb14,
+            gpiob.pb15,
+            &mut gpioc.crl,
+            &mut gpiob.crl,
+            &mut gpiob.crh,
             cx.device.TIM2,
-            &clocks,
-        );
-        let mut timer_2: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ> =
-            tim2.counter();
-        timer_2
-            .start(stepper_state.micros_pulse_duration.micros())
-            .unwrap();
-        timer_2.listen(Event::Update);
-
-        let tim3 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM3, TIMER_CLOCK_FREQ>::new(
             cx.device.TIM3,
-            &clocks,
-        );
-        let mut timer_3: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM3, TIMER_CLOCK_FREQ> =
-            tim3.counter();
-        timer_3
-            .start(stepper_state.micros_pulse_duration.micros())
-            .unwrap();
-        timer_3.listen(Event::Update);
-
-        let tim4 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM4, TIMER_CLOCK_FREQ>::new(
             cx.device.TIM4,
-            &clocks,
-        );
-        let mut timer_4: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM4, TIMER_CLOCK_FREQ> =
-            tim4.counter();
-        timer_4
-            .start(stepper_state.micros_pulse_duration.micros())
-            .unwrap();
-        timer_4.listen(Event::Update);
-
-        let tim5 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM5, TIMER_CLOCK_FREQ>::new(
             cx.device.TIM5,
-            &clocks,
         );
-        let mut timer_5: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM5, TIMER_CLOCK_FREQ> =
-            tim5.counter();
-        timer_5
-            .start(stepper_state.micros_pulse_duration.micros())
-            .unwrap();
-        timer_5.listen(Event::Update);
 
-        let (sender_1, stepper_1_commands_receiver) =
-            make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
-        let (sender_2, stepper_2_commands_receiver) =
-            make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
-        let (sender_3, stepper_3_commands_receiver) =
-            make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
-        let (sender_4, stepper_4_commands_receiver) =
-            make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
-
-        let stepper_1 = MyStepper::new(
-            1,
-            stepper_state.clone(),
-            timer_2,
-            x_step_pin,
-            x_dir_pin,
-            stepper_1_commands_receiver,
-        );
-        let stepper_2 = MyStepper::new(
-            2,
-            stepper_state.clone(),
-            timer_3,
-            y_step_pin,
-            y_dir_pin,
-            stepper_2_commands_receiver,
-        );
-        let stepper_3 = MyStepper::new(
-            3,
-            stepper_state.clone(),
-            timer_4,
-            z_step_pin,
-            z_dir_pin,
-            stepper_3_commands_receiver,
-        );
-        let stepper_4 = MyStepper::new(
-            4,
-            stepper_state.clone(),
-            timer_5,
-            e_step_pin,
-            e_dir_pin,
-            stepper_4_commands_receiver,
-        );
-        //
-        //
-        //
-        //
         let (mut display_sender, display_receiver) =
             make_channel!(Box<DisplayMemoryPool>, CHANNEL_CAPACITY);
 
@@ -288,7 +183,7 @@ mod app {
         );
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
-        Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
+        Systick::start(cx.core.SYST, MAIN_CLOCK_FREQ, systick_mono_token);
 
         serial_usart1.listen(stm32f1xx_hal::serial::Event::Rxne);
         serial_usart2.listen(stm32f1xx_hal::serial::Event::Rxne);
@@ -296,14 +191,14 @@ mod app {
         let (tx_usart2, rx_usart2) = serial_usart2.split();
 
         let robot = robot::Robot::new(
-            sender_1.clone(),
-            sender_2,
-            sender_3,
-            sender_4,
+            stepper_1_sender,
+            stepper_2_sender,
+            stepper_3_sender,
+            stepper_4_sender,
             robot_commands_receiver,
         );
 
-        display_task::spawn().unwrap();
+        // display_task::spawn().unwrap();
         // display_task_writer::spawn().unwrap();
         ps3_events_reader::spawn().unwrap();
         ps3_reader_task::spawn().unwrap();
@@ -317,7 +212,6 @@ mod app {
                 rx_usart2,
                 tx_usart2,
                 stepper_1,
-                stepper_1_sender: sender_1,
                 display_receiver,
                 display_sender,
                 display,
@@ -330,12 +224,12 @@ mod app {
     }
 
     // Optional idle, can be removed if not needed.
-    #[idle]
-    fn idle(_: idle::Context) -> ! {
-        defmt::debug!("idle");
-
+    #[idle(local = [display_receiver, display])]
+    fn idle(cx: idle::Context) -> ! {
         loop {
-            rtic::export::nop();
+            if let Ok(message) = cx.local.display_receiver.try_recv() {
+                cx.local.display.print(message);
+            }
         }
     }
 
@@ -360,7 +254,7 @@ mod app {
         }
     }
 
-    #[task(binds = USART2, priority = 12, local = [ speed: u8 = 0, rx_usart2, tx_usart2, stepper_1_sender, ps3_bytes_sender ])]
+    #[task(binds = USART2, priority = 12, local = [ speed: u8 = 0, rx_usart2, tx_usart2, ps3_bytes_sender ])]
     fn esp32_reader(cx: esp32_reader::Context) {
         let rx = cx.local.rx_usart2;
         if rx.is_rx_not_empty() {
@@ -373,30 +267,6 @@ mod app {
                             defmt::Debug2Format(&err)
                         );
                     });
-
-                    // let speed = cx.local.speed;
-                    // let mut command = MyStepperCommands::Stay;
-
-                    // *speed = *speed + 1;
-                    // if *speed == MAX_SPEED_VAL + 1 {
-                    //     command = MyStepperCommands::Stay;
-                    // } else if *speed > MAX_SPEED_VAL + 1 {
-                    //     *speed = 0;
-                    //     command = MyStepperCommands::Move(*speed);
-                    // } else {
-                    //     command = MyStepperCommands::Move(*speed);
-                    // }
-
-                    // cx.local
-                    //     .stepper_1_sender
-                    //     .try_send(command)
-                    //     .err()
-                    //     .map(|err| {
-                    //         defmt::debug!(
-                    //             "fail to send command to stepper_1: {:?}",
-                    //             defmt::Debug2Format(&err)
-                    //         )
-                    //     });
                 }
 
                 Err(err) => {
@@ -443,14 +313,6 @@ mod app {
     // fn delay_task_4(cx: delay_task_4::Context) {
     //     cx.local.stepper_4.work();
     // }
-
-    #[task(priority = 1, local = [display_receiver, display])]
-    async fn display_task(cx: display_task::Context) {
-        loop {
-            let message = cx.local.display_receiver.recv().await.unwrap();
-            cx.local.display.print(message);
-        }
-    }
 
     use core::fmt::Write;
     #[task(priority = 2, local = [display_sender])]
