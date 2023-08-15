@@ -169,8 +169,37 @@ void notify()
       Serial.flush();
       return;
    }
+
     if(Ps3.event.button_down.select){
       byte* signal_to_send = send_digital_signal(0x59);
+      Serial.write(signal_to_send, 5);
+      Serial.flush();
+      return;
+   }
+
+    if(Ps3.event.button_down.l1){
+      byte* signal_to_send = send_digital_signal(0x60);
+      Serial.write(signal_to_send, 5);
+      Serial.flush();
+      return;
+   }
+
+    if(Ps3.event.button_down.l2){
+      byte* signal_to_send = send_digital_signal(0x61);
+      Serial.write(signal_to_send, 5);
+      Serial.flush();
+      return;
+   }
+
+    if(Ps3.event.button_down.r1){
+      byte* signal_to_send = send_digital_signal(0x62);
+      Serial.write(signal_to_send, 5);
+      Serial.flush();
+      return;
+   }
+
+    if(Ps3.event.button_down.r2){
+      byte* signal_to_send = send_digital_signal(0x65);
       Serial.write(signal_to_send, 5);
       Serial.flush();
       return;

@@ -19,6 +19,7 @@ pub enum RobotCommand {
     MoveToLeft(u8),
     SelectStepper(u8),
     AllMode,
+    ChangeDirection(bool),
 }
 
 struct RobotState {
@@ -107,6 +108,9 @@ impl Robot {
             RobotCommand::SelectStepper(index) => {
                 self.state.separate_mode = true;
                 self.state.stepper_index = index;
+                defmt::debug!(
+                    "robot: controlling stepper {}", index
+                );
             },
 
             RobotCommand::StartMove => {
@@ -116,6 +120,14 @@ impl Robot {
 
             RobotCommand::AllMode => {
                 self.state.separate_mode = false;
+                defmt::debug!(
+                    "robot: controlling all steppers",
+                );
+            }
+
+            RobotCommand::ChangeDirection(is_right) => {
+                let stepper_dir_command = MyStepperCommands::Direction(is_right);
+                self.send_command(stepper_dir_command).await;
             }
         }
     }

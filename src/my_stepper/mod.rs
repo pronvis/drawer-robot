@@ -189,8 +189,10 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
             MyStepperCommands::Direction(is_right) => {
                 if is_right {
                     self.direction_pin.set_low().ok();
+                    defmt::debug!("stepper #{}: set direction to right", self.index);
                 } else {
                     self.direction_pin.set_high().ok();
+                    defmt::debug!("stepper #{}: set direction to left", self.index);
                 }
             }
             MyStepperCommands::Move(speed) => {
@@ -304,52 +306,52 @@ pub fn create_steppers(
         .unwrap();
     timer_5.listen(Event::Update);
 
+    let (sender_0, stepper_0_commands_receiver) =
+        make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
     let (sender_1, stepper_1_commands_receiver) =
         make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
     let (sender_2, stepper_2_commands_receiver) =
         make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
     let (sender_3, stepper_3_commands_receiver) =
         make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
-    let (sender_4, stepper_4_commands_receiver) =
-        make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
 
-    let stepper_1 = MyStepper::new(
-        1,
+    let stepper_0 = MyStepper::new(
+        0,
         stepper_state.clone(),
         timer_2,
         x_step_pin,
         x_dir_pin,
+        stepper_0_commands_receiver,
+    );
+    let stepper_1 = MyStepper::new(
+        1,
+        stepper_state.clone(),
+        timer_3,
+        y_step_pin,
+        y_dir_pin,
         stepper_1_commands_receiver,
     );
     let stepper_2 = MyStepper::new(
         2,
         stepper_state.clone(),
-        timer_3,
-        y_step_pin,
-        y_dir_pin,
+        timer_4,
+        z_step_pin,
+        z_dir_pin,
         stepper_2_commands_receiver,
     );
     let stepper_3 = MyStepper::new(
         3,
-        stepper_state.clone(),
-        timer_4,
-        z_step_pin,
-        z_dir_pin,
-        stepper_3_commands_receiver,
-    );
-    let stepper_4 = MyStepper::new(
-        4,
         stepper_state,
         timer_5,
         e_step_pin,
         e_dir_pin,
-        stepper_4_commands_receiver,
+        stepper_3_commands_receiver,
     );
 
     (
+        (stepper_0, sender_0),
         (stepper_1, sender_1),
         (stepper_2, sender_2),
         (stepper_3, sender_3),
-        (stepper_4, sender_4),
     )
 }
