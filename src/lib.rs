@@ -19,7 +19,7 @@ pub mod my_stepper;
 pub mod ps3;
 pub mod robot;
 pub const CHANNEL_CAPACITY: usize = 2;
-pub const PS3_CHANNEL_CAPACITY: usize = 8;
+pub const PS3_CHANNEL_CAPACITY: usize = 32;
 
 use panic_probe as _;
 
