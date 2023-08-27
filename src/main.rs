@@ -42,8 +42,6 @@ mod app {
     };
 
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
-    // if `delay` is active in 'display_task_writer' function, then size of the pool could be 32
-    // for some reason. Why?
     static mut DISPLAY_MEMORY_POOL_MEMORY: [u8; 96] = [32u8; 96];
 
     // Import the memory pool into scope
@@ -142,6 +140,9 @@ mod app {
             &clocks,
         );
 
+        let (mut display_sender, display_receiver) =
+            make_channel!(Box<DisplayMemoryPool>, CHANNEL_CAPACITY);
+
         let (
             (stepper_1, stepper_1_sender),
             (stepper_2, stepper_2_sender),
@@ -168,10 +169,8 @@ mod app {
             cx.device.TIM3,
             cx.device.TIM4,
             cx.device.TIM5,
+            display_sender.clone(),
         );
-
-        let (mut display_sender, display_receiver) =
-            make_channel!(Box<DisplayMemoryPool>, CHANNEL_CAPACITY);
 
         let (mut ps3_bytes_sender, ps3_bytes_receiver) = make_channel!(u8, PS3_CHANNEL_CAPACITY);
         let (mut ps3_events_sender, ps3_events_receiver) =
@@ -199,6 +198,7 @@ mod app {
             stepper_3_sender,
             stepper_4_sender,
             robot_commands_receiver,
+            display_sender.clone(),
         );
 
         // display_task_writer::spawn().unwrap();

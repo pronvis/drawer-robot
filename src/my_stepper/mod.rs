@@ -9,8 +9,10 @@ use stm32f1xx_hal::{
     timer::{Counter, Event, Instance},
 };
 
-use crate::CHANNEL_CAPACITY;
+use crate::{display, DisplayMemoryPool, DisplayString, CHANNEL_CAPACITY};
 use crate::{EDirPin, EStepPin, XDirPin, XStepPin, YDirPin, YStepPin, ZDirPin, ZStepPin};
+use core::fmt::Write;
+use heapless::pool::singleton::Box;
 
 const TIMER_CLOCK_FREQ: u32 = 10_000;
 // step = 100_000 nanos, 100 micros
@@ -82,6 +84,7 @@ pub struct MyStepper<Tim, StepPin, DirPin> {
     step_pin: StepPin,
     direction_pin: DirPin,
     commands_channel: Receiver<'static, MyStepperCommands, CHANNEL_CAPACITY>,
+    display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
 }
 
 impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPin, DirPin> {
@@ -92,6 +95,7 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
         step_pin: StepPin,
         dir_pin: DirPin,
         commands_channel: Receiver<'static, MyStepperCommands, CHANNEL_CAPACITY>,
+        display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
     ) -> Self {
         Self {
             index,
@@ -100,6 +104,7 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
             step_pin,
             direction_pin: dir_pin,
             commands_channel,
+            display_sender,
         }
     }
 
@@ -155,8 +160,21 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
 
     fn handle_command(&mut self, command: MyStepperCommands) {
         match command {
-            MyStepperCommands::Stay => self.state.is_moving = false,
-            MyStepperCommands::StartMove => self.state.is_moving = true,
+            MyStepperCommands::Stay => {
+                self.state.is_moving = false;
+
+                let mut data_str = DisplayString::new();
+                let index = self.index;
+                write!(data_str, "s{index}: stay").expect("not written");
+                display::display_str_sync(data_str, &mut self.display_sender).ok();
+            }
+            MyStepperCommands::StartMove => {
+                self.state.is_moving = true;
+                let mut data_str = DisplayString::new();
+                let index = self.index;
+                write!(data_str, "s{index}: move").expect("not written");
+                display::display_str_sync(data_str, &mut self.display_sender).ok();
+            }
             MyStepperCommands::ReduceSpeed => {
                 if self.state.micros_between_steps > MIN_DELAY_BETWEEN_STEPS {
                     self.state.micros_between_steps -= DELAY_BETWEEN_STEPS_STEP;
@@ -166,6 +184,11 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
                     self.index,
                     self.state.micros_between_steps
                 );
+                let mut data_str = DisplayString::new();
+                let index = self.index;
+                let speed = self.state.micros_between_steps;
+                write!(data_str, "s{index}: speed={speed}").expect("not written");
+                display::display_str_sync(data_str, &mut self.display_sender).ok();
             }
             MyStepperCommands::IncreaseSpeed => {
                 if self.state.micros_between_steps < MAX_DELAY_BETWEEN_STEPS {
@@ -176,6 +199,11 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
                     self.index,
                     self.state.micros_between_steps
                 );
+                let mut data_str = DisplayString::new();
+                let index = self.index;
+                let speed = self.state.micros_between_steps;
+                write!(data_str, "s{index}: speed={speed}").expect("not written");
+                display::display_str_sync(data_str, &mut self.display_sender).ok();
             }
             MyStepperCommands::AddSteps(steps) => {
                 self.state.steps_mode = true;
@@ -185,14 +213,27 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
                     self.index,
                     self.state.steps_amount
                 );
+                let mut data_str = DisplayString::new();
+                let index = self.index;
+                let steps = self.state.steps_amount;
+                write!(data_str, "s{index}: steps={steps}").expect("not written");
+                display::display_str_sync(data_str, &mut self.display_sender).ok();
             }
             MyStepperCommands::Direction(is_right) => {
                 if is_right {
                     self.direction_pin.set_low().ok();
                     defmt::debug!("stepper #{}: set direction to right", self.index);
+                    let mut data_str = DisplayString::new();
+                    let index = self.index;
+                    write!(data_str, "s{index}: dir=right").expect("not written");
+                    display::display_str_sync(data_str, &mut self.display_sender).ok();
                 } else {
                     self.direction_pin.set_high().ok();
                     defmt::debug!("stepper #{}: set direction to left", self.index);
+                    let mut data_str = DisplayString::new();
+                    let index = self.index;
+                    write!(data_str, "s{index}: dir=left").expect("not written");
+                    display::display_str_sync(data_str, &mut self.display_sender).ok();
                 }
             }
             MyStepperCommands::Move(speed) => {
@@ -204,6 +245,10 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
                     self.index,
                     self.state.micros_between_steps
                 );
+                let mut data_str = DisplayString::new();
+                let index = self.index;
+                write!(data_str, "s{index}: move speed={speed}").expect("not written");
+                display::display_str_sync(data_str, &mut self.display_sender).ok();
             }
         }
     }
@@ -237,6 +282,7 @@ pub fn create_steppers(
     tim3: TIM3,
     tim4: TIM4,
     tim5: TIM5,
+    display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
 ) -> (
     (MyStepper1, MyStepperCommandsSender),
     (MyStepper2, MyStepperCommandsSender),
@@ -322,6 +368,7 @@ pub fn create_steppers(
         x_step_pin,
         x_dir_pin,
         stepper_0_commands_receiver,
+        display_sender.clone(),
     );
     let stepper_1 = MyStepper::new(
         1,
@@ -330,6 +377,7 @@ pub fn create_steppers(
         y_step_pin,
         y_dir_pin,
         stepper_1_commands_receiver,
+        display_sender.clone(),
     );
     let stepper_2 = MyStepper::new(
         2,
@@ -338,6 +386,7 @@ pub fn create_steppers(
         z_step_pin,
         z_dir_pin,
         stepper_2_commands_receiver,
+        display_sender.clone(),
     );
     let stepper_3 = MyStepper::new(
         3,
@@ -346,6 +395,7 @@ pub fn create_steppers(
         e_step_pin,
         e_dir_pin,
         stepper_3_commands_receiver,
+        display_sender.clone(),
     );
 
     (

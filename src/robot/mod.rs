@@ -1,9 +1,12 @@
 use rtic_sync::channel::{Receiver, Sender};
 
 use crate::{
+    display,
     my_stepper::{MyStepperCommands, MyStepperCommandsSender},
-    CHANNEL_CAPACITY,
+    DisplayMemoryPool, DisplayString, CHANNEL_CAPACITY,
 };
+use core::fmt::Write;
+use heapless::pool::singleton::Box;
 
 pub type RobotCommandsSender = Sender<'static, RobotCommand, CHANNEL_CAPACITY>;
 pub type RobotCommandsReceiver = Receiver<'static, RobotCommand, CHANNEL_CAPACITY>;
@@ -28,32 +31,35 @@ struct RobotState {
 }
 
 pub struct Robot {
+    stepper_0: MyStepperCommandsSender,
     stepper_1: MyStepperCommandsSender,
     stepper_2: MyStepperCommandsSender,
     stepper_3: MyStepperCommandsSender,
-    stepper_4: MyStepperCommandsSender,
     commands_receiver: RobotCommandsReceiver,
     state: RobotState,
+    display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
 }
 
 impl Robot {
     pub fn new(
+        stepper_0: MyStepperCommandsSender,
         stepper_1: MyStepperCommandsSender,
         stepper_2: MyStepperCommandsSender,
         stepper_3: MyStepperCommandsSender,
-        stepper_4: MyStepperCommandsSender,
         commands_receiver: RobotCommandsReceiver,
+        display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
     ) -> Self {
         Robot {
+            stepper_0,
             stepper_1,
             stepper_2,
             stepper_3,
-            stepper_4,
             commands_receiver,
             state: RobotState {
                 separate_mode: false,
                 stepper_index: 0,
             },
+            display_sender,
         }
     }
 
@@ -111,6 +117,12 @@ impl Robot {
                 defmt::debug!(
                     "robot: controlling stepper {}", index
                 );
+                let mut data_str = DisplayString::new();
+                let stepper_index = self.state.stepper_index;
+                write!(data_str, "Robot: s{stepper_index}").expect("not written");
+                display::display_str(data_str, &mut self.display_sender)
+                    .await
+                    .unwrap();
             },
 
             RobotCommand::StartMove => {
@@ -123,6 +135,10 @@ impl Robot {
                 defmt::debug!(
                     "robot: controlling all steppers",
                 );
+                let data_str = DisplayString::from("Robot: all mode");
+                display::display_str(data_str, &mut self.display_sender)
+                    .await
+                    .unwrap();
             }
 
             RobotCommand::ChangeDirection(is_right) => {
@@ -137,10 +153,10 @@ impl Robot {
             let stepper = self.get_stepper_sender();
             stepper.send(command).await.ok();
         } else {
+            self.stepper_0.send(command.clone()).await.ok();
             self.stepper_1.send(command.clone()).await.ok();
             self.stepper_2.send(command.clone()).await.ok();
             self.stepper_3.send(command.clone()).await.ok();
-            self.stepper_4.send(command.clone()).await.ok();
         }
     }
 
@@ -150,29 +166,29 @@ impl Robot {
             stepper.send(command).await.ok();
             stepper.send(command_2).await.ok();
         } else {
+            self.stepper_0.send(command.clone()).await.ok();
+            self.stepper_0.send(command_2.clone()).await.ok();
             self.stepper_1.send(command.clone()).await.ok();
             self.stepper_1.send(command_2.clone()).await.ok();
             self.stepper_2.send(command.clone()).await.ok();
             self.stepper_2.send(command_2.clone()).await.ok();
             self.stepper_3.send(command.clone()).await.ok();
             self.stepper_3.send(command_2.clone()).await.ok();
-            self.stepper_4.send(command.clone()).await.ok();
-            self.stepper_4.send(command_2.clone()).await.ok();
         }
     }
 
     fn get_stepper_sender(&mut self) -> &mut MyStepperCommandsSender {
         let index = self.state.stepper_index;
         if index == 0 {
-            return &mut self.stepper_1;
+            return &mut self.stepper_0;
         } else if index == 1 {
-            return &mut self.stepper_2;
+            return &mut self.stepper_1;
         } else if index == 2 {
-            return &mut self.stepper_3;
+            return &mut self.stepper_2;
         } else if index == 3 {
-            return &mut self.stepper_4;
+            return &mut self.stepper_3;
         }
 
-        return &mut self.stepper_1;
+        return &mut self.stepper_0;
     }
 }

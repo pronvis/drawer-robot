@@ -1,6 +1,6 @@
 use crate::{CHANNEL_CAPACITY, *};
 use fugit::RateExtU32;
-use rtic_sync::channel::Sender;
+use rtic_sync::channel::{Sender, TrySendError};
 use ssd1306::{I2CDisplayInterface, Ssd1306};
 use stm32f1xx_hal::{
     afio,
@@ -105,6 +105,22 @@ pub async fn display_str(
         Some(allocated_memory) => {
             let memory_block = allocated_memory.init(text);
             display_sender.send(memory_block).await
+        }
+        None => {
+            defmt::error!("fail to alloc DisplayMemoryPool");
+            Result::Ok(())
+        }
+    }
+}
+
+pub fn display_str_sync(
+    text: DisplayString,
+    display_sender: &mut Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
+) -> Result<(), TrySendError<Box<DisplayMemoryPool>>> {
+    match DisplayMemoryPool::alloc() {
+        Some(allocated_memory) => {
+            let memory_block = allocated_memory.init(text);
+            display_sender.try_send(memory_block)
         }
         None => {
             defmt::error!("fail to alloc DisplayMemoryPool");

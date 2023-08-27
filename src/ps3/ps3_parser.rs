@@ -7,7 +7,6 @@ use heapless::pool::singleton::Box;
 use rtic_sync::channel::{Receiver, Sender};
 
 use super::Ps3Event;
-use core::fmt::Write;
 
 // CrossDown,
 // CrossUp,
@@ -70,12 +69,6 @@ impl Ps3EventParser {
             }
 
             Ps3Event::DigitalSignal(signal) => {
-                let mut data_str = DisplayString::new();
-                write!(data_str, "receive signal: {signal}").expect("not written");
-                display::display_str(data_str, &mut self.display_sender)
-                    .await
-                    .unwrap();
-
                 let robot_command = digital_signal_to_robot_command(signal);
                 if let Some(robot_command) = robot_command {
                     self.robot_commands_sender.send(robot_command).await.ok();
@@ -110,7 +103,7 @@ fn digital_signal_to_robot_command(signal: u8) -> Option<RobotCommand> {
     let mut robot_command = None;
     if signal == 0x55 {
         // up button down
-        robot_command.replace(RobotCommand::AddSteps(10));
+        robot_command.replace(RobotCommand::AddSteps(100));
     } else if signal == 0x53 {
         // square button down
         robot_command.replace(RobotCommand::SelectStepper(0));
@@ -140,13 +133,13 @@ fn digital_signal_to_robot_command(signal: u8) -> Option<RobotCommand> {
         robot_command.replace(RobotCommand::AllMode);
     } else if signal == 0x60 {
         // L1 button down
-        robot_command.replace(RobotCommand::AddSteps(100));
+        robot_command.replace(RobotCommand::AddSteps(1));
     } else if signal == 0x61 {
         // L2 button down
         robot_command.replace(RobotCommand::ChangeDirection(false));
     } else if signal == 0x62 {
         // R1 button down
-        robot_command.replace(RobotCommand::AddSteps(1000));
+        robot_command.replace(RobotCommand::AddSteps(10));
     } else if signal == 0x65 {
         // R2 button down
         robot_command.replace(RobotCommand::ChangeDirection(true));
