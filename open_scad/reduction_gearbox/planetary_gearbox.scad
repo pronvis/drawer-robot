@@ -4,16 +4,16 @@ use <gears.scad>
 //---------------------------------------------------------------
 //DISPLAY OPTIONS
 //---------------------------------------------------------------
-split=0; // disasemble gearbox
+split=1; // disasemble gearbox
 //---------------------------------------------------------------
-show_carrier_top=0;        // display gearbox carrier top part with sun gear
+show_carrier_top=1;        // display gearbox carrier top part with sun gear
 show_carrier_bottom=0;     // display gearbox carrier bottom part 
 show_planets=0;            // display gearbox planets
 show_ring_gear=0;          // display ring gear
-show_motor_gear=1;         // display motor gear
+show_motor_gear=0;         // display motor gear
 show_motor_mount=0;        // display motor mounting base
 show_distancer=0;          // display distancer
-show_nema=0;               // display nema17
+show_nema=0;               // display nema07
 //---------------------------------------------------------------
 //PARAMETERS
 //---------------------------------------------------------------
@@ -55,9 +55,9 @@ CARRIER_NUT_SIZE=5.5;       // carrier mounting hex nut size
 CARRIER_NUT_DEPTH=2;        // carrier mounting hex nut depth
 //MOTOR
 MOTOR_BASE_H=10;            // motor base for gearbox mounting height
-MOTOR_MOUNT_H=7.5;          // motor gear mount height 
+MOTOR_MOUNT_H=5.5;          // motor gear mount height 
 MOTOR_MOUNT_OD=20;          // motor gear mount outter diameter
-MOTOR_MOUNT_ID=5.2;         // motor gear mount inner diameter
+MOTOR_MOUNT_ID=5.5;         // motor gear mount inner diameter
 MOTOR_GEAR_N=SUN_GEAR_N;    // motor gear tooth count
 MOTOR_GEAR_H=SUN_GEAR_H;    // motor gear height/tickness
 MOTOR_GEAR_DIST_H=SUN_GEAR_DIST_H; // motor gear distancer/support height
@@ -102,6 +102,7 @@ carrier_hole_p=planet_gear_p;
 //COLORS
 //---------------------------------------------------------------
 color1=[0,0.8,0];        //GREEN
+white=[1,1,1];           //WHITE
 color2=[0.25,0.25,0.25]; //DARK
 //---------------------------------------------------------------
 //NEMA17
@@ -112,7 +113,7 @@ if(show_nema)
     translate([0,0,n_offset])
     {    
         translate([-4,0,1.5])
-        color(color2)
+        color(white)
         import("Nema17.stl");
     }
 }
@@ -209,24 +210,14 @@ if(show_carrier_bottom)
 //--------------------------------------------------------    
 //CARRIER TOP PART        
 //--------------------------------------------------------
+AXEL_H = 22;
+AXEL_D = 5;
+AXEL_BASE_H = 3;
 if(show_carrier_top)
 {
     t_offset = split ? (h_motor_gear+h_bottom+GEARBOX_H+h_planet+MOTOR_BASE_H+30) : MOTOR_BASE_H;
     translate([0,0,t_offset])
     {
-
-        //top gear
-        color(color2)
-        translate([0,0,GEARBOX_H+SUN_GEAR_DIST_H])
-        spur_gear (
-            modul=GEAR_MODUL, 
-            tooth_number=SUN_GEAR_N, 
-            width=SUN_GEAR_H, 
-            bore=SUN_GEAR_ID, 
-            pressure_angle=GEAR_PREASURE_ANGLE,   
-            helix_angle=GEAR_HELIX_ANGLE, 
-            optimized=true
-            ); 
         //top mount  
         translate([-0,-0,h_bottom])
         difference()
@@ -234,17 +225,25 @@ if(show_carrier_top)
             color(color2)
             union()
             {
-                translate([-0,-0,0])
                 cylinder(r=ring_gear_id/2-CARRIER_CLR,h=h_top);
                 
-                translate([0,-0,h_top])
-                cylinder(r=SUN_GEAR_DIST_D/2,h=SUN_GEAR_DIST_H+0.025);
+                translate([0,0,h_top])
+                cylinder(r=SUN_GEAR_DIST_D/2,h=SUN_GEAR_H+AXEL_BASE_H);
             
-                translate([0,-0,h_top])
-                cylinder(r=PLANET_GEAR_ID/2+0.1,h=SUN_GEAR_H+SUN_GEAR_DIST_H);
+                //axel 
+                translate([0,0,h_top+SUN_GEAR_H+AXEL_BASE_H]) difference() {
+                    cylinder(r=AXEL_D/2,h=AXEL_H);
+                    // axle inside cut
+                    translate([4, 0, AXEL_H/2]) {
+                        cube([4, 4, AXEL_H+0.1], center = true);
+                    }   
+                }
+                // translate([0,0,h_top/2]){
+                //     cylinder(r=PLANET_GEAR_ID/2+0.1,h=SUN_GEAR_H+SUN_GEAR_DIST_H);
+                // }
             }
-            //shaft hole
-            cylinder(r=SUN_GEAR_ID/2,h=h_top+SUN_GEAR_DIST_H+SUN_GEAR_H+0.1);
+            // shaft hole
+            cylinder(r=SUN_GEAR_ID/2,h=h_top+SUN_GEAR_H+1.1);
             
             translate([0,-0,-0.1])
             cylinder(r=MOTOR_GEAR_DIST_D/2+MOTOR_GEAR_R_CLR,h=h_top-ofst+0.1);   
@@ -405,33 +404,33 @@ if(show_motor_gear)
                 ); 
         }
         //top mount  
+        color(color2)
         difference()
         {
-            color(color2)
             union()
             {
                 //base
-                translate([-0,-0,0])
                 cylinder(r=MOTOR_MOUNT_OD/2,h=MOTOR_MOUNT_H);
                 //gear distancer
                 translate([0,-0,MOTOR_MOUNT_H-0.1])
                 cylinder(r=MOTOR_GEAR_DIST_D/2,h=MOTOR_GEAR_DIST_H+0.125);
                 //filling cylinder
-                translate([0,-0,MOTOR_MOUNT_H])
-                cylinder(r=PLANET_GEAR_ID/2+0.1,h=MOTOR_GEAR_H+MOTOR_GEAR_DIST_H);
+                translate([0,-0,MOTOR_MOUNT_H+MOTOR_GEAR_DIST_H])
+                cylinder(r=PLANET_GEAR_ID/2+0.1,h=MOTOR_GEAR_H);
             }            
+
             //shaft hole
-            translate([0,0,-0.1])
-            cylinder(r=MOTOR_MOUNT_ID/2,h=h_motor_gear+0.2);
-            //nut isert slit
-            translate([-MOUNTING_NUT_SIZE/2-0.05,MOTOR_MOUNT_ID/2+1.5,-0.1])
-            cube([MOUNTING_NUT_SIZE+0.1,MOUNTING_NUT_TICKESS+0.1,MOTOR_MOUNT_H/2+3.7+0.1]);
-            //bolt fixing hole
-            translate([0,0,MOTOR_MOUNT_H/2])
-            rotate(a=-90,v=[1,0,0])
-            cylinder(r=MOUNTING_HOLE_ID/2,h=MOTOR_MOUNT_OD/2+0.1);     
+            translate([0,0,-0.1]) difference() {
+                cylinder(r=MOTOR_MOUNT_ID/2,h=h_motor_gear+0.2);
+                // axle inside cut
+                intersection() {
+                    cylinder(h=h_motor_gear+0.2, r=MOTOR_MOUNT_ID/2);
+                    translate([4, 0, (h_motor_gear+0.2)/2]) {
+                        cube([4, 4, h_motor_gear+0.2], center = true);
+                    }   
+                }
+            }
         }
-        
     }
 }
 //--------------------------------------------------------
