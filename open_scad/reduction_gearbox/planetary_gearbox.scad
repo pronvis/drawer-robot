@@ -7,13 +7,13 @@ use <gears.scad>
 split=1; // disasemble gearbox
 //---------------------------------------------------------------
 show_carrier_top=1;        // display gearbox carrier top part with sun gear
-show_carrier_bottom=0;     // display gearbox carrier bottom part 
-show_planets=0;            // display gearbox planets
-show_ring_gear=0;          // display ring gear
-show_motor_gear=0;         // display motor gear
-show_motor_mount=0;        // display motor mounting base
-show_distancer=0;          // display distancer
-show_nema=0;               // display nema07
+show_carrier_bottom=1;     // display gearbox carrier bottom part 
+show_planets=1;            // display gearbox planets
+show_ring_gear=1;          // display ring gear
+show_motor_gear=1;         // display motor gear
+show_motor_mount=1;        // display motor mounting base
+show_distancer=1;          // display distancer
+show_nema=1;               // display nema17
 //---------------------------------------------------------------
 //PARAMETERS
 //---------------------------------------------------------------
@@ -266,9 +266,9 @@ if(show_carrier_top)
                 {
                     translate([-0,-0,-0.1])
                     cylinder(r=CARRIER_HOLE_D/2,h=h_top+0.2); 
-                    rotate(a=30,v=[0,0,1])
-                    translate([-0,-0,h_top-CARRIER_BOLT_DEPTH+0.1])
-                    cylinder(r=CARRIER_HOLE_D/2+CARRIER_BOLT_CLR,h=CARRIER_BOLT_DEPTH+0.1); 
+                    // rotate(a=30,v=[0,0,1])
+                    // translate([-0,-0,h_top-CARRIER_BOLT_DEPTH+0.1])
+                    // cylinder(r=CARRIER_HOLE_D/2+CARRIER_BOLT_CLR,h=CARRIER_BOLT_DEPTH+0.1); 
                 }
             }
        
@@ -356,26 +356,26 @@ if(show_ring_gear)
                 //mounting holes
                 for(i=[0:(2*MOUNTING_HOLE_N-1)])
                 {
-                    rotate(a=i*(360/2/MOUNTING_HOLE_N),v=[0,0,1])
+                    rotate(a=i*(180/MOUNTING_HOLE_N),v=[0,0,1])
                     translate([0,MOUNTING_HOLE_P,-1])
                     cylinder(r=MOUNTING_HOLE_ID/2,h=GEARBOX_H+2);        
                 }
-                //hex nuts for mounting
-                for(i=[0:(MOUNTING_HOLE_N-1)])
-                {
-                    rotate(a=i*(360/MOUNTING_HOLE_N),v=[0,0,1]) 
-                    translate([0,MOUNTING_HOLE_P,0])
-                    rotate(a=30,v=[0,0,1])
-                    translate([0,0,(MOUNTING_NUT_DEPTH+1)/2-1])
-                    fhex(MOUNTING_NUT_SIZE,MOUNTING_NUT_DEPTH+1);
-                }
+                ////hex nuts for mounting
+                //for(i=[0:(MOUNTING_HOLE_N-1)])
+                //{
+                //    rotate(a=i*(360/MOUNTING_HOLE_N),v=[0,0,1]) 
+                //    translate([0,MOUNTING_HOLE_P,0])
+                //    rotate(a=30,v=[0,0,1])
+                //    translate([0,0,(MOUNTING_NUT_DEPTH+1)/2-1])
+                //    fhex(MOUNTING_NUT_SIZE,MOUNTING_NUT_DEPTH+1);
+                //}
                 //bolt head clearance
-                for(i=[0:(MOUNTING_HOLE_N-1)])
-                {
-                    rotate(a=i*(360/MOUNTING_HOLE_N)+(360/2/MOUNTING_HOLE_N),v=[0,0,1]) 
-                    translate([0,MOUNTING_HOLE_P,GEARBOX_H-MOUNTING_BOLT_DEPTH])
-                    cylinder(r=MOUNTING_HOLE_ID/2+MOUNTING_BOLT_CLR,h=MOUNTING_BOLT_DEPTH+0.1);
-                }  
+                // for(i=[0:(2*MOUNTING_HOLE_N-1)])
+                // {
+                //     rotate(a=i*(180/MOUNTING_HOLE_N)+(360/2/MOUNTING_HOLE_N),v=[0,0,1]) 
+                //     translate([0,MOUNTING_HOLE_P,GEARBOX_H-MOUNTING_BOLT_DEPTH])
+                //     cylinder(r=MOUNTING_HOLE_ID/2+MOUNTING_BOLT_CLR,h=MOUNTING_BOLT_DEPTH+0.1);
+                // }  
             }
         }
     }
@@ -479,22 +479,22 @@ if(show_motor_mount)
                     translate([0,MOUNTING_HOLE_P,-1])
                     cylinder(r=MOUNTING_HOLE_ID/2,h=MOTOR_BASE_H+2);        
                 }
-                //hex nuts for mounting
-                for(i=[0:(MOUNTING_HOLE_N-1)])
-                {
-                    rotate(a=i*(360/MOUNTING_HOLE_N),v=[0,0,1]) 
-                    translate([0,MOUNTING_HOLE_P,0])
-                    rotate(a=30,v=[0,0,1])
-                    translate([0,0,(MOUNTING_NUT_DEPTH+1)/2-1])
-                    fhex(MOUNTING_NUT_SIZE,MOUNTING_NUT_DEPTH+1);
-                }
-                //bolt head clearance
-                for(i=[0:(MOUNTING_HOLE_N-1)])
-                {
-                    rotate(a=i*(360/MOUNTING_HOLE_N)+(360/MOUNTING_HOLE_N/2),v=[0,0,1]) 
-                    translate([0,MOUNTING_HOLE_P,MOTOR_BASE_H-MOUNTING_BOLT_DEPTH])
-                    cylinder(r=MOUNTING_HOLE_ID/2+MOUNTING_BOLT_CLR,h=MOUNTING_BOLT_DEPTH+0.1);
-                }
+                ////hex nuts for mounting
+                //for(i=[0:(MOUNTING_HOLE_N-1)])
+                //{
+                //    rotate(a=i*(360/MOUNTING_HOLE_N),v=[0,0,1]) 
+                //    translate([0,MOUNTING_HOLE_P,0])
+                //    rotate(a=30,v=[0,0,1])
+                //    translate([0,0,(MOUNTING_NUT_DEPTH+1)/2-1])
+                //    fhex(MOUNTING_NUT_SIZE,MOUNTING_NUT_DEPTH+1);
+                //}
+                ////bolt head clearance
+                //for(i=[0:(MOUNTING_HOLE_N-1)])
+                //{
+                //    rotate(a=i*(360/MOUNTING_HOLE_N)+(360/MOUNTING_HOLE_N/2),v=[0,0,1]) 
+                //    translate([0,MOUNTING_HOLE_P,MOTOR_BASE_H-MOUNTING_BOLT_DEPTH])
+                //    cylinder(r=MOUNTING_HOLE_ID/2+MOUNTING_BOLT_CLR,h=MOUNTING_BOLT_DEPTH+0.1);
+                //}
             }
         }
     }
