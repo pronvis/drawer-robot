@@ -1,16 +1,29 @@
 // Planetary gear bearing (customizable)
 
 use <pins.scad>;
-use <Write.scad>
+use <write/Write.scad>
+
+show_nema=1;               // display nema17
+white=[1,1,1];           //WHITE
+
 //----------------------------------------------------------------------------
 //PARAMETERS------------------------------------------------------------------
 //----------------------------------------------------------------------------
 
-object=1; //[0=planetary gear:1=carrier:2=both]
+if(show_nema)
+{
+    translate([0,0,n_offset])
+    {    
+        translate([-4,0,1.5])
+        color(white)
+        import("Nema17.stl");
+    }
+}
+object=0; //[0=planetary gear:1=carrier:2=both]
 
 //Planetary gear--------------------------------------------------------------
 
-approximate_gear_ratio=6; 
+approximate_gear_ratio=4; 
 //The actual acheived gear ratio is influenced by the number_of_teeth_on_planets and number_of_planets
 number_of_teeth_on_planets=22; 
 number_of_planets=3;
@@ -33,7 +46,7 @@ DR=0.5;
 
 //Planetary gear bearings-------------------------------------------------------
 
-number_of_planets_b=4;
+number_of_planets_b=0;
 number_of_teeth_on_planets_b=7;
 approximate_number_of_teeth_on_sun_b=8;
 wall_thickness=4;
@@ -265,17 +278,6 @@ flat_extrude(h=gear_thickness,flat=flat)translate([0,-clearance*cos(pressure_ang
 	}
 }
 
-module monogram(h=1)
-linear_extrude(height=h,center=true)
-translate(-[3,2.5])union(){
-	difference(){
-		square([4,5]);
-		translate([1,1])square([2,3]);
-	}
-	square([6,1]);
-	translate([0,2])square([2,1]);
-}
-
 module herringbone(
 	number_of_teeth=15,
 	circular_pitch=10,
@@ -325,9 +327,9 @@ flat_extrude(h=gear_thickness,twist=twist,flat=flat)
 
 module flat_extrude(h,twist,flat){
 	if(flat==false)
-		linear_extrude(height=h,twist=twist,slices=twist/6)child(0);
+		linear_extrude(height=h,twist=twist,slices=twist/6)children(0);
 	else
-		child(0);
+		children(0);
 }
 
 module gear2D (

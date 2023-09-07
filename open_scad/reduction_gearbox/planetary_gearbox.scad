@@ -4,16 +4,16 @@ use <gears.scad>
 //---------------------------------------------------------------
 //DISPLAY OPTIONS
 //---------------------------------------------------------------
-split=1; // disasemble gearbox
+split=0; // disasemble gearbox
 //---------------------------------------------------------------
-show_carrier_top=1;        // display gearbox carrier top part with sun gear
-show_carrier_bottom=1;     // display gearbox carrier bottom part 
+show_carrier_top=0;        // display gearbox carrier top part with sun gear
+show_carrier_bottom=0;     // display gearbox carrier bottom part 
 show_planets=1;            // display gearbox planets
-show_ring_gear=1;          // display ring gear
+show_ring_gear=0;          // display ring gear
 show_motor_gear=1;         // display motor gear
-show_motor_mount=1;        // display motor mounting base
-show_distancer=1;          // display distancer
-show_nema=1;               // display nema17
+show_motor_mount=0;        // display motor mounting base
+show_distancer=0;          // display distancer
+show_nema=0;               // display nema07
 //---------------------------------------------------------------
 //PARAMETERS
 //---------------------------------------------------------------
@@ -54,10 +54,10 @@ CARRIER_BOLT_DEPTH=2;       // carrier mounting holes clearance depth
 CARRIER_NUT_SIZE=5.5;       // carrier mounting hex nut size
 CARRIER_NUT_DEPTH=2;        // carrier mounting hex nut depth
 //MOTOR
-MOTOR_BASE_H=10;            // motor base for gearbox mounting height
-MOTOR_MOUNT_H=5.5;          // motor gear mount height 
+MOTOR_BASE_H=9;            // motor base for gearbox mounting height
+MOTOR_MOUNT_H=7.5;          // motor gear mount height 
 MOTOR_MOUNT_OD=20;          // motor gear mount outter diameter
-MOTOR_MOUNT_ID=5.5;         // motor gear mount inner diameter
+MOTOR_MOUNT_ID=5.25;         // motor gear mount inner diameter
 MOTOR_GEAR_N=SUN_GEAR_N;    // motor gear tooth count
 MOTOR_GEAR_H=SUN_GEAR_H;    // motor gear height/tickness
 MOTOR_GEAR_DIST_H=SUN_GEAR_DIST_H; // motor gear distancer/support height
@@ -75,6 +75,10 @@ MOUNTING_NUT_DEPTH=3;       // gearbox mounting hex nut depth
 MOUNTING_NUT_TICKESS=2.5;   // gearbox mounting hex nut tickness
 //DISTANCER
 DISTANCER_H=1;              // distancer between individual geaboxes
+// Hole for Nema17 axel 
+AXEL_H = 22;
+AXEL_D = 5;
+AXEL_BASE_H = 3;
 //---------------------------------------------------------------
 //CALCULATED PARAMETERS
 //---------------------------------------------------------------
@@ -120,6 +124,44 @@ if(show_nema)
 //---------------------------------------------------------------
 //PLANETS
 //---------------------------------------------------------------
+
+// clearance b
+tol=0.15;
+
+// pressure angle between gears
+P=30;//[30:60] 
+// number of teeth to twist across
+nTwist=1;
+// maximum depth ratio of teeth
+DR=0.5;
+
+approximate_gear_ratio=4; 
+number_of_teeth_on_planets=11; 
+number_of_planets=3;
+
+np=round(number_of_teeth_on_planets);
+
+approximate_number_of_teeth_on_sun=(2*number_of_teeth_on_planets)/(approximate_gear_ratio-2);
+ns1=approximate_number_of_teeth_on_sun;
+m=round(number_of_planets);
+k1=round(2/m*(ns1+np));
+k= k1*m%2!=0 ? k1+1 : k1;
+ns=k*m/2-np;
+
+nr=ns+2*np;
+
+module custom_sun(height, outer_diameter) {
+    pitchD=0.9*outer_diameter/(1+min(PI/(2*nr*tan(P)),PI*DR/nr));
+    pitch=pitchD*PI/nr;
+    helix_angle=atan(2*nTwist*pitch/height);
+	rotate([0,0,(np+1)*180/ns+phi*(ns+np)*2/ns]){
+		difference() {
+			 mirror([0,1,0])
+				herringbone(ns,pitch,P,DR,tol,helix_angle,height);
+		}
+	}
+}
+
 if(show_planets)
 {
     p_offset = split ? (h_motor_gear+h_bottom+GEARBOX_H+MOTOR_BASE_H+25) : MOTOR_BASE_H;
@@ -210,9 +252,6 @@ if(show_carrier_bottom)
 //--------------------------------------------------------    
 //CARRIER TOP PART        
 //--------------------------------------------------------
-AXEL_H = 22;
-AXEL_D = 5;
-AXEL_BASE_H = 3;
 if(show_carrier_top)
 {
     t_offset = split ? (h_motor_gear+h_bottom+GEARBOX_H+h_planet+MOTOR_BASE_H+30) : MOTOR_BASE_H;
@@ -393,15 +432,32 @@ if(show_motor_gear)
         color(color2)
         translate([0,0,MOTOR_MOUNT_H+MOTOR_GEAR_DIST_H])
         {
-            spur_gear (
-                modul=GEAR_MODUL, 
-                tooth_number=MOTOR_GEAR_N, 
-                width=MOTOR_GEAR_H, 
-                bore=MOTOR_MOUNT_ID, 
-                pressure_angle=GEAR_PREASURE_ANGLE,   
-                helix_angle=GEAR_HELIX_ANGLE, 
-                optimized=true
-                ); 
+
+             difference() {
+                 translate([0,0,SUN_GEAR_H/2])
+                     custom_sun(SUN_GEAR_H, ring_gear_od);
+                //shaft hole
+                translate([0,0,-0.1]) difference() {
+                    cylinder(r=MOTOR_MOUNT_ID/2,h=SUN_GEAR_H+0.2);
+                    // axle inside cut
+                    intersection() {
+                        cylinder(h=SUN_GEAR_H+0.2, r=MOTOR_MOUNT_ID/2);
+                        translate([4, 0, (SUN_GEAR_H+0.2)/2]) {
+                            cube([4, 4, SUN_GEAR_H+0.2], center = true);
+                        }   
+                    }
+                }
+         }
+
+            // spur_gear (
+            //     modul=GEAR_MODUL, 
+            //     tooth_number=MOTOR_GEAR_N, 
+            //     width=MOTOR_GEAR_H, 
+            //     bore=MOTOR_MOUNT_ID, 
+            //     pressure_angle=GEAR_PREASURE_ANGLE,   
+            //     helix_angle=GEAR_HELIX_ANGLE, 
+            //     optimized=true
+            //     ); 
         }
         //top mount  
         color(color2)
@@ -621,3 +677,140 @@ function getOD(tooth_number,modul)=
         da = (modul <1)? d + (modul+c) * 2.2 : d + (modul+c) * 2
     )
     2*(da/2+1);
+
+
+
+
+module herringbone(
+	number_of_teeth=15,
+	circular_pitch=10,
+	pressure_angle=28,
+	depth_ratio=1,
+	clearance=0,
+	helix_angle=0,
+	gear_thickness=5){
+union(){
+	gear(number_of_teeth,
+		circular_pitch,
+		pressure_angle,
+		depth_ratio,
+		clearance,
+		helix_angle,
+		gear_thickness/2);
+	mirror([0,0,1])
+		gear(number_of_teeth,
+			circular_pitch,
+			pressure_angle,
+			depth_ratio,
+			clearance,
+			helix_angle,
+			gear_thickness/2);
+}}
+
+module gear (
+	number_of_teeth=15,
+	circular_pitch=10,
+	pressure_angle=28,
+	depth_ratio=1,
+	clearance=0,
+	helix_angle=0,
+	gear_thickness=5,
+	flat=false){
+pitch_radius = number_of_teeth*circular_pitch/(2*PI);
+twist=tan(helix_angle)*gear_thickness/pitch_radius*180/PI;
+
+flat_extrude(h=gear_thickness,twist=twist,flat=flat)
+	gear2D (
+		number_of_teeth,
+		circular_pitch,
+		pressure_angle,
+		depth_ratio,
+		clearance);
+}
+
+module flat_extrude(h,twist,flat){
+	if(flat==false)
+		linear_extrude(height=h,twist=twist,slices=twist/6)children(0);
+	else
+		children(0);
+}
+
+module gear2D (
+	number_of_teeth,
+	circular_pitch,
+	pressure_angle,
+	depth_ratio,
+	clearance){
+pitch_radius = number_of_teeth*circular_pitch/(2*PI);
+base_radius = pitch_radius*cos(pressure_angle);
+depth=circular_pitch/(2*tan(pressure_angle));
+outer_radius = clearance<0 ? pitch_radius+depth/2-clearance : pitch_radius+depth/2;
+root_radius1 = pitch_radius-depth/2-clearance/2;
+root_radius = (clearance<0 && root_radius1<base_radius) ? base_radius : root_radius1;
+backlash_angle = clearance/(pitch_radius*cos(pressure_angle)) * 180 / PI;
+half_thick_angle = 90/number_of_teeth - backlash_angle/2;
+pitch_point = involute (base_radius, involute_intersect_angle (base_radius, pitch_radius));
+pitch_angle = atan2 (pitch_point[1], pitch_point[0]);
+min_radius = max (base_radius,root_radius);
+
+intersection(){
+	rotate(90/number_of_teeth)
+		circle($fn=number_of_teeth*1,r=pitch_radius+depth_ratio*circular_pitch/2-clearance/2);
+	union(){
+		rotate(90/number_of_teeth)
+			circle($fn=number_of_teeth*1,r=max(root_radius,pitch_radius-depth_ratio*circular_pitch/2-clearance/2));
+		for (i = [1:number_of_teeth])rotate(i*360/number_of_teeth){
+			halftooth (
+				pitch_angle,
+				base_radius,
+				min_radius,
+				outer_radius,
+				half_thick_angle);		
+			mirror([0,1])halftooth (
+				pitch_angle,
+				base_radius,
+				min_radius,
+				outer_radius,
+				half_thick_angle);
+		}
+	}
+}}
+
+module halftooth (
+	pitch_angle,
+	base_radius,
+	min_radius,
+	outer_radius,
+	half_thick_angle){
+index=[0,1,2,3,4,5];
+start_angle = max(involute_intersect_angle (base_radius, min_radius)-5,0);
+stop_angle = involute_intersect_angle (base_radius, outer_radius);
+angle=index*(stop_angle-start_angle)/index[len(index)-1];
+p=[[0,0],
+	involute(base_radius,angle[0]+start_angle),
+	involute(base_radius,angle[1]+start_angle),
+	involute(base_radius,angle[2]+start_angle),
+	involute(base_radius,angle[3]+start_angle),
+	involute(base_radius,angle[4]+start_angle),
+	involute(base_radius,angle[5]+start_angle)];
+
+difference(){
+	rotate(-pitch_angle-half_thick_angle)polygon(points=p);
+	square(2*outer_radius);
+}}
+
+// Mathematical Functions
+//===============
+
+// Finds the angle of the involute about the base radius at the given distance (radius) from it's center.
+//source: http://www.mathhelpforum.com/math-help/geometry/136011-circle-involute-solving-y-any-given-x.html
+
+function involute_intersect_angle (base_radius, radius) = sqrt (pow (radius/base_radius, 2) - 1) * 180 / PI;
+
+// Calculate the involute position for a given base radius and involute angle.
+
+function involute (base_radius, involute_angle) =
+[
+	base_radius*(cos (involute_angle) + involute_angle*PI/180*sin (involute_angle)),
+	base_radius*(sin (involute_angle) - involute_angle*PI/180*cos (involute_angle))
+];
