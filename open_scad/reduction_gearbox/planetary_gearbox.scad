@@ -4,22 +4,23 @@ use <gears.scad>
 //---------------------------------------------------------------
 //DISPLAY OPTIONS
 //---------------------------------------------------------------
-split=0; // disasemble gearbox
+split=1; // disasemble gearbox
 //---------------------------------------------------------------
-show_carrier_top=0;        // display gearbox carrier top part with sun gear
-show_carrier_bottom=0;     // display gearbox carrier bottom part 
+show_carrier_top=1;        // display gearbox carrier top part with sun gear
+show_carrier_bottom=1;     // display gearbox carrier bottom part 
 show_planets=1;            // display gearbox planets
-show_ring_gear=0;          // display ring gear
+show_ring_gear=1;          // display ring gear
 show_motor_gear=1;         // display motor gear
-show_motor_mount=0;        // display motor mounting base
-show_distancer=0;          // display distancer
-show_nema=0;               // display nema07
+show_motor_mount=1;        // display motor mounting base
+show_distancer=1;          // display distancer
+show_nema=1;               // display nema17
 //---------------------------------------------------------------
 //PARAMETERS
 //---------------------------------------------------------------
 //PLANET GEAR
 PLANETS_N=3;
 PLANET_GEAR_N=9;            // planet gear tooth count
+REAL_PLANET_GEAR_N=11;      // planet gear tooth count
 PLANET_GEAR_H=4.7;          // planet gear height
 PLANET_GEAR_ID=6.0;         // planet gear mountig hole inner diameter
 PLANET_GEAR_ID_CLR=0.2;     // planet gear mounting shaft/pilar clearance 
@@ -27,6 +28,7 @@ PLANET_GEAR_DIST_H=0.4;     // height of top and bottom planet gear distancer
 PLANET_GEAR_DIST_D=7.5;     // diameter of top and bottom planet gear distancer
 PLANET_GEAR_R_CLR=0.4;      // radial clearance - clearance around planet gear
 PLANET_GEAR_A_CLR=0.3;      // axial clearance - clearance along vertical axis
+PLANET_GEAR_OUTER_D=28.3;     // outer planet gear diameter 
 //SUN GEAR
 SUN_GEAR_N=9;               // sun gear tooth count
 SUN_GEAR_H=5.3;             // sun gear height
@@ -136,12 +138,11 @@ nTwist=1;
 DR=0.5;
 
 approximate_gear_ratio=4; 
-number_of_teeth_on_planets=11; 
 number_of_planets=3;
 
-np=round(number_of_teeth_on_planets);
+np=round(REAL_PLANET_GEAR_N);
 
-approximate_number_of_teeth_on_sun=(2*number_of_teeth_on_planets)/(approximate_gear_ratio-2);
+approximate_number_of_teeth_on_sun=(2*REAL_PLANET_GEAR_N)/(approximate_gear_ratio-2);
 ns1=approximate_number_of_teeth_on_sun;
 m=round(number_of_planets);
 k1=round(2/m*(ns1+np));
@@ -149,8 +150,15 @@ k= k1*m%2!=0 ? k1+1 : k1;
 ns=k*m/2-np;
 
 nr=ns+2*np;
+phi=$t*360/m;
 
-module custom_sun(height, outer_diameter) {
+gear_ratio=(nr+ns)/ns;
+echo("gear_ratio=",gear_ratio);
+echo("Number of teeth on planets", np);
+echo("Number of teeth on sun", ns);
+echo("Number of teeth on annular", nr);
+
+module custom_gear(height, outer_diameter) {
     pitchD=0.9*outer_diameter/(1+min(PI/(2*nr*tan(P)),PI*DR/nr));
     pitch=pitchD*PI/nr;
     helix_angle=atan(2*nTwist*pitch/height);
@@ -171,9 +179,10 @@ if(show_planets)
         {
             color(color1)
             rotate(a=i*(360/PLANETS_N),v=[0,0,1])
+            translate([-planet_gear_p+1,0,GEARBOX_H/2])
             {
                 //distancer
-                translate([-planet_gear_p,0.0,GEARBOX_H/2+PLANET_GEAR_H/2])
+                translate([0,0,PLANET_GEAR_H/2])
                 difference()
                 {
                     translate([0,0,-0.1])   
@@ -182,16 +191,20 @@ if(show_planets)
                     cylinder(r=PLANET_GEAR_ID/2,h=PLANET_GEAR_DIST_H+0.3);
                 }
                 //gear
-                translate([-planet_gear_p,0,GEARBOX_H/2-PLANET_GEAR_H/2])
-                spur_gear (
-                    modul=GEAR_MODUL, 
-                    tooth_number=PLANET_GEAR_N, 
-                    width=PLANET_GEAR_H, 
-                    bore=PLANET_GEAR_ID, 
-                    pressure_angle=GEAR_PREASURE_ANGLE,   
-                    helix_angle=GEAR_HELIX_ANGLE, 
-                    optimized=true
-                    ); 
+                difference() {
+                    custom_gear(PLANET_GEAR_H, PLANET_GEAR_OUTER_D);
+                    translate([0,0,-PLANET_GEAR_H/2 - 0.1])
+                        cylinder(r=PLANET_GEAR_ID/2,h=PLANET_GEAR_H+0.3);
+                }
+                // spur_gear (
+                //     modul=GEAR_MODUL, 
+                //     tooth_number=PLANET_GEAR_N, 
+                //     width=PLANET_GEAR_H, 
+                //     bore=PLANET_GEAR_ID, 
+                //     pressure_angle=GEAR_PREASURE_ANGLE,   
+                //     helix_angle=GEAR_HELIX_ANGLE, 
+                //     optimized=true
+                //     ); 
             }
         }
 
@@ -217,8 +230,8 @@ if(show_carrier_bottom)
             for(i=[0:(PLANETS_N-1)])
             {
                 rotate(a=i*(360/PLANETS_N),v=[0,0,1])
-                translate([-planet_gear_p,0,ofst])
-                cylinder(r=getOD(PLANET_GEAR_N,GEAR_MODUL)/2-1+PLANET_GEAR_R_CLR,h=h_bottom-ofst+0.1);
+                translate([-planet_gear_p+1,0,ofst])
+                cylinder(r=getOD(PLANET_GEAR_N,GEAR_MODUL)/2-1+PLANET_GEAR_R_CLR-2,h=h_bottom-ofst+0.1);
             }
             for(i=[0:(CARRIER_HOLE_N-1)])
             { 
@@ -435,7 +448,7 @@ if(show_motor_gear)
 
              difference() {
                  translate([0,0,SUN_GEAR_H/2])
-                     custom_sun(SUN_GEAR_H, ring_gear_od);
+                     custom_gear(SUN_GEAR_H, ring_gear_od);
                 //shaft hole
                 translate([0,0,-0.1]) difference() {
                     cylinder(r=MOTOR_MOUNT_ID/2,h=SUN_GEAR_H+0.2);
