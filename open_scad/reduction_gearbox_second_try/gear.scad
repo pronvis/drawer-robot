@@ -138,67 +138,67 @@ carrier_translate_distance=(T+carrier_gear_gap)*(object-1);
 
 //Planetary gear--------------------------------------------------------------
 if (object==0 || object==2){
-	//Annuler 
-	translate([0,0,T/2]){
-		difference(){
-			cylinder(r=D/2,h=T,center=true,$fn=100);
-			union(){
-				writecylinder(str(gear_ratio,":1"),[0,0,0],D/2,T,h=T/2,rotate=0,center=true); 
-				herringbone(nr,pitch,P,DR,-tol,helix_angle,T+0.2);
-			}
-		}
-	//sun
-	rotate([0,0,(np+1)*180/ns+phi*(ns+np)*2/ns]){
-		difference(){
-			mirror([0,1,0])
-				herringbone(ns,pitch,P,DR,tol,helix_angle,T);
-			cylinder(r=w/sqrt(3),h=T+1,center=true,$fn=6);
-		}
-	}
-//planets (gear bearings)-----------------------------------------------------
-	for(i=[1:m])rotate([0,0,i*360/m+phi])translate([pitchD/2*(ns+np)/nr,0,0]){
-	//Carrier mounting pin
-		translate([0,0,T/2]){
-			
-			if (pin_diameter==0)
-			{
-				
-			}
-			else{
-				//auto. max
-				if (pin_diameter==-1)//
-				{
-					pin(h=carrier_thickness+carrier_gear_gap, r=Bearing_sun_root_radius, lh=pin_lip_height, lt=pin_lip_thickness, t=pin_tolerance, side=false);
-				}
-				//diameter
-				else{
-					pin(h=carrier_thickness+carrier_gear_gap, r=pin_diameter/2, lh=pin_lip_height, lt=pin_lip_thickness, t=pin_tolerance, side=false);
-				}
-			}
-		}
-		rotate([0,0,i*ns/m*360/np-phi*(ns+np)/np-phi]){
-		//Annuler 
-			difference(){
-				herringbone(np,pitch,P,DR,tol,helix_angle,T);
-				herringbone(nr_b,pitch_b,P_b,DR_b,-tol,helix_angle_b,T+0.2);
-			}
-		//sun
-		difference(){
-			rotate([0,0,(np_b+1)*180/ns_b+phi*(ns_b+np_b)*2/ns_b])
-				mirror([0,1,0])
-					herringbone(ns_b,pitch_b,P_b,DR_b,tol,helix_angle_b,T);
-			translate([0,0,-T/2])
-				cylinder(r=w_b/sqrt(3),h=T,center=true,$fn=6);
-		}	
-		//planets
-		for(i=[1:m_b])rotate([0,0,i*360/m_b+phi])translate([pitchD_b/2*(ns_b+np_b)/nr_b,0,0])
-			rotate([0,0,i*ns_b/m_b*360/np_b-phi*(ns_b+np_b)/np_b-phi])
-			herringbone(np_b,pitch_b,P_b,DR_b,tol,helix_angle_b,T);
+    scale(0.4) { 	//Annuler 
+        translate([0,0,T/2]){
+            difference(){
+                cylinder(r=D/2,h=T,center=true,$fn=100);
+                union(){
+                    writecylinder(str(gear_ratio,":1"),[0,0,0],D/2,T,h=T/2,rotate=0,center=true); 
+                    herringbone(nr,pitch,P,DR,-tol,helix_angle,T+0.2);
+                }
+            }
+            //sun
+            rotate([0,0,(np+1)*180/ns+phi*(ns+np)*2/ns]){
+                difference(){
+                    mirror([0,1,0])
+                        herringbone(ns,pitch,P,DR,tol,helix_angle,T);
+                    cylinder(r=w/sqrt(3),h=T+1,center=true,$fn=6);
+                }
+            }
+            //planets (gear bearings)-----------------------------------------------------
+            for(i=[1:m])rotate([0,0,i*360/m+phi])translate([pitchD/2*(ns+np)/nr,0,0]){
+                //Carrier mounting pin
+                translate([0,0,T/2]){
 
-	}
-	} 
-}
-}
+                    if (pin_diameter==0)
+                    {
+
+                    }
+                    else{
+                        //auto. max
+                        if (pin_diameter==-1)//
+                        {
+                            pin(h=carrier_thickness+carrier_gear_gap, r=Bearing_sun_root_radius, lh=pin_lip_height, lt=pin_lip_thickness, t=pin_tolerance, side=false);
+                        }
+                        //diameter
+                        else{
+                            pin(h=carrier_thickness+carrier_gear_gap, r=pin_diameter/2, lh=pin_lip_height, lt=pin_lip_thickness, t=pin_tolerance, side=false);
+                        }
+                    }
+                }
+                rotate([0,0,i*ns/m*360/np-phi*(ns+np)/np-phi]){
+                    //Annuler 
+                    difference(){
+                        herringbone(np,pitch,P,DR,tol,helix_angle,T);
+                        herringbone(nr_b,pitch_b,P_b,DR_b,-tol,helix_angle_b,T+0.2);
+                    }
+                    //sun
+                    difference(){
+                        rotate([0,0,(np_b+1)*180/ns_b+phi*(ns_b+np_b)*2/ns_b])
+                            mirror([0,1,0])
+                            herringbone(ns_b,pitch_b,P_b,DR_b,tol,helix_angle_b,T);
+                        translate([0,0,-T/2])
+                            cylinder(r=w_b/sqrt(3),h=T,center=true,$fn=6);
+                    }	
+                    //planets
+                    for(i=[1:m_b])rotate([0,0,i*360/m_b+phi])translate([pitchD_b/2*(ns_b+np_b)/nr_b,0,0])
+                        rotate([0,0,i*ns_b/m_b*360/np_b-phi*(ns_b+np_b)/np_b-phi])
+                            herringbone(np_b,pitch_b,P_b,DR_b,tol,helix_angle_b,T);
+
+                }
+            } 
+        }
+    }}
 
 //Carrier
 if (object==1 || object==2){
