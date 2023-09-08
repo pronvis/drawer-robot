@@ -106,3 +106,29 @@ module v_inner_gear (
                 );
 };
 
+module base(h, hole_d) autoColor(custom = partColors) {
+    mounting_holes_count = 4;
+    mounting_hole_outer_diameter = 10;
+    mounting_hole_inner_diameter = 3.3;
+    holes_diagonal = sqrt(2 * pow((NEMA17_HOLES_SQUARE_WIDTH/2), 2));
+
+    g(turnXY(45)) { 
+        difference() {
+            union() {
+                rounded_octagon(width = NEMA17_WIDTH, radius = 6, height = h);
+
+                pieces(mounting_holes_count) g(turnXY(spanAllButLast(360)), X(holes_diagonal))
+                    up_tube(d = mounting_hole_outer_diameter, h = h);
+            }
+
+            Z(-0.1) {
+                //central hole
+                up_tube(d = hole_d + 1, h = h + 0.2);
+
+                //mounting holes
+                pieces(mounting_holes_count) g(turnXY(spanAllButLast(360)), X(holes_diagonal))
+                    up_tube(d = mounting_hole_inner_diameter, h = h + 0.2);
+            }
+        }
+    }
+}
