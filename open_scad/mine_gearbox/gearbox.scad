@@ -15,7 +15,7 @@ partColors = [
     ["motor_gear", [0, 0.3, 0.5], 1],
     ["carrier_bottom", [0.2, 0.2, 0.4], 1],
     ["planets", [0, 0.3, 0], 1],
-    ["ring_gear", [0.2, 0.3, 0], 1],
+    ["ring_gear", [0.2, 0.3, 0], 1]
 ];
 
 ///////////////////////////////////
@@ -42,7 +42,6 @@ MOTOR_GEAR_HEIGHT = 5.3;    // motor gear height/tickness
 //----------- GEARS ----------------
 backlash = 0.05;
 clearance = 0.2;
-tooth_twist = 20;
 h = 1; //wall
 SUN_TOOTH_COUNT = 10;
 SATELLITE_TOOTH_COUNT = 11;
@@ -51,6 +50,8 @@ dd3 = (NEMA17_WIDTH - h * 2 - 0.4) * OUTER_RING_TOOTH_COUNT / (OUTER_RING_TOOTH_
 mm_per_tooth = dd3 / OUTER_RING_TOOTH_COUNT * PI; //all meshing gears need the same mm_per_tooth (and the same pressure_angle)
 satellite_distance = pitch_radius(mm_per_tooth, SUN_TOOTH_COUNT) + pitch_radius(mm_per_tooth, SATELLITE_TOOTH_COUNT);
 SATELLITES_COUNT = 3;
+tooth_twist = 15;
+ring_tooth_twist = tooth_twist * (outer_radius(mm_per_tooth = mm_per_tooth, number_of_teeth = SATELLITE_TOOTH_COUNT, clearance = clearance) / outer_radius(mm_per_tooth = mm_per_tooth, number_of_teeth = OUTER_RING_TOOTH_COUNT, clearance = clearance));
 
 //------- CARRIER BOTTOM -----------
 CARRIER_BOTTOM_MAIN_DIAMETER = 35;
@@ -77,7 +78,7 @@ planets = "planets";
 ring_gear = "ring_gear";
 gears = "motor_gear,ring_gear,planets";
 
-assemble(ring_gear) {
+assemble(gears) {
     nema17();
 
     m_mount_height = MOTOR_BASE_HEIGHT;
@@ -97,7 +98,7 @@ assemble(ring_gear) {
     apply_split(NEMA17_AXLE_HEIGHT +  h_motor_gear + planets_height + split_free_space * 4)
         Z(m_mount_height) {
             height = MOTOR_GEAR_DIST_HEIGHT * 2 + MOTOR_GEAR_HEIGHT;
-            ring_gear(h = height, hole_d = CARRIER_BOTTOM_MAIN_DIAMETER, inside_gear_h = planets_height);
+            ring_gear(h = height, hole_d = CARRIER_BOTTOM_MAIN_DIAMETER, planets_h = planets_height);
         }
 
     //TODO
@@ -132,7 +133,7 @@ module motor_gear(h, gear_h, gear_dist_h) autoColor(custom = partColors) {
 
         //gear
         Z(base_h + gear_distancer_h) {
-            v_gear(mm_per_tooth = mm_per_tooth, number_of_teeth = SUN_TOOTH_COUNT, thickness = gear_h, hole_diameter = PLANET_GEAR_INNER_DIAMETER - 0.5, clearance = clearance, backlash = backlash, twist = tooth_twist+25);
+            gear(mm_per_tooth = mm_per_tooth, number_of_teeth = SUN_TOOTH_COUNT, thickness = gear_h, hole_diameter = PLANET_GEAR_INNER_DIAMETER - 0.5, clearance = clearance, backlash = backlash, twist = tooth_twist);
         }
     }
 
@@ -168,33 +169,43 @@ module carrier_bottom() autoColor(custom = partColors) {
 module planets(h) autoColor(custom = partColors) {
     add("planets") {
         pieces(SATELLITES_COUNT) g(turnXY(spanAllButLast(360)), X(satellite_distance)) {
-            g(turnXZ(180), Z(-MOTOR_GEAR_HEIGHT/2 - h/2)) 
-                v_gear(mm_per_tooth = mm_per_tooth, number_of_teeth = SATELLITE_TOOTH_COUNT, thickness = h, hole_diameter = 4, clearance = clearance, backlash = backlash, twist = tooth_twist+25);
+            Z(MOTOR_GEAR_HEIGHT/2 - h/2)
+                gear(mm_per_tooth = mm_per_tooth, number_of_teeth = SATELLITE_TOOTH_COUNT, thickness = h, hole_diameter = 4, clearance = clearance, backlash = backlash, twist = -tooth_twist);
         };
     }
 }
 
-module ring_gear(h, hole_d, inside_gear_h) autoColor(custom = partColors) {
-    // OLD SOLUTION
-    inside_gear_height = inside_gear_h + 1;
+module ring_gear(h, hole_d, planets_h) autoColor(custom = partColors) {
+    inside_gear_height = planets_h + 1;
     add("ring_gear") {
-        intersection() {
-            base(h = h, hole_d = hole_d);
-            g(turnXZ(180), Z(-inside_gear_height/2 - h/2)) 
-                v_inner_gear(mm_per_tooth = mm_per_tooth, number_of_teeth = OUTER_RING_TOOTH_COUNT, outer_diameter = NEMA17_WIDTH, thickness = inside_gear_height, clearance = clearance, backlash = backlash, twist = tooth_twist);
-        }
+        base(h = h, hole_d = hole_d);
     }
 
-    // NEW SOLUTION
-    // add("ring_gear") {
-    //     base(h = h, hole_d = hole_d);
-    // }
+    remove("ring_gear") {
+        Z(h/2 - inside_gear_height/2)
+            gear(mm_per_tooth = mm_per_tooth, number_of_teeth = OUTER_RING_TOOTH_COUNT, thickness = inside_gear_height, clearance = clearance, backlash = backlash, twist = ring_tooth_twist);
+    }
+}
 
-    // remove("ring_gear") {
-    // fake_gears_count = 8;
-    // fake_gear_h = inside_gear_h + 1;
-    // pieces(fake_gears_count) turnXY(360 / fake_gears_count) 
-    //         g(turnXY(spanAllButLast(360)), X(satellite_distance), turnXZ(180), Z(-MOTOR_GEAR_HEIGHT/2 - fake_gear_h/2 - MOTOR_GEAR_DIST_HEIGHT)) 
-    //             v_gear(mm_per_tooth = mm_per_tooth, number_of_teeth = SATELLITE_TOOTH_COUNT, thickness = fake_gear_h, hole_diameter = 4, clearance = clearance, backlash = backlash, twist = tooth_twist+25);
-    // }
+//ADD params and use it!
+module simple_gear(d, h) {
+    tooth_size = mm_per_tooth;
+    tooth_count = 4;
+
+    out_r = outer_radius(mm_per_tooth=tooth_size,number_of_teeth=tooth_count,clearance=0.1);
+    in_r = pitch_radius(mm_per_tooth=tooth_size,number_of_teeth=tooth_count);
+
+    echo(">>> out : ", out_r);
+    echo(">>> in : ", in_r);
+    scale_coeff = d/2.06 / out_r;
+    scaled_h = h / scale_coeff;
+
+    scale(scale_coeff)
+        gear( 
+                mm_per_tooth = tooth_size,
+                number_of_teeth = tooth_count,
+                thickness       = scaled_h,
+                hole_diameter   = 0
+        );
+
 }
