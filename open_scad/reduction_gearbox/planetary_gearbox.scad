@@ -1,19 +1,19 @@
-$fn=100;
+$fn=300;
 use <gears.scad>
 
 //---------------------------------------------------------------
 //DISPLAY OPTIONS
 //---------------------------------------------------------------
-split=1; // disasemble gearbox
+split=0; // disasemble gearbox
 //---------------------------------------------------------------
-show_carrier_top=1;        // display gearbox carrier top part with sun gear
-show_carrier_bottom=1;     // display gearbox carrier bottom part 
-show_planets=1;            // display gearbox planets
-show_ring_gear=1;          // display ring gear
+show_carrier_top=0;        // display gearbox carrier top part with sun gear
+show_carrier_bottom=0;     // display gearbox carrier bottom part 
+show_planets=0;            // display gearbox planets
+show_ring_gear=0;          // display ring gear
 show_motor_gear=1;         // display motor gear
-show_motor_mount=1;        // display motor mounting base
-show_distancer=1;          // display distancer
-show_nema=1;               // display nema17
+show_motor_mount=0;        // display motor mounting base
+show_distancer=0;          // display distancer
+show_nema=0;               // display nema07
 //---------------------------------------------------------------
 //PARAMETERS
 //---------------------------------------------------------------
@@ -54,10 +54,10 @@ CARRIER_BOLT_DEPTH=2;       // carrier mounting holes clearance depth
 CARRIER_NUT_SIZE=5.5;       // carrier mounting hex nut size
 CARRIER_NUT_DEPTH=2;        // carrier mounting hex nut depth
 //MOTOR
-MOTOR_BASE_H=10;            // motor base for gearbox mounting height
+MOTOR_BASE_H=5;            // motor base for gearbox mounting height
 MOTOR_MOUNT_H=5.5;          // motor gear mount height 
 MOTOR_MOUNT_OD=20;          // motor gear mount outter diameter
-MOTOR_MOUNT_ID=5.5;         // motor gear mount inner diameter
+MOTOR_MOUNT_ID=5.1;         // motor gear mount inner diameter
 MOTOR_GEAR_N=SUN_GEAR_N;    // motor gear tooth count
 MOTOR_GEAR_H=SUN_GEAR_H;    // motor gear height/tickness
 MOTOR_GEAR_DIST_H=SUN_GEAR_DIST_H; // motor gear distancer/support height
@@ -227,17 +227,28 @@ if(show_carrier_top)
             {
                 cylinder(r=ring_gear_id/2-CARRIER_CLR,h=h_top);
                 
+                cyl_2_height = SUN_GEAR_H+AXEL_BASE_H;
                 translate([0,0,h_top])
-                cylinder(r=SUN_GEAR_DIST_D/2,h=SUN_GEAR_H+AXEL_BASE_H);
-            
-                //axel 
-                translate([0,0,h_top+SUN_GEAR_H+AXEL_BASE_H]) difference() {
-                    cylinder(r=AXEL_D/2,h=AXEL_H);
-                    // axle inside cut
-                    translate([4, 0, AXEL_H/2]) {
-                        cube([4, 4, AXEL_H+0.1], center = true);
-                    }   
+                cylinder(r=SUN_GEAR_DIST_D/2,h=cyl_2_height);
+
+                cube_height = 15;
+                translate([0,0, h_top + cyl_2_height + cube_height/2]) {
+                    cube([5, 12, cube_height], center = true);
                 }
+                mirror([1,1,0])
+                translate([0,0, h_top + cyl_2_height + cube_height/2]) {
+                    cube([5, 12, cube_height], center = true);
+                }
+
+            
+                ////axel 
+                //translate([0,0,h_top+SUN_GEAR_H+AXEL_BASE_H]) difference() {
+                //    cylinder(r=AXEL_D/2,h=AXEL_H);
+                //    // axle inside cut
+                //    translate([4, 0, AXEL_H/2]) {
+                //        cube([4, 4, AXEL_H+0.1], center = true);
+                //    }   
+                //}
                 // translate([0,0,h_top/2]){
                 //     cylinder(r=PLANET_GEAR_ID/2+0.1,h=SUN_GEAR_H+SUN_GEAR_DIST_H);
                 // }
@@ -421,6 +432,7 @@ if(show_motor_gear)
 
             //shaft hole
             translate([0,0,-0.1]) difference() {
+                margin = 0.1;
                 cylinder(r=MOTOR_MOUNT_ID/2,h=h_motor_gear+0.2);
                 // axle inside cut
                 intersection() {

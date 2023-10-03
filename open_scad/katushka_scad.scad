@@ -1,4 +1,4 @@
-$fn= $preview ? 32 : 64;
+$fn= $preview ? 32 : 300;
 
 total_height = 34;
 
@@ -21,32 +21,42 @@ module hole() {
 }
 
 module center() {
-    difference() {
         cylinder(center_height, center_radius, center_radius, center = true);
-        hole();
-    }
 }
 
 module base() {
-    difference(){
         union() {        
             cylinder(base_height/2, base_radius, center_radius, center = true);
             translate([0, 0, -base_height/2]) {
                 cylinder(base_height/2, base_radius, base_radius, center = true);
             }
         }
-        hole();
-    }
 }
 
-center();
+difference() {
+    union() {
+        center();
 
-translate([0, 0, -base_shift]) {
-   base();
-}
+        translate([0, 0, -base_shift]) {
+            base();
+        }
 
-translate([0, 0, base_shift]) {
-    rotate([180,0,0]) { 
-        base();
+        translate([0, 0, base_shift]) {
+            rotate([180,0,0]) { 
+                base();
+            }
+        }
     }
+
+    cube_height = 15 + 1.6;
+    margin = 0.25;
+    translate([0,0, -base_shift - base_height/2 -1.6 + cube_height/2]) {
+        cube([5 + margin, 12 + margin, cube_height], center = true);
+    }
+
+    mirror([1,1,0])
+    translate([0,0, -base_shift - base_height/2 -1.6 + cube_height/2]) {
+        cube([5 + margin, 12 + margin, cube_height], center = true);
+    }
+
 }
