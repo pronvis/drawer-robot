@@ -152,6 +152,7 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
         } else {
             self.step_pin.set_high().ok();
             self.state.step_phase = true;
+            //TODO: with TMC2209 you might want to remove delay here
             self.timer
                 .start(self.state.micros_pulse_duration.micros())
                 .unwrap(); //TODO: unwrap
