@@ -28,8 +28,10 @@ flags:
 bindgen_lists:
   allowlist_function:
     - TMCStepper.*
+    - TMC2209Stepper.*
   allowlist_type:
     - TMCStepper.*
+    - TMC2209Stepper.*
   blocklist_function:
     - Print.*
     - String.*

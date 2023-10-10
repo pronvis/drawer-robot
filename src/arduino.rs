@@ -81,6 +81,240 @@ where
     }
 }
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct __FlashStringHelper {
+    _unused: [u8; 0],
+}
+pub type uint8 = ::core::ffi::c_uchar;
+pub type uint32 = u32;
+#[repr(C)]
+pub struct Stream__bindgen_vtable(::core::ffi::c_void);
+#[repr(C)]
+pub struct Stream {
+    pub vtable_: *const Stream__bindgen_vtable,
+    pub __bindgen_padding_0: u32,
+    pub _timeout: ::core::ffi::c_ulong,
+    pub _startMillis: ::core::ffi::c_ulong,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct Stream_MultiTarget {
+    pub str_: *const ::core::ffi::c_char,
+    pub len: usize,
+    pub index: usize,
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN6Stream9timedReadEv"]
+    pub fn Stream_timedRead(this: *mut Stream) -> ::core::ffi::c_int;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN6Stream9timedPeekEv"]
+    pub fn Stream_timedPeek(this: *mut Stream) -> ::core::ffi::c_int;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN6Stream13peekNextDigitEv"]
+    pub fn Stream_peekNextDigit(this: *mut Stream) -> ::core::ffi::c_int;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN6Stream10setTimeoutEm"]
+    pub fn Stream_setTimeout(this: *mut Stream, timeout: ::core::ffi::c_ulong);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN6Stream4findEPc"]
+    pub fn Stream_find(this: *mut Stream, target: *mut ::core::ffi::c_char) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN6Stream4findEPcj"]
+    pub fn Stream_find1(this: *mut Stream, target: *mut ::core::ffi::c_char, length: usize)
+        -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN6Stream9findUntilEPcS0_"]
+    pub fn Stream_findUntil(
+        this: *mut Stream,
+        target: *mut ::core::ffi::c_char,
+        terminator: *mut ::core::ffi::c_char,
+    ) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN6Stream9findUntilEPcjS0_j"]
+    pub fn Stream_findUntil1(
+        this: *mut Stream,
+        target: *mut ::core::ffi::c_char,
+        targetLen: usize,
+        terminate: *mut ::core::ffi::c_char,
+        termLen: usize,
+    ) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN6Stream8parseIntEv"]
+    pub fn Stream_parseInt(this: *mut Stream) -> ::core::ffi::c_long;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN6Stream10parseFloatEv"]
+    pub fn Stream_parseFloat(this: *mut Stream) -> f32;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN6Stream9readBytesEPcj"]
+    pub fn Stream_readBytes(
+        this: *mut Stream,
+        buffer: *mut ::core::ffi::c_char,
+        length: usize,
+    ) -> usize;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN6Stream14readBytesUntilEcPcj"]
+    pub fn Stream_readBytesUntil(
+        this: *mut Stream,
+        terminator: ::core::ffi::c_char,
+        buffer: *mut ::core::ffi::c_char,
+        length: usize,
+    ) -> usize;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN6Stream10readStringEv"]
+    pub fn Stream_readString(this: *mut Stream) -> String;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN6Stream15readStringUntilEc"]
+    pub fn Stream_readStringUntil(this: *mut Stream, terminator: ::core::ffi::c_char) -> String;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN6Stream8parseIntEc"]
+    pub fn Stream_parseInt1(
+        this: *mut Stream,
+        skipChar: ::core::ffi::c_char,
+    ) -> ::core::ffi::c_long;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN6Stream10parseFloatEc"]
+    pub fn Stream_parseFloat1(this: *mut Stream, skipChar: ::core::ffi::c_char) -> f32;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN6Stream9findMultiEPNS_11MultiTargetEi"]
+    pub fn Stream_findMulti(
+        this: *mut Stream,
+        targets: *mut Stream_MultiTarget,
+        tCount: ::core::ffi::c_int,
+    ) -> ::core::ffi::c_int;
+}
+impl Stream {
+    #[inline]
+    pub unsafe fn timedRead(&mut self) -> ::core::ffi::c_int {
+        Stream_timedRead(self)
+    }
+    #[inline]
+    pub unsafe fn timedPeek(&mut self) -> ::core::ffi::c_int {
+        Stream_timedPeek(self)
+    }
+    #[inline]
+    pub unsafe fn peekNextDigit(&mut self) -> ::core::ffi::c_int {
+        Stream_peekNextDigit(self)
+    }
+    #[inline]
+    pub unsafe fn setTimeout(&mut self, timeout: ::core::ffi::c_ulong) {
+        Stream_setTimeout(self, timeout)
+    }
+    #[inline]
+    pub unsafe fn find(&mut self, target: *mut ::core::ffi::c_char) -> bool {
+        Stream_find(self, target)
+    }
+    #[inline]
+    pub unsafe fn find1(&mut self, target: *mut ::core::ffi::c_char, length: usize) -> bool {
+        Stream_find1(self, target, length)
+    }
+    #[inline]
+    pub unsafe fn findUntil(
+        &mut self,
+        target: *mut ::core::ffi::c_char,
+        terminator: *mut ::core::ffi::c_char,
+    ) -> bool {
+        Stream_findUntil(self, target, terminator)
+    }
+    #[inline]
+    pub unsafe fn findUntil1(
+        &mut self,
+        target: *mut ::core::ffi::c_char,
+        targetLen: usize,
+        terminate: *mut ::core::ffi::c_char,
+        termLen: usize,
+    ) -> bool {
+        Stream_findUntil1(self, target, targetLen, terminate, termLen)
+    }
+    #[inline]
+    pub unsafe fn parseInt(&mut self) -> ::core::ffi::c_long {
+        Stream_parseInt(self)
+    }
+    #[inline]
+    pub unsafe fn parseFloat(&mut self) -> f32 {
+        Stream_parseFloat(self)
+    }
+    #[inline]
+    pub unsafe fn readBytes(&mut self, buffer: *mut ::core::ffi::c_char, length: usize) -> usize {
+        Stream_readBytes(self, buffer, length)
+    }
+    #[inline]
+    pub unsafe fn readBytesUntil(
+        &mut self,
+        terminator: ::core::ffi::c_char,
+        buffer: *mut ::core::ffi::c_char,
+        length: usize,
+    ) -> usize {
+        Stream_readBytesUntil(self, terminator, buffer, length)
+    }
+    #[inline]
+    pub unsafe fn readString(&mut self) -> String {
+        Stream_readString(self)
+    }
+    #[inline]
+    pub unsafe fn readStringUntil(&mut self, terminator: ::core::ffi::c_char) -> String {
+        Stream_readStringUntil(self, terminator)
+    }
+    #[inline]
+    pub unsafe fn parseInt1(&mut self, skipChar: ::core::ffi::c_char) -> ::core::ffi::c_long {
+        Stream_parseInt1(self, skipChar)
+    }
+    #[inline]
+    pub unsafe fn parseFloat1(&mut self, skipChar: ::core::ffi::c_char) -> f32 {
+        Stream_parseFloat1(self, skipChar)
+    }
+    #[inline]
+    pub unsafe fn findMulti(
+        &mut self,
+        targets: *mut Stream_MultiTarget,
+        tCount: ::core::ffi::c_int,
+    ) -> ::core::ffi::c_int {
+        Stream_findMulti(self, targets, tCount)
+    }
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct SSwitch {
+    pub p1: u16,
+    pub p2: u16,
+    pub addr: u8,
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN7SSwitch6activeEv"]
+    pub fn SSwitch_active(this: *mut SSwitch);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN7SSwitchC1Etth"]
+    pub fn SSwitch_SSwitch(this: *mut SSwitch, pin1: u16, pin2: u16, address: u8);
+}
+impl SSwitch {
+    #[inline]
+    pub unsafe fn active(&mut self) {
+        SSwitch_active(self)
+    }
+    #[inline]
+    pub unsafe fn new(pin1: u16, pin2: u16, address: u8) -> Self {
+        let mut __bindgen_tmp = ::core::mem::MaybeUninit::uninit();
+        SSwitch_SSwitch(__bindgen_tmp.as_mut_ptr(), pin1, pin2, address);
+        __bindgen_tmp.assume_init()
+    }
+}
+#[repr(C)]
 #[derive(Copy, Clone)]
 pub struct IHOLD_IRUN_t {
     pub __bindgen_anon_1: IHOLD_IRUN_t__bindgen_ty_1,
@@ -235,6 +469,858 @@ impl TPWMTHRS_t {
         __bindgen_bitfield_unit
     }
 }
+#[repr(C, packed)]
+#[derive(Debug, Copy, Clone)]
+pub struct TCOOLTHRS_t {
+    pub _bitfield_align_1: [u8; 0],
+    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 3usize]>,
+}
+pub const TCOOLTHRS_t_address: u8 = 20;
+impl TCOOLTHRS_t {
+    #[inline]
+    pub fn sr(&self) -> u32 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(0usize, 20u8) as u32) }
+    }
+    #[inline]
+    pub fn set_sr(&mut self, val: u32) {
+        unsafe {
+            let val: u32 = ::core::mem::transmute(val);
+            self._bitfield_1.set(0usize, 20u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn new_bitfield_1(sr: u32) -> __BindgenBitfieldUnit<[u8; 3usize]> {
+        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 3usize]> = Default::default();
+        __bindgen_bitfield_unit.set(0usize, 20u8, {
+            let sr: u32 = unsafe { ::core::mem::transmute(sr) };
+            sr as u64
+        });
+        __bindgen_bitfield_unit
+    }
+}
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct SLAVECONF_t {
+    pub __bindgen_anon_1: SLAVECONF_t__bindgen_ty_1,
+}
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub union SLAVECONF_t__bindgen_ty_1 {
+    pub _bitfield_align_1: [u8; 0],
+    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 2usize]>,
+    pub __bindgen_anon_1: SLAVECONF_t__bindgen_ty_1__bindgen_ty_1,
+}
+#[repr(C, packed)]
+#[derive(Debug, Copy, Clone)]
+pub struct SLAVECONF_t__bindgen_ty_1__bindgen_ty_1 {
+    pub _bitfield_align_1: [u8; 0],
+    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 2usize]>,
+}
+impl SLAVECONF_t__bindgen_ty_1__bindgen_ty_1 {
+    #[inline]
+    pub fn slaveaddr(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(0usize, 8u8) as u8) }
+    }
+    #[inline]
+    pub fn set_slaveaddr(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(0usize, 8u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn senddelay(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(8usize, 4u8) as u8) }
+    }
+    #[inline]
+    pub fn set_senddelay(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(8usize, 4u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn new_bitfield_1(slaveaddr: u8, senddelay: u8) -> __BindgenBitfieldUnit<[u8; 2usize]> {
+        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 2usize]> = Default::default();
+        __bindgen_bitfield_unit.set(0usize, 8u8, {
+            let slaveaddr: u8 = unsafe { ::core::mem::transmute(slaveaddr) };
+            slaveaddr as u64
+        });
+        __bindgen_bitfield_unit.set(8usize, 4u8, {
+            let senddelay: u8 = unsafe { ::core::mem::transmute(senddelay) };
+            senddelay as u64
+        });
+        __bindgen_bitfield_unit
+    }
+}
+impl SLAVECONF_t__bindgen_ty_1 {
+    #[inline]
+    pub fn sr(&self) -> u16 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(0usize, 12u8) as u16) }
+    }
+    #[inline]
+    pub fn set_sr(&mut self, val: u16) {
+        unsafe {
+            let val: u16 = ::core::mem::transmute(val);
+            self._bitfield_1.set(0usize, 12u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn new_bitfield_1(sr: u16) -> __BindgenBitfieldUnit<[u8; 2usize]> {
+        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 2usize]> = Default::default();
+        __bindgen_bitfield_unit.set(0usize, 12u8, {
+            let sr: u16 = unsafe { ::core::mem::transmute(sr) };
+            sr as u64
+        });
+        __bindgen_bitfield_unit
+    }
+}
+pub const SLAVECONF_t_address: u8 = 3;
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TMC2208_n_GCONF_t {
+    pub __bindgen_anon_1: TMC2208_n_GCONF_t__bindgen_ty_1,
+}
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub union TMC2208_n_GCONF_t__bindgen_ty_1 {
+    pub _bitfield_align_1: [u8; 0],
+    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 2usize]>,
+    pub __bindgen_anon_1: TMC2208_n_GCONF_t__bindgen_ty_1__bindgen_ty_1,
+}
+#[repr(C, packed)]
+#[derive(Debug, Copy, Clone)]
+pub struct TMC2208_n_GCONF_t__bindgen_ty_1__bindgen_ty_1 {
+    pub _bitfield_align_1: [u8; 0],
+    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 2usize]>,
+}
+impl TMC2208_n_GCONF_t__bindgen_ty_1__bindgen_ty_1 {
+    #[inline]
+    pub fn i_scale_analog(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(0usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_i_scale_analog(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(0usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn internal_rsense(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(1usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_internal_rsense(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(1usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn en_spreadcycle(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(2usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_en_spreadcycle(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(2usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn shaft(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(3usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_shaft(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(3usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn index_otpw(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(4usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_index_otpw(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(4usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn index_step(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(5usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_index_step(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(5usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn pdn_disable(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(6usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_pdn_disable(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(6usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn mstep_reg_select(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(7usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_mstep_reg_select(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(7usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn multistep_filt(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(8usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_multistep_filt(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(8usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn test_mode(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(9usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_test_mode(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(9usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn new_bitfield_1(
+        i_scale_analog: bool,
+        internal_rsense: bool,
+        en_spreadcycle: bool,
+        shaft: bool,
+        index_otpw: bool,
+        index_step: bool,
+        pdn_disable: bool,
+        mstep_reg_select: bool,
+        multistep_filt: bool,
+        test_mode: bool,
+    ) -> __BindgenBitfieldUnit<[u8; 2usize]> {
+        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 2usize]> = Default::default();
+        __bindgen_bitfield_unit.set(0usize, 1u8, {
+            let i_scale_analog: u8 = unsafe { ::core::mem::transmute(i_scale_analog) };
+            i_scale_analog as u64
+        });
+        __bindgen_bitfield_unit.set(1usize, 1u8, {
+            let internal_rsense: u8 = unsafe { ::core::mem::transmute(internal_rsense) };
+            internal_rsense as u64
+        });
+        __bindgen_bitfield_unit.set(2usize, 1u8, {
+            let en_spreadcycle: u8 = unsafe { ::core::mem::transmute(en_spreadcycle) };
+            en_spreadcycle as u64
+        });
+        __bindgen_bitfield_unit.set(3usize, 1u8, {
+            let shaft: u8 = unsafe { ::core::mem::transmute(shaft) };
+            shaft as u64
+        });
+        __bindgen_bitfield_unit.set(4usize, 1u8, {
+            let index_otpw: u8 = unsafe { ::core::mem::transmute(index_otpw) };
+            index_otpw as u64
+        });
+        __bindgen_bitfield_unit.set(5usize, 1u8, {
+            let index_step: u8 = unsafe { ::core::mem::transmute(index_step) };
+            index_step as u64
+        });
+        __bindgen_bitfield_unit.set(6usize, 1u8, {
+            let pdn_disable: u8 = unsafe { ::core::mem::transmute(pdn_disable) };
+            pdn_disable as u64
+        });
+        __bindgen_bitfield_unit.set(7usize, 1u8, {
+            let mstep_reg_select: u8 = unsafe { ::core::mem::transmute(mstep_reg_select) };
+            mstep_reg_select as u64
+        });
+        __bindgen_bitfield_unit.set(8usize, 1u8, {
+            let multistep_filt: u8 = unsafe { ::core::mem::transmute(multistep_filt) };
+            multistep_filt as u64
+        });
+        __bindgen_bitfield_unit.set(9usize, 1u8, {
+            let test_mode: u8 = unsafe { ::core::mem::transmute(test_mode) };
+            test_mode as u64
+        });
+        __bindgen_bitfield_unit
+    }
+}
+impl TMC2208_n_GCONF_t__bindgen_ty_1 {
+    #[inline]
+    pub fn sr(&self) -> u16 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(0usize, 10u8) as u16) }
+    }
+    #[inline]
+    pub fn set_sr(&mut self, val: u16) {
+        unsafe {
+            let val: u16 = ::core::mem::transmute(val);
+            self._bitfield_1.set(0usize, 10u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn new_bitfield_1(sr: u16) -> __BindgenBitfieldUnit<[u8; 2usize]> {
+        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 2usize]> = Default::default();
+        __bindgen_bitfield_unit.set(0usize, 10u8, {
+            let sr: u16 = unsafe { ::core::mem::transmute(sr) };
+            sr as u64
+        });
+        __bindgen_bitfield_unit
+    }
+}
+pub const TMC2208_n_GCONF_t_address: u8 = 0;
+#[repr(C, packed)]
+#[derive(Debug, Copy, Clone)]
+pub struct TMC2208_n_VACTUAL_t {
+    pub sr: u32,
+}
+pub const TMC2208_n_VACTUAL_t_address: u8 = 34;
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TMC2208_n_CHOPCONF_t {
+    pub __bindgen_anon_1: TMC2208_n_CHOPCONF_t__bindgen_ty_1,
+}
+#[repr(C, packed)]
+#[derive(Copy, Clone)]
+pub union TMC2208_n_CHOPCONF_t__bindgen_ty_1 {
+    pub sr: u32,
+    pub __bindgen_anon_1: TMC2208_n_CHOPCONF_t__bindgen_ty_1__bindgen_ty_1,
+}
+#[repr(C, packed)]
+#[derive(Debug, Copy, Clone)]
+pub struct TMC2208_n_CHOPCONF_t__bindgen_ty_1__bindgen_ty_1 {
+    pub _bitfield_align_1: [u8; 0],
+    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 5usize]>,
+}
+impl TMC2208_n_CHOPCONF_t__bindgen_ty_1__bindgen_ty_1 {
+    #[inline]
+    pub fn toff(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(0usize, 4u8) as u8) }
+    }
+    #[inline]
+    pub fn set_toff(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(0usize, 4u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn hstrt(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(4usize, 3u8) as u8) }
+    }
+    #[inline]
+    pub fn set_hstrt(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(4usize, 3u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn hend(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(8usize, 4u8) as u8) }
+    }
+    #[inline]
+    pub fn set_hend(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(8usize, 4u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn tbl(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(16usize, 2u8) as u8) }
+    }
+    #[inline]
+    pub fn set_tbl(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(16usize, 2u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn vsense(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(18usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_vsense(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(18usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn mres(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(32usize, 4u8) as u8) }
+    }
+    #[inline]
+    pub fn set_mres(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(32usize, 4u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn intpol(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(36usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_intpol(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(36usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn dedge(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(37usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_dedge(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(37usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn diss2g(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(38usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_diss2g(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(38usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn diss2vs(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(39usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_diss2vs(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(39usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn new_bitfield_1(
+        toff: u8,
+        hstrt: u8,
+        hend: u8,
+        tbl: u8,
+        vsense: bool,
+        mres: u8,
+        intpol: bool,
+        dedge: bool,
+        diss2g: bool,
+        diss2vs: bool,
+    ) -> __BindgenBitfieldUnit<[u8; 5usize]> {
+        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 5usize]> = Default::default();
+        __bindgen_bitfield_unit.set(0usize, 4u8, {
+            let toff: u8 = unsafe { ::core::mem::transmute(toff) };
+            toff as u64
+        });
+        __bindgen_bitfield_unit.set(4usize, 3u8, {
+            let hstrt: u8 = unsafe { ::core::mem::transmute(hstrt) };
+            hstrt as u64
+        });
+        __bindgen_bitfield_unit.set(8usize, 4u8, {
+            let hend: u8 = unsafe { ::core::mem::transmute(hend) };
+            hend as u64
+        });
+        __bindgen_bitfield_unit.set(16usize, 2u8, {
+            let tbl: u8 = unsafe { ::core::mem::transmute(tbl) };
+            tbl as u64
+        });
+        __bindgen_bitfield_unit.set(18usize, 1u8, {
+            let vsense: u8 = unsafe { ::core::mem::transmute(vsense) };
+            vsense as u64
+        });
+        __bindgen_bitfield_unit.set(32usize, 4u8, {
+            let mres: u8 = unsafe { ::core::mem::transmute(mres) };
+            mres as u64
+        });
+        __bindgen_bitfield_unit.set(36usize, 1u8, {
+            let intpol: u8 = unsafe { ::core::mem::transmute(intpol) };
+            intpol as u64
+        });
+        __bindgen_bitfield_unit.set(37usize, 1u8, {
+            let dedge: u8 = unsafe { ::core::mem::transmute(dedge) };
+            dedge as u64
+        });
+        __bindgen_bitfield_unit.set(38usize, 1u8, {
+            let diss2g: u8 = unsafe { ::core::mem::transmute(diss2g) };
+            diss2g as u64
+        });
+        __bindgen_bitfield_unit.set(39usize, 1u8, {
+            let diss2vs: u8 = unsafe { ::core::mem::transmute(diss2vs) };
+            diss2vs as u64
+        });
+        __bindgen_bitfield_unit
+    }
+}
+pub const TMC2208_n_CHOPCONF_t_address: u8 = 108;
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TMC2208_n_PWMCONF_t {
+    pub __bindgen_anon_1: TMC2208_n_PWMCONF_t__bindgen_ty_1,
+}
+#[repr(C, packed)]
+#[derive(Copy, Clone)]
+pub union TMC2208_n_PWMCONF_t__bindgen_ty_1 {
+    pub sr: u32,
+    pub __bindgen_anon_1: TMC2208_n_PWMCONF_t__bindgen_ty_1__bindgen_ty_1,
+}
+#[repr(C, packed)]
+#[derive(Debug, Copy, Clone)]
+pub struct TMC2208_n_PWMCONF_t__bindgen_ty_1__bindgen_ty_1 {
+    pub _bitfield_align_1: [u8; 0],
+    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 4usize]>,
+}
+impl TMC2208_n_PWMCONF_t__bindgen_ty_1__bindgen_ty_1 {
+    #[inline]
+    pub fn pwm_ofs(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(0usize, 8u8) as u8) }
+    }
+    #[inline]
+    pub fn set_pwm_ofs(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(0usize, 8u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn pwm_grad(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(8usize, 8u8) as u8) }
+    }
+    #[inline]
+    pub fn set_pwm_grad(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(8usize, 8u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn pwm_freq(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(16usize, 2u8) as u8) }
+    }
+    #[inline]
+    pub fn set_pwm_freq(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(16usize, 2u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn pwm_autoscale(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(18usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_pwm_autoscale(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(18usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn pwm_autograd(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(19usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_pwm_autograd(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(19usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn freewheel(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(20usize, 2u8) as u8) }
+    }
+    #[inline]
+    pub fn set_freewheel(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(20usize, 2u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn pwm_reg(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(24usize, 4u8) as u8) }
+    }
+    #[inline]
+    pub fn set_pwm_reg(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(24usize, 4u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn pwm_lim(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(28usize, 4u8) as u8) }
+    }
+    #[inline]
+    pub fn set_pwm_lim(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(28usize, 4u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn new_bitfield_1(
+        pwm_ofs: u8,
+        pwm_grad: u8,
+        pwm_freq: u8,
+        pwm_autoscale: bool,
+        pwm_autograd: bool,
+        freewheel: u8,
+        pwm_reg: u8,
+        pwm_lim: u8,
+    ) -> __BindgenBitfieldUnit<[u8; 4usize]> {
+        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 4usize]> = Default::default();
+        __bindgen_bitfield_unit.set(0usize, 8u8, {
+            let pwm_ofs: u8 = unsafe { ::core::mem::transmute(pwm_ofs) };
+            pwm_ofs as u64
+        });
+        __bindgen_bitfield_unit.set(8usize, 8u8, {
+            let pwm_grad: u8 = unsafe { ::core::mem::transmute(pwm_grad) };
+            pwm_grad as u64
+        });
+        __bindgen_bitfield_unit.set(16usize, 2u8, {
+            let pwm_freq: u8 = unsafe { ::core::mem::transmute(pwm_freq) };
+            pwm_freq as u64
+        });
+        __bindgen_bitfield_unit.set(18usize, 1u8, {
+            let pwm_autoscale: u8 = unsafe { ::core::mem::transmute(pwm_autoscale) };
+            pwm_autoscale as u64
+        });
+        __bindgen_bitfield_unit.set(19usize, 1u8, {
+            let pwm_autograd: u8 = unsafe { ::core::mem::transmute(pwm_autograd) };
+            pwm_autograd as u64
+        });
+        __bindgen_bitfield_unit.set(20usize, 2u8, {
+            let freewheel: u8 = unsafe { ::core::mem::transmute(freewheel) };
+            freewheel as u64
+        });
+        __bindgen_bitfield_unit.set(24usize, 4u8, {
+            let pwm_reg: u8 = unsafe { ::core::mem::transmute(pwm_reg) };
+            pwm_reg as u64
+        });
+        __bindgen_bitfield_unit.set(28usize, 4u8, {
+            let pwm_lim: u8 = unsafe { ::core::mem::transmute(pwm_lim) };
+            pwm_lim as u64
+        });
+        __bindgen_bitfield_unit
+    }
+}
+pub const TMC2208_n_PWMCONF_t_address: u8 = 112;
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct FACTORY_CONF_t {
+    pub __bindgen_anon_1: FACTORY_CONF_t__bindgen_ty_1,
+}
+#[repr(C, packed)]
+#[derive(Copy, Clone)]
+pub union FACTORY_CONF_t__bindgen_ty_1 {
+    pub sr: u16,
+    pub __bindgen_anon_1: FACTORY_CONF_t__bindgen_ty_1__bindgen_ty_1,
+}
+#[repr(C, packed)]
+#[derive(Debug, Copy, Clone)]
+pub struct FACTORY_CONF_t__bindgen_ty_1__bindgen_ty_1 {
+    pub _bitfield_align_1: [u8; 0],
+    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 2usize]>,
+}
+impl FACTORY_CONF_t__bindgen_ty_1__bindgen_ty_1 {
+    #[inline]
+    pub fn fclktrim(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(0usize, 5u8) as u8) }
+    }
+    #[inline]
+    pub fn set_fclktrim(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(0usize, 5u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn ottrim(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(8usize, 2u8) as u8) }
+    }
+    #[inline]
+    pub fn set_ottrim(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(8usize, 2u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn new_bitfield_1(fclktrim: u8, ottrim: u8) -> __BindgenBitfieldUnit<[u8; 2usize]> {
+        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 2usize]> = Default::default();
+        __bindgen_bitfield_unit.set(0usize, 5u8, {
+            let fclktrim: u8 = unsafe { ::core::mem::transmute(fclktrim) };
+            fclktrim as u64
+        });
+        __bindgen_bitfield_unit.set(8usize, 2u8, {
+            let ottrim: u8 = unsafe { ::core::mem::transmute(ottrim) };
+            ottrim as u64
+        });
+        __bindgen_bitfield_unit
+    }
+}
+pub const FACTORY_CONF_t_address: u8 = 7;
+#[repr(C, packed)]
+#[derive(Debug, Copy, Clone)]
+pub struct TMC2209_n_SGTHRS_t {
+    pub _bitfield_align_1: [u8; 0],
+    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
+}
+pub const TMC2209_n_SGTHRS_t_address: u8 = 64;
+impl TMC2209_n_SGTHRS_t {
+    #[inline]
+    pub fn sr(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(0usize, 8u8) as u8) }
+    }
+    #[inline]
+    pub fn set_sr(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(0usize, 8u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn new_bitfield_1(sr: u8) -> __BindgenBitfieldUnit<[u8; 1usize]> {
+        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 1usize]> = Default::default();
+        __bindgen_bitfield_unit.set(0usize, 8u8, {
+            let sr: u8 = unsafe { ::core::mem::transmute(sr) };
+            sr as u64
+        });
+        __bindgen_bitfield_unit
+    }
+}
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TMC2209_n_COOLCONF_t {
+    pub __bindgen_anon_1: TMC2209_n_COOLCONF_t__bindgen_ty_1,
+}
+#[repr(C, packed)]
+#[derive(Copy, Clone)]
+pub union TMC2209_n_COOLCONF_t__bindgen_ty_1 {
+    pub sr: u16,
+    pub __bindgen_anon_1: TMC2209_n_COOLCONF_t__bindgen_ty_1__bindgen_ty_1,
+}
+#[repr(C, packed)]
+#[derive(Debug, Copy, Clone)]
+pub struct TMC2209_n_COOLCONF_t__bindgen_ty_1__bindgen_ty_1 {
+    pub _bitfield_align_1: [u8; 0],
+    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 2usize]>,
+}
+impl TMC2209_n_COOLCONF_t__bindgen_ty_1__bindgen_ty_1 {
+    #[inline]
+    pub fn semin(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(0usize, 4u8) as u8) }
+    }
+    #[inline]
+    pub fn set_semin(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(0usize, 4u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn seup(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(5usize, 2u8) as u8) }
+    }
+    #[inline]
+    pub fn set_seup(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(5usize, 2u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn semax(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(8usize, 4u8) as u8) }
+    }
+    #[inline]
+    pub fn set_semax(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(8usize, 4u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn sedn(&self) -> u8 {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(13usize, 2u8) as u8) }
+    }
+    #[inline]
+    pub fn set_sedn(&mut self, val: u8) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(13usize, 2u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn seimin(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(15usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_seimin(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(15usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn new_bitfield_1(
+        semin: u8,
+        seup: u8,
+        semax: u8,
+        sedn: u8,
+        seimin: bool,
+    ) -> __BindgenBitfieldUnit<[u8; 2usize]> {
+        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 2usize]> = Default::default();
+        __bindgen_bitfield_unit.set(0usize, 4u8, {
+            let semin: u8 = unsafe { ::core::mem::transmute(semin) };
+            semin as u64
+        });
+        __bindgen_bitfield_unit.set(5usize, 2u8, {
+            let seup: u8 = unsafe { ::core::mem::transmute(seup) };
+            seup as u64
+        });
+        __bindgen_bitfield_unit.set(8usize, 4u8, {
+            let semax: u8 = unsafe { ::core::mem::transmute(semax) };
+            semax as u64
+        });
+        __bindgen_bitfield_unit.set(13usize, 2u8, {
+            let sedn: u8 = unsafe { ::core::mem::transmute(sedn) };
+            sedn as u64
+        });
+        __bindgen_bitfield_unit.set(15usize, 1u8, {
+            let seimin: u8 = unsafe { ::core::mem::transmute(seimin) };
+            seimin as u64
+        });
+        __bindgen_bitfield_unit
+    }
+}
+pub const TMC2209_n_COOLCONF_t_address: u8 = 66;
 #[repr(C)]
 pub struct TMCStepper__bindgen_vtable(::core::ffi::c_void);
 #[repr(C)]
@@ -541,5 +1627,1255 @@ impl TMCStepper {
     #[inline]
     pub unsafe fn cur_b(&mut self) -> i16 {
         TMCStepper_cur_b(self)
+    }
+}
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TMC2208Stepper {
+    pub _base: TMCStepper,
+    pub bytesWritten: u16,
+    pub Rsense: f32,
+    pub CRCerror: bool,
+    pub GCONF_register: TMC2208_n_GCONF_t,
+    pub SLAVECONF_register: SLAVECONF_t,
+    pub FACTORY_CONF_register: FACTORY_CONF_t,
+    pub VACTUAL_register: TMC2208_n_VACTUAL_t,
+    pub CHOPCONF_register: TMC2208_n_CHOPCONF_t,
+    pub PWMCONF_register: TMC2208_n_PWMCONF_t,
+    pub HWSerial: *mut Stream,
+    pub sswitch: *mut SSwitch,
+    pub slave_address: u8,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct TMC2208Stepper_IFCNT_t {
+    pub _address: u8,
+}
+pub const TMC2208Stepper_IFCNT_t_address: u8 = 2;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct TMC2208Stepper_OTP_PROG_t {
+    pub _address: u8,
+}
+pub const TMC2208Stepper_OTP_PROG_t_address: u8 = 4;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct TMC2208Stepper_OTP_READ_t {
+    pub _address: u8,
+}
+pub const TMC2208Stepper_OTP_READ_t_address: u8 = 5;
+pub const TMC2208Stepper_TMC2208_SYNC: u8 = 5;
+pub const TMC2208Stepper_TMC2208_SLAVE_ADDR: u8 = 0;
+pub const TMC2208Stepper_replyDelay: u8 = 2;
+pub const TMC2208Stepper_abort_window: u8 = 5;
+pub const TMC2208Stepper_max_retries: u8 = 2;
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper8defaultsEv"]
+    pub fn TMC2208Stepper_defaults(this: *mut TMC2208Stepper);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4pushEv"]
+    pub fn TMC2208Stepper_push(this: *mut TMC2208Stepper);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper5beginEv"]
+    pub fn TMC2208Stepper_begin(this: *mut TMC2208Stepper);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper9isEnabledEv"]
+    pub fn TMC2208Stepper_isEnabled(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper5GCONFEj"]
+    pub fn TMC2208Stepper_GCONF(this: *mut TMC2208Stepper, input: u32);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper14I_scale_analogEb"]
+    pub fn TMC2208Stepper_I_scale_analog(this: *mut TMC2208Stepper, B: bool);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper15internal_RsenseEb"]
+    pub fn TMC2208Stepper_internal_Rsense(this: *mut TMC2208Stepper, B: bool);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper14en_spreadCycleEb"]
+    pub fn TMC2208Stepper_en_spreadCycle(this: *mut TMC2208Stepper, B: bool);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper5shaftEb"]
+    pub fn TMC2208Stepper_shaft(this: *mut TMC2208Stepper, B: bool);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper10index_otpwEb"]
+    pub fn TMC2208Stepper_index_otpw(this: *mut TMC2208Stepper, B: bool);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper10index_stepEb"]
+    pub fn TMC2208Stepper_index_step(this: *mut TMC2208Stepper, B: bool);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper11pdn_disableEb"]
+    pub fn TMC2208Stepper_pdn_disable(this: *mut TMC2208Stepper, B: bool);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper16mstep_reg_selectEb"]
+    pub fn TMC2208Stepper_mstep_reg_select(this: *mut TMC2208Stepper, B: bool);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper14multistep_filtEb"]
+    pub fn TMC2208Stepper_multistep_filt(this: *mut TMC2208Stepper, B: bool);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper5GCONFEv"]
+    pub fn TMC2208Stepper_GCONF1(this: *mut TMC2208Stepper) -> u32;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper14I_scale_analogEv"]
+    pub fn TMC2208Stepper_I_scale_analog1(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper15internal_RsenseEv"]
+    pub fn TMC2208Stepper_internal_Rsense1(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper14en_spreadCycleEv"]
+    pub fn TMC2208Stepper_en_spreadCycle1(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper5shaftEv"]
+    pub fn TMC2208Stepper_shaft1(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper10index_otpwEv"]
+    pub fn TMC2208Stepper_index_otpw1(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper10index_stepEv"]
+    pub fn TMC2208Stepper_index_step1(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper11pdn_disableEv"]
+    pub fn TMC2208Stepper_pdn_disable1(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper16mstep_reg_selectEv"]
+    pub fn TMC2208Stepper_mstep_reg_select1(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper14multistep_filtEv"]
+    pub fn TMC2208Stepper_multistep_filt1(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper5IFCNTEv"]
+    pub fn TMC2208Stepper_IFCNT(this: *mut TMC2208Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper9SLAVECONFEt"]
+    pub fn TMC2208Stepper_SLAVECONF(this: *mut TMC2208Stepper, input: u16);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper9SLAVECONFEv"]
+    pub fn TMC2208Stepper_SLAVECONF1(this: *mut TMC2208Stepper) -> u16;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper9senddelayEh"]
+    pub fn TMC2208Stepper_senddelay(this: *mut TMC2208Stepper, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper9senddelayEv"]
+    pub fn TMC2208Stepper_senddelay1(this: *mut TMC2208Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper8OTP_PROGEt"]
+    pub fn TMC2208Stepper_OTP_PROG(this: *mut TMC2208Stepper, input: u16);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper8OTP_READEv"]
+    pub fn TMC2208Stepper_OTP_READ(this: *mut TMC2208Stepper) -> u32;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4IOINEv"]
+    pub fn TMC2208Stepper_IOIN(this: *mut TMC2208Stepper) -> u32;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper3ennEv"]
+    pub fn TMC2208Stepper_enn(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper3ms1Ev"]
+    pub fn TMC2208Stepper_ms1(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper3ms2Ev"]
+    pub fn TMC2208Stepper_ms2(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4diagEv"]
+    pub fn TMC2208Stepper_diag(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper8pdn_uartEv"]
+    pub fn TMC2208Stepper_pdn_uart(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4stepEv"]
+    pub fn TMC2208Stepper_step(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper5sel_aEv"]
+    pub fn TMC2208Stepper_sel_a(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper3dirEv"]
+    pub fn TMC2208Stepper_dir(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper7versionEv"]
+    pub fn TMC2208Stepper_version(this: *mut TMC2208Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper12FACTORY_CONFEt"]
+    pub fn TMC2208Stepper_FACTORY_CONF(this: *mut TMC2208Stepper, input: u16);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper12FACTORY_CONFEv"]
+    pub fn TMC2208Stepper_FACTORY_CONF1(this: *mut TMC2208Stepper) -> u16;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper8fclktrimEh"]
+    pub fn TMC2208Stepper_fclktrim(this: *mut TMC2208Stepper, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper6ottrimEh"]
+    pub fn TMC2208Stepper_ottrim(this: *mut TMC2208Stepper, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper8fclktrimEv"]
+    pub fn TMC2208Stepper_fclktrim1(this: *mut TMC2208Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper6ottrimEv"]
+    pub fn TMC2208Stepper_ottrim1(this: *mut TMC2208Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper7VACTUALEj"]
+    pub fn TMC2208Stepper_VACTUAL(this: *mut TMC2208Stepper, input: u32);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper7VACTUALEv"]
+    pub fn TMC2208Stepper_VACTUAL1(this: *mut TMC2208Stepper) -> u32;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper8CHOPCONFEj"]
+    pub fn TMC2208Stepper_CHOPCONF(this: *mut TMC2208Stepper, input: u32);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4toffEh"]
+    pub fn TMC2208Stepper_toff(this: *mut TMC2208Stepper, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper6intpolEb"]
+    pub fn TMC2208Stepper_intpol(this: *mut TMC2208Stepper, B: bool);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper5dedgeEb"]
+    pub fn TMC2208Stepper_dedge(this: *mut TMC2208Stepper, B: bool);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper6diss2gEb"]
+    pub fn TMC2208Stepper_diss2g(this: *mut TMC2208Stepper, B: bool);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper7diss2vsEb"]
+    pub fn TMC2208Stepper_diss2vs(this: *mut TMC2208Stepper, B: bool);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper8CHOPCONFEv"]
+    pub fn TMC2208Stepper_CHOPCONF1(this: *mut TMC2208Stepper) -> u32;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4toffEv"]
+    pub fn TMC2208Stepper_toff1(this: *mut TMC2208Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper6intpolEv"]
+    pub fn TMC2208Stepper_intpol1(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper5dedgeEv"]
+    pub fn TMC2208Stepper_dedge1(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper6diss2gEv"]
+    pub fn TMC2208Stepper_diss2g1(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper7diss2vsEv"]
+    pub fn TMC2208Stepper_diss2vs1(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4otpwEv"]
+    pub fn TMC2208Stepper_otpw(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper2otEv"]
+    pub fn TMC2208Stepper_ot(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4s2gaEv"]
+    pub fn TMC2208Stepper_s2ga(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4s2gbEv"]
+    pub fn TMC2208Stepper_s2gb(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper5s2vsaEv"]
+    pub fn TMC2208Stepper_s2vsa(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper5s2vsbEv"]
+    pub fn TMC2208Stepper_s2vsb(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper3olaEv"]
+    pub fn TMC2208Stepper_ola(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper3olbEv"]
+    pub fn TMC2208Stepper_olb(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4t120Ev"]
+    pub fn TMC2208Stepper_t120(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4t143Ev"]
+    pub fn TMC2208Stepper_t143(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4t150Ev"]
+    pub fn TMC2208Stepper_t150(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4t157Ev"]
+    pub fn TMC2208Stepper_t157(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper9cs_actualEv"]
+    pub fn TMC2208Stepper_cs_actual(this: *mut TMC2208Stepper) -> u16;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper7stealthEv"]
+    pub fn TMC2208Stepper_stealth(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4ststEv"]
+    pub fn TMC2208Stepper_stst(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper7PWMCONFEj"]
+    pub fn TMC2208Stepper_PWMCONF(this: *mut TMC2208Stepper, input: u32);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper7pwm_ofsEh"]
+    pub fn TMC2208Stepper_pwm_ofs(this: *mut TMC2208Stepper, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper8pwm_gradEh"]
+    pub fn TMC2208Stepper_pwm_grad(this: *mut TMC2208Stepper, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper8pwm_freqEh"]
+    pub fn TMC2208Stepper_pwm_freq(this: *mut TMC2208Stepper, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper13pwm_autoscaleEb"]
+    pub fn TMC2208Stepper_pwm_autoscale(this: *mut TMC2208Stepper, B: bool);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper12pwm_autogradEb"]
+    pub fn TMC2208Stepper_pwm_autograd(this: *mut TMC2208Stepper, B: bool);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper9freewheelEh"]
+    pub fn TMC2208Stepper_freewheel(this: *mut TMC2208Stepper, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper7pwm_regEh"]
+    pub fn TMC2208Stepper_pwm_reg(this: *mut TMC2208Stepper, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper7pwm_limEh"]
+    pub fn TMC2208Stepper_pwm_lim(this: *mut TMC2208Stepper, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper7PWMCONFEv"]
+    pub fn TMC2208Stepper_PWMCONF1(this: *mut TMC2208Stepper) -> u32;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper7pwm_ofsEv"]
+    pub fn TMC2208Stepper_pwm_ofs1(this: *mut TMC2208Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper8pwm_gradEv"]
+    pub fn TMC2208Stepper_pwm_grad1(this: *mut TMC2208Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper8pwm_freqEv"]
+    pub fn TMC2208Stepper_pwm_freq1(this: *mut TMC2208Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper13pwm_autoscaleEv"]
+    pub fn TMC2208Stepper_pwm_autoscale1(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper12pwm_autogradEv"]
+    pub fn TMC2208Stepper_pwm_autograd1(this: *mut TMC2208Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper9freewheelEv"]
+    pub fn TMC2208Stepper_freewheel1(this: *mut TMC2208Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper7pwm_regEv"]
+    pub fn TMC2208Stepper_pwm_reg1(this: *mut TMC2208Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper7pwm_limEv"]
+    pub fn TMC2208Stepper_pwm_lim1(this: *mut TMC2208Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper9PWM_SCALEEv"]
+    pub fn TMC2208Stepper_PWM_SCALE(this: *mut TMC2208Stepper) -> u32;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper13pwm_scale_sumEv"]
+    pub fn TMC2208Stepper_pwm_scale_sum(this: *mut TMC2208Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper14pwm_scale_autoEv"]
+    pub fn TMC2208Stepper_pwm_scale_auto(this: *mut TMC2208Stepper) -> i16;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper8PWM_AUTOEv"]
+    pub fn TMC2208Stepper_PWM_AUTO(this: *mut TMC2208Stepper) -> u32;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper12pwm_ofs_autoEv"]
+    pub fn TMC2208Stepper_pwm_ofs_auto(this: *mut TMC2208Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper13pwm_grad_autoEv"]
+    pub fn TMC2208Stepper_pwm_grad_auto(this: *mut TMC2208Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper9availableEv"]
+    pub fn TMC2208Stepper_available(this: *mut TMC2208Stepper) -> ::core::ffi::c_int;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper21preWriteCommunicationEv"]
+    pub fn TMC2208Stepper_preWriteCommunication(this: *mut TMC2208Stepper);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper20preReadCommunicationEv"]
+    pub fn TMC2208Stepper_preReadCommunication(this: *mut TMC2208Stepper);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper11serial_readEv"]
+    pub fn TMC2208Stepper_serial_read(this: *mut TMC2208Stepper) -> i16;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper12serial_writeEh"]
+    pub fn TMC2208Stepper_serial_write(this: *mut TMC2208Stepper, data: u8) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper22postWriteCommunicationEv"]
+    pub fn TMC2208Stepper_postWriteCommunication(this: *mut TMC2208Stepper);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper21postReadCommunicationEv"]
+    pub fn TMC2208Stepper_postReadCommunication(this: *mut TMC2208Stepper);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper7calcCRCEPhh"]
+    pub fn TMC2208Stepper_calcCRC(this: *mut TMC2208Stepper, datagram: *mut u8, len: u8) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper13_sendDatagramEPhht"]
+    pub fn TMC2208Stepper__sendDatagram(
+        this: *mut TMC2208Stepper,
+        arg1: *mut u8,
+        arg2: u8,
+        arg3: u16,
+    ) -> u64;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208StepperC1EP6Streamfhtt"]
+    pub fn TMC2208Stepper_TMC2208Stepper(
+        this: *mut TMC2208Stepper,
+        SerialPort: *mut Stream,
+        RS: f32,
+        addr: u8,
+        mul_pin1: u16,
+        mul_pin2: u16,
+    );
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208StepperC1EP6Streamfh"]
+    pub fn TMC2208Stepper_TMC2208Stepper1(
+        this: *mut TMC2208Stepper,
+        SerialPort: *mut Stream,
+        RS: f32,
+        addr: u8,
+    );
+}
+impl TMC2208Stepper {
+    #[inline]
+    pub unsafe fn defaults(&mut self) {
+        TMC2208Stepper_defaults(self)
+    }
+    #[inline]
+    pub unsafe fn push(&mut self) {
+        TMC2208Stepper_push(self)
+    }
+    #[inline]
+    pub unsafe fn begin(&mut self) {
+        TMC2208Stepper_begin(self)
+    }
+    #[inline]
+    pub unsafe fn isEnabled(&mut self) -> bool {
+        TMC2208Stepper_isEnabled(self)
+    }
+    #[inline]
+    pub unsafe fn GCONF(&mut self, input: u32) {
+        TMC2208Stepper_GCONF(self, input)
+    }
+    #[inline]
+    pub unsafe fn I_scale_analog(&mut self, B: bool) {
+        TMC2208Stepper_I_scale_analog(self, B)
+    }
+    #[inline]
+    pub unsafe fn internal_Rsense(&mut self, B: bool) {
+        TMC2208Stepper_internal_Rsense(self, B)
+    }
+    #[inline]
+    pub unsafe fn en_spreadCycle(&mut self, B: bool) {
+        TMC2208Stepper_en_spreadCycle(self, B)
+    }
+    #[inline]
+    pub unsafe fn shaft(&mut self, B: bool) {
+        TMC2208Stepper_shaft(self, B)
+    }
+    #[inline]
+    pub unsafe fn index_otpw(&mut self, B: bool) {
+        TMC2208Stepper_index_otpw(self, B)
+    }
+    #[inline]
+    pub unsafe fn index_step(&mut self, B: bool) {
+        TMC2208Stepper_index_step(self, B)
+    }
+    #[inline]
+    pub unsafe fn pdn_disable(&mut self, B: bool) {
+        TMC2208Stepper_pdn_disable(self, B)
+    }
+    #[inline]
+    pub unsafe fn mstep_reg_select(&mut self, B: bool) {
+        TMC2208Stepper_mstep_reg_select(self, B)
+    }
+    #[inline]
+    pub unsafe fn multistep_filt(&mut self, B: bool) {
+        TMC2208Stepper_multistep_filt(self, B)
+    }
+    #[inline]
+    pub unsafe fn GCONF1(&mut self) -> u32 {
+        TMC2208Stepper_GCONF1(self)
+    }
+    #[inline]
+    pub unsafe fn I_scale_analog1(&mut self) -> bool {
+        TMC2208Stepper_I_scale_analog1(self)
+    }
+    #[inline]
+    pub unsafe fn internal_Rsense1(&mut self) -> bool {
+        TMC2208Stepper_internal_Rsense1(self)
+    }
+    #[inline]
+    pub unsafe fn en_spreadCycle1(&mut self) -> bool {
+        TMC2208Stepper_en_spreadCycle1(self)
+    }
+    #[inline]
+    pub unsafe fn shaft1(&mut self) -> bool {
+        TMC2208Stepper_shaft1(self)
+    }
+    #[inline]
+    pub unsafe fn index_otpw1(&mut self) -> bool {
+        TMC2208Stepper_index_otpw1(self)
+    }
+    #[inline]
+    pub unsafe fn index_step1(&mut self) -> bool {
+        TMC2208Stepper_index_step1(self)
+    }
+    #[inline]
+    pub unsafe fn pdn_disable1(&mut self) -> bool {
+        TMC2208Stepper_pdn_disable1(self)
+    }
+    #[inline]
+    pub unsafe fn mstep_reg_select1(&mut self) -> bool {
+        TMC2208Stepper_mstep_reg_select1(self)
+    }
+    #[inline]
+    pub unsafe fn multistep_filt1(&mut self) -> bool {
+        TMC2208Stepper_multistep_filt1(self)
+    }
+    #[inline]
+    pub unsafe fn IFCNT(&mut self) -> u8 {
+        TMC2208Stepper_IFCNT(self)
+    }
+    #[inline]
+    pub unsafe fn SLAVECONF(&mut self, input: u16) {
+        TMC2208Stepper_SLAVECONF(self, input)
+    }
+    #[inline]
+    pub unsafe fn SLAVECONF1(&mut self) -> u16 {
+        TMC2208Stepper_SLAVECONF1(self)
+    }
+    #[inline]
+    pub unsafe fn senddelay(&mut self, B: u8) {
+        TMC2208Stepper_senddelay(self, B)
+    }
+    #[inline]
+    pub unsafe fn senddelay1(&mut self) -> u8 {
+        TMC2208Stepper_senddelay1(self)
+    }
+    #[inline]
+    pub unsafe fn OTP_PROG(&mut self, input: u16) {
+        TMC2208Stepper_OTP_PROG(self, input)
+    }
+    #[inline]
+    pub unsafe fn OTP_READ(&mut self) -> u32 {
+        TMC2208Stepper_OTP_READ(self)
+    }
+    #[inline]
+    pub unsafe fn IOIN(&mut self) -> u32 {
+        TMC2208Stepper_IOIN(self)
+    }
+    #[inline]
+    pub unsafe fn enn(&mut self) -> bool {
+        TMC2208Stepper_enn(self)
+    }
+    #[inline]
+    pub unsafe fn ms1(&mut self) -> bool {
+        TMC2208Stepper_ms1(self)
+    }
+    #[inline]
+    pub unsafe fn ms2(&mut self) -> bool {
+        TMC2208Stepper_ms2(self)
+    }
+    #[inline]
+    pub unsafe fn diag(&mut self) -> bool {
+        TMC2208Stepper_diag(self)
+    }
+    #[inline]
+    pub unsafe fn pdn_uart(&mut self) -> bool {
+        TMC2208Stepper_pdn_uart(self)
+    }
+    #[inline]
+    pub unsafe fn step(&mut self) -> bool {
+        TMC2208Stepper_step(self)
+    }
+    #[inline]
+    pub unsafe fn sel_a(&mut self) -> bool {
+        TMC2208Stepper_sel_a(self)
+    }
+    #[inline]
+    pub unsafe fn dir(&mut self) -> bool {
+        TMC2208Stepper_dir(self)
+    }
+    #[inline]
+    pub unsafe fn version(&mut self) -> u8 {
+        TMC2208Stepper_version(self)
+    }
+    #[inline]
+    pub unsafe fn FACTORY_CONF(&mut self, input: u16) {
+        TMC2208Stepper_FACTORY_CONF(self, input)
+    }
+    #[inline]
+    pub unsafe fn FACTORY_CONF1(&mut self) -> u16 {
+        TMC2208Stepper_FACTORY_CONF1(self)
+    }
+    #[inline]
+    pub unsafe fn fclktrim(&mut self, B: u8) {
+        TMC2208Stepper_fclktrim(self, B)
+    }
+    #[inline]
+    pub unsafe fn ottrim(&mut self, B: u8) {
+        TMC2208Stepper_ottrim(self, B)
+    }
+    #[inline]
+    pub unsafe fn fclktrim1(&mut self) -> u8 {
+        TMC2208Stepper_fclktrim1(self)
+    }
+    #[inline]
+    pub unsafe fn ottrim1(&mut self) -> u8 {
+        TMC2208Stepper_ottrim1(self)
+    }
+    #[inline]
+    pub unsafe fn VACTUAL(&mut self, input: u32) {
+        TMC2208Stepper_VACTUAL(self, input)
+    }
+    #[inline]
+    pub unsafe fn VACTUAL1(&mut self) -> u32 {
+        TMC2208Stepper_VACTUAL1(self)
+    }
+    #[inline]
+    pub unsafe fn CHOPCONF(&mut self, input: u32) {
+        TMC2208Stepper_CHOPCONF(self, input)
+    }
+    #[inline]
+    pub unsafe fn toff(&mut self, B: u8) {
+        TMC2208Stepper_toff(self, B)
+    }
+    #[inline]
+    pub unsafe fn intpol(&mut self, B: bool) {
+        TMC2208Stepper_intpol(self, B)
+    }
+    #[inline]
+    pub unsafe fn dedge(&mut self, B: bool) {
+        TMC2208Stepper_dedge(self, B)
+    }
+    #[inline]
+    pub unsafe fn diss2g(&mut self, B: bool) {
+        TMC2208Stepper_diss2g(self, B)
+    }
+    #[inline]
+    pub unsafe fn diss2vs(&mut self, B: bool) {
+        TMC2208Stepper_diss2vs(self, B)
+    }
+    #[inline]
+    pub unsafe fn CHOPCONF1(&mut self) -> u32 {
+        TMC2208Stepper_CHOPCONF1(self)
+    }
+    #[inline]
+    pub unsafe fn toff1(&mut self) -> u8 {
+        TMC2208Stepper_toff1(self)
+    }
+    #[inline]
+    pub unsafe fn intpol1(&mut self) -> bool {
+        TMC2208Stepper_intpol1(self)
+    }
+    #[inline]
+    pub unsafe fn dedge1(&mut self) -> bool {
+        TMC2208Stepper_dedge1(self)
+    }
+    #[inline]
+    pub unsafe fn diss2g1(&mut self) -> bool {
+        TMC2208Stepper_diss2g1(self)
+    }
+    #[inline]
+    pub unsafe fn diss2vs1(&mut self) -> bool {
+        TMC2208Stepper_diss2vs1(self)
+    }
+    #[inline]
+    pub unsafe fn otpw(&mut self) -> bool {
+        TMC2208Stepper_otpw(self)
+    }
+    #[inline]
+    pub unsafe fn ot(&mut self) -> bool {
+        TMC2208Stepper_ot(self)
+    }
+    #[inline]
+    pub unsafe fn s2ga(&mut self) -> bool {
+        TMC2208Stepper_s2ga(self)
+    }
+    #[inline]
+    pub unsafe fn s2gb(&mut self) -> bool {
+        TMC2208Stepper_s2gb(self)
+    }
+    #[inline]
+    pub unsafe fn s2vsa(&mut self) -> bool {
+        TMC2208Stepper_s2vsa(self)
+    }
+    #[inline]
+    pub unsafe fn s2vsb(&mut self) -> bool {
+        TMC2208Stepper_s2vsb(self)
+    }
+    #[inline]
+    pub unsafe fn ola(&mut self) -> bool {
+        TMC2208Stepper_ola(self)
+    }
+    #[inline]
+    pub unsafe fn olb(&mut self) -> bool {
+        TMC2208Stepper_olb(self)
+    }
+    #[inline]
+    pub unsafe fn t120(&mut self) -> bool {
+        TMC2208Stepper_t120(self)
+    }
+    #[inline]
+    pub unsafe fn t143(&mut self) -> bool {
+        TMC2208Stepper_t143(self)
+    }
+    #[inline]
+    pub unsafe fn t150(&mut self) -> bool {
+        TMC2208Stepper_t150(self)
+    }
+    #[inline]
+    pub unsafe fn t157(&mut self) -> bool {
+        TMC2208Stepper_t157(self)
+    }
+    #[inline]
+    pub unsafe fn cs_actual(&mut self) -> u16 {
+        TMC2208Stepper_cs_actual(self)
+    }
+    #[inline]
+    pub unsafe fn stealth(&mut self) -> bool {
+        TMC2208Stepper_stealth(self)
+    }
+    #[inline]
+    pub unsafe fn stst(&mut self) -> bool {
+        TMC2208Stepper_stst(self)
+    }
+    #[inline]
+    pub unsafe fn PWMCONF(&mut self, input: u32) {
+        TMC2208Stepper_PWMCONF(self, input)
+    }
+    #[inline]
+    pub unsafe fn pwm_ofs(&mut self, B: u8) {
+        TMC2208Stepper_pwm_ofs(self, B)
+    }
+    #[inline]
+    pub unsafe fn pwm_grad(&mut self, B: u8) {
+        TMC2208Stepper_pwm_grad(self, B)
+    }
+    #[inline]
+    pub unsafe fn pwm_freq(&mut self, B: u8) {
+        TMC2208Stepper_pwm_freq(self, B)
+    }
+    #[inline]
+    pub unsafe fn pwm_autoscale(&mut self, B: bool) {
+        TMC2208Stepper_pwm_autoscale(self, B)
+    }
+    #[inline]
+    pub unsafe fn pwm_autograd(&mut self, B: bool) {
+        TMC2208Stepper_pwm_autograd(self, B)
+    }
+    #[inline]
+    pub unsafe fn freewheel(&mut self, B: u8) {
+        TMC2208Stepper_freewheel(self, B)
+    }
+    #[inline]
+    pub unsafe fn pwm_reg(&mut self, B: u8) {
+        TMC2208Stepper_pwm_reg(self, B)
+    }
+    #[inline]
+    pub unsafe fn pwm_lim(&mut self, B: u8) {
+        TMC2208Stepper_pwm_lim(self, B)
+    }
+    #[inline]
+    pub unsafe fn PWMCONF1(&mut self) -> u32 {
+        TMC2208Stepper_PWMCONF1(self)
+    }
+    #[inline]
+    pub unsafe fn pwm_ofs1(&mut self) -> u8 {
+        TMC2208Stepper_pwm_ofs1(self)
+    }
+    #[inline]
+    pub unsafe fn pwm_grad1(&mut self) -> u8 {
+        TMC2208Stepper_pwm_grad1(self)
+    }
+    #[inline]
+    pub unsafe fn pwm_freq1(&mut self) -> u8 {
+        TMC2208Stepper_pwm_freq1(self)
+    }
+    #[inline]
+    pub unsafe fn pwm_autoscale1(&mut self) -> bool {
+        TMC2208Stepper_pwm_autoscale1(self)
+    }
+    #[inline]
+    pub unsafe fn pwm_autograd1(&mut self) -> bool {
+        TMC2208Stepper_pwm_autograd1(self)
+    }
+    #[inline]
+    pub unsafe fn freewheel1(&mut self) -> u8 {
+        TMC2208Stepper_freewheel1(self)
+    }
+    #[inline]
+    pub unsafe fn pwm_reg1(&mut self) -> u8 {
+        TMC2208Stepper_pwm_reg1(self)
+    }
+    #[inline]
+    pub unsafe fn pwm_lim1(&mut self) -> u8 {
+        TMC2208Stepper_pwm_lim1(self)
+    }
+    #[inline]
+    pub unsafe fn PWM_SCALE(&mut self) -> u32 {
+        TMC2208Stepper_PWM_SCALE(self)
+    }
+    #[inline]
+    pub unsafe fn pwm_scale_sum(&mut self) -> u8 {
+        TMC2208Stepper_pwm_scale_sum(self)
+    }
+    #[inline]
+    pub unsafe fn pwm_scale_auto(&mut self) -> i16 {
+        TMC2208Stepper_pwm_scale_auto(self)
+    }
+    #[inline]
+    pub unsafe fn PWM_AUTO(&mut self) -> u32 {
+        TMC2208Stepper_PWM_AUTO(self)
+    }
+    #[inline]
+    pub unsafe fn pwm_ofs_auto(&mut self) -> u8 {
+        TMC2208Stepper_pwm_ofs_auto(self)
+    }
+    #[inline]
+    pub unsafe fn pwm_grad_auto(&mut self) -> u8 {
+        TMC2208Stepper_pwm_grad_auto(self)
+    }
+    #[inline]
+    pub unsafe fn available(&mut self) -> ::core::ffi::c_int {
+        TMC2208Stepper_available(self)
+    }
+    #[inline]
+    pub unsafe fn preWriteCommunication(&mut self) {
+        TMC2208Stepper_preWriteCommunication(self)
+    }
+    #[inline]
+    pub unsafe fn preReadCommunication(&mut self) {
+        TMC2208Stepper_preReadCommunication(self)
+    }
+    #[inline]
+    pub unsafe fn serial_read(&mut self) -> i16 {
+        TMC2208Stepper_serial_read(self)
+    }
+    #[inline]
+    pub unsafe fn serial_write(&mut self, data: u8) -> u8 {
+        TMC2208Stepper_serial_write(self, data)
+    }
+    #[inline]
+    pub unsafe fn postWriteCommunication(&mut self) {
+        TMC2208Stepper_postWriteCommunication(self)
+    }
+    #[inline]
+    pub unsafe fn postReadCommunication(&mut self) {
+        TMC2208Stepper_postReadCommunication(self)
+    }
+    #[inline]
+    pub unsafe fn calcCRC(&mut self, datagram: *mut u8, len: u8) -> u8 {
+        TMC2208Stepper_calcCRC(self, datagram, len)
+    }
+    #[inline]
+    pub unsafe fn _sendDatagram(&mut self, arg1: *mut u8, arg2: u8, arg3: u16) -> u64 {
+        TMC2208Stepper__sendDatagram(self, arg1, arg2, arg3)
+    }
+    #[inline]
+    pub unsafe fn new(
+        SerialPort: *mut Stream,
+        RS: f32,
+        addr: u8,
+        mul_pin1: u16,
+        mul_pin2: u16,
+    ) -> Self {
+        let mut __bindgen_tmp = ::core::mem::MaybeUninit::uninit();
+        TMC2208Stepper_TMC2208Stepper(
+            __bindgen_tmp.as_mut_ptr(),
+            SerialPort,
+            RS,
+            addr,
+            mul_pin1,
+            mul_pin2,
+        );
+        __bindgen_tmp.assume_init()
+    }
+    #[inline]
+    pub unsafe fn new1(SerialPort: *mut Stream, RS: f32, addr: u8) -> Self {
+        let mut __bindgen_tmp = ::core::mem::MaybeUninit::uninit();
+        TMC2208Stepper_TMC2208Stepper1(__bindgen_tmp.as_mut_ptr(), SerialPort, RS, addr);
+        __bindgen_tmp.assume_init()
+    }
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper5hstrtEh"]
+    pub fn TMC2208Stepper_hstrt(this: *mut ::core::ffi::c_void, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4hendEh"]
+    pub fn TMC2208Stepper_hend(this: *mut ::core::ffi::c_void, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper3tblEh"]
+    pub fn TMC2208Stepper_tbl(this: *mut ::core::ffi::c_void, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper6vsenseEb"]
+    pub fn TMC2208Stepper_vsense(this: *mut ::core::ffi::c_void, B: bool);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4mresEh"]
+    pub fn TMC2208Stepper_mres(this: *mut ::core::ffi::c_void, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper5hstrtEv"]
+    pub fn TMC2208Stepper_hstrt1(this: *mut ::core::ffi::c_void) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4hendEv"]
+    pub fn TMC2208Stepper_hend1(this: *mut ::core::ffi::c_void) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper3tblEv"]
+    pub fn TMC2208Stepper_tbl1(this: *mut ::core::ffi::c_void) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper6vsenseEv"]
+    pub fn TMC2208Stepper_vsense1(this: *mut ::core::ffi::c_void) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4mresEv"]
+    pub fn TMC2208Stepper_mres1(this: *mut ::core::ffi::c_void) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper10DRV_STATUSEv"]
+    pub fn TMC2208Stepper_DRV_STATUS(this: *mut ::core::ffi::c_void) -> u32;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper5writeEhj"]
+    pub fn TMC2208Stepper_write(this: *mut ::core::ffi::c_void, arg1: u8, arg2: u32);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2208Stepper4readEh"]
+    pub fn TMC2208Stepper_read(this: *mut ::core::ffi::c_void, arg1: u8) -> u32;
+}
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TMC2209Stepper {
+    pub _base: TMC2208Stepper,
+    pub TCOOLTHRS_register: TCOOLTHRS_t,
+    pub SGTHRS_register: TMC2209_n_SGTHRS_t,
+    pub COOLCONF_register: TMC2209_n_COOLCONF_t,
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper4pushEv"]
+    pub fn TMC2209Stepper_push(this: *mut TMC2209Stepper);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper4IOINEv"]
+    pub fn TMC2209Stepper_IOIN(this: *mut TMC2209Stepper) -> u32;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper3ennEv"]
+    pub fn TMC2209Stepper_enn(this: *mut TMC2209Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper3ms1Ev"]
+    pub fn TMC2209Stepper_ms1(this: *mut TMC2209Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper3ms2Ev"]
+    pub fn TMC2209Stepper_ms2(this: *mut TMC2209Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper4diagEv"]
+    pub fn TMC2209Stepper_diag(this: *mut TMC2209Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper8pdn_uartEv"]
+    pub fn TMC2209Stepper_pdn_uart(this: *mut TMC2209Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper4stepEv"]
+    pub fn TMC2209Stepper_step(this: *mut TMC2209Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper9spread_enEv"]
+    pub fn TMC2209Stepper_spread_en(this: *mut TMC2209Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper3dirEv"]
+    pub fn TMC2209Stepper_dir(this: *mut TMC2209Stepper) -> bool;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper7versionEv"]
+    pub fn TMC2209Stepper_version(this: *mut TMC2209Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper9TCOOLTHRSEv"]
+    pub fn TMC2209Stepper_TCOOLTHRS(this: *mut TMC2209Stepper) -> u32;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper9TCOOLTHRSEj"]
+    pub fn TMC2209Stepper_TCOOLTHRS1(this: *mut TMC2209Stepper, input: u32);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper6SGTHRSEh"]
+    pub fn TMC2209Stepper_SGTHRS(this: *mut TMC2209Stepper, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper6SGTHRSEv"]
+    pub fn TMC2209Stepper_SGTHRS1(this: *mut TMC2209Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper9SG_RESULTEv"]
+    pub fn TMC2209Stepper_SG_RESULT(this: *mut TMC2209Stepper) -> u16;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper8COOLCONFEt"]
+    pub fn TMC2209Stepper_COOLCONF(this: *mut TMC2209Stepper, B: u16);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper8COOLCONFEv"]
+    pub fn TMC2209Stepper_COOLCONF1(this: *mut TMC2209Stepper) -> u16;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper5seminEh"]
+    pub fn TMC2209Stepper_semin(this: *mut TMC2209Stepper, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper4seupEh"]
+    pub fn TMC2209Stepper_seup(this: *mut TMC2209Stepper, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper5semaxEh"]
+    pub fn TMC2209Stepper_semax(this: *mut TMC2209Stepper, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper4sednEh"]
+    pub fn TMC2209Stepper_sedn(this: *mut TMC2209Stepper, B: u8);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper6seiminEb"]
+    pub fn TMC2209Stepper_seimin(this: *mut TMC2209Stepper, B: bool);
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper5seminEv"]
+    pub fn TMC2209Stepper_semin1(this: *mut TMC2209Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper4seupEv"]
+    pub fn TMC2209Stepper_seup1(this: *mut TMC2209Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper5semaxEv"]
+    pub fn TMC2209Stepper_semax1(this: *mut TMC2209Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper4sednEv"]
+    pub fn TMC2209Stepper_sedn1(this: *mut TMC2209Stepper) -> u8;
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14TMC2209Stepper6seiminEv"]
+    pub fn TMC2209Stepper_seimin1(this: *mut TMC2209Stepper) -> bool;
+}
+impl TMC2209Stepper {
+    #[inline]
+    pub unsafe fn push(&mut self) {
+        TMC2209Stepper_push(self)
+    }
+    #[inline]
+    pub unsafe fn IOIN(&mut self) -> u32 {
+        TMC2209Stepper_IOIN(self)
+    }
+    #[inline]
+    pub unsafe fn enn(&mut self) -> bool {
+        TMC2209Stepper_enn(self)
+    }
+    #[inline]
+    pub unsafe fn ms1(&mut self) -> bool {
+        TMC2209Stepper_ms1(self)
+    }
+    #[inline]
+    pub unsafe fn ms2(&mut self) -> bool {
+        TMC2209Stepper_ms2(self)
+    }
+    #[inline]
+    pub unsafe fn diag(&mut self) -> bool {
+        TMC2209Stepper_diag(self)
+    }
+    #[inline]
+    pub unsafe fn pdn_uart(&mut self) -> bool {
+        TMC2209Stepper_pdn_uart(self)
+    }
+    #[inline]
+    pub unsafe fn step(&mut self) -> bool {
+        TMC2209Stepper_step(self)
+    }
+    #[inline]
+    pub unsafe fn spread_en(&mut self) -> bool {
+        TMC2209Stepper_spread_en(self)
+    }
+    #[inline]
+    pub unsafe fn dir(&mut self) -> bool {
+        TMC2209Stepper_dir(self)
+    }
+    #[inline]
+    pub unsafe fn version(&mut self) -> u8 {
+        TMC2209Stepper_version(self)
+    }
+    #[inline]
+    pub unsafe fn TCOOLTHRS(&mut self) -> u32 {
+        TMC2209Stepper_TCOOLTHRS(self)
+    }
+    #[inline]
+    pub unsafe fn TCOOLTHRS1(&mut self, input: u32) {
+        TMC2209Stepper_TCOOLTHRS1(self, input)
+    }
+    #[inline]
+    pub unsafe fn SGTHRS(&mut self, B: u8) {
+        TMC2209Stepper_SGTHRS(self, B)
+    }
+    #[inline]
+    pub unsafe fn SGTHRS1(&mut self) -> u8 {
+        TMC2209Stepper_SGTHRS1(self)
+    }
+    #[inline]
+    pub unsafe fn SG_RESULT(&mut self) -> u16 {
+        TMC2209Stepper_SG_RESULT(self)
+    }
+    #[inline]
+    pub unsafe fn COOLCONF(&mut self, B: u16) {
+        TMC2209Stepper_COOLCONF(self, B)
+    }
+    #[inline]
+    pub unsafe fn COOLCONF1(&mut self) -> u16 {
+        TMC2209Stepper_COOLCONF1(self)
+    }
+    #[inline]
+    pub unsafe fn semin(&mut self, B: u8) {
+        TMC2209Stepper_semin(self, B)
+    }
+    #[inline]
+    pub unsafe fn seup(&mut self, B: u8) {
+        TMC2209Stepper_seup(self, B)
+    }
+    #[inline]
+    pub unsafe fn semax(&mut self, B: u8) {
+        TMC2209Stepper_semax(self, B)
+    }
+    #[inline]
+    pub unsafe fn sedn(&mut self, B: u8) {
+        TMC2209Stepper_sedn(self, B)
+    }
+    #[inline]
+    pub unsafe fn seimin(&mut self, B: bool) {
+        TMC2209Stepper_seimin(self, B)
+    }
+    #[inline]
+    pub unsafe fn semin1(&mut self) -> u8 {
+        TMC2209Stepper_semin1(self)
+    }
+    #[inline]
+    pub unsafe fn seup1(&mut self) -> u8 {
+        TMC2209Stepper_seup1(self)
+    }
+    #[inline]
+    pub unsafe fn semax1(&mut self) -> u8 {
+        TMC2209Stepper_semax1(self)
+    }
+    #[inline]
+    pub unsafe fn sedn1(&mut self) -> u8 {
+        TMC2209Stepper_sedn1(self)
+    }
+    #[inline]
+    pub unsafe fn seimin1(&mut self) -> bool {
+        TMC2209Stepper_seimin1(self)
     }
 }
