@@ -5,6 +5,9 @@ name = "drawer-robot"
 version = "0.1.0"
 edition = "2021"
 
+[build-dependencies]
+bindgen = "0.68.1"
+
 [dependencies]
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
 critical-section = "1.1.1"
