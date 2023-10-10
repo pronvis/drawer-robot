@@ -35,6 +35,8 @@ bindgen_lists:
   blocklist_function:
     - Print.*
     - String.*
+    - Stream_readString
+    - Stream_readStringUntil
   blocklist_type:
     - Print.*
     - String.*

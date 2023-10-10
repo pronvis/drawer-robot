@@ -172,14 +172,6 @@ extern "C" {
     ) -> usize;
 }
 extern "C" {
-    #[link_name = "\u{1}_ZN6Stream10readStringEv"]
-    pub fn Stream_readString(this: *mut Stream) -> String;
-}
-extern "C" {
-    #[link_name = "\u{1}_ZN6Stream15readStringUntilEc"]
-    pub fn Stream_readStringUntil(this: *mut Stream, terminator: ::core::ffi::c_char) -> String;
-}
-extern "C" {
     #[link_name = "\u{1}_ZN6Stream8parseIntEc"]
     pub fn Stream_parseInt1(
         this: *mut Stream,
@@ -261,14 +253,6 @@ impl Stream {
         length: usize,
     ) -> usize {
         Stream_readBytesUntil(self, terminator, buffer, length)
-    }
-    #[inline]
-    pub unsafe fn readString(&mut self) -> String {
-        Stream_readString(self)
-    }
-    #[inline]
-    pub unsafe fn readStringUntil(&mut self, terminator: ::core::ffi::c_char) -> String {
-        Stream_readStringUntil(self, terminator)
     }
     #[inline]
     pub unsafe fn parseInt1(&mut self, skipChar: ::core::ffi::c_char) -> ::core::ffi::c_long {

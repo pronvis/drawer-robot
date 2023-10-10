@@ -14,6 +14,7 @@ use stm32f1xx_hal::{
 
 use heapless::{pool, pool::singleton::Pool};
 
+pub mod arduino;
 pub mod display;
 pub mod my_stepper;
 pub mod ps3;
