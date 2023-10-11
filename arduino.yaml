@@ -1,0 +1,86 @@
+arduino_home: $HOME/Library/Arduino15
+external_home: $HOME/Documents/Arduino
+
+core_version: STM32F1
+# for BluePill
+variant: generic_stm32f103c
+# for BigTreeTech v1.1
+# variant: generic_stm32f103r
+
+arm_none_eabi_gcc_version: 4.8.3-2014q1
+arduino_libraries:
+external_libraries:
+  - TMCStepper
+
+definitions:
+  ARDUINO: '10607'
+  F_CPU: 72000000L
+  # TODO: maybe I would need to add that, but better in code, manually, cause we have the same value in 'variant'
+  # ARDUINO_GENERIC_STM32F103C: '1'
+  __STM32F1__: '1'
+  ARDUINO_ARCH_STM32F1: '1'
+  MCU_STM32F103C8: '1'
+  # MCU_STM32F103RE: '1'
+flags:
+  - '-mcpu=cortex-m3'
+
+
+bindgen_lists:
+  allowlist_function:
+    - TMCStepper.*
+    - TMC2209Stepper.*
+  allowlist_type:
+    - TMCStepper.*
+    - TMC2209Stepper.*
+  blocklist_function:
+    - Print.*
+    - String.*
+    - Stream_readString
+    - Stream_readStringUntil
+  blocklist_type:
+    - Print.*
+    - String.*
+
+
+# Arduino IDE shows me this line:
+#
+# /Users/pronvis/Library/Arduino15/packages/arduino/tools/arm-none-eabi-gcc/4.8.3-2014q1/bin/arm-none-eabi-gcc
+# -c
+# -g
+# -Os
+# -w
+# -DDEBUG_LEVEL=DEBUG_NONE
+# -std=gnu11
+# -MMD
+# -ffunction-sections
+# -fdata-sections
+# -nostdlib
+# --param
+# max-inline-insns-single=500
+# -DBOARD_generic_stm32f103c
+# -DVECT_TAB_ADDR=0x8000000
+# -DERROR_LED_PORT=GPIOC
+# -DERROR_LED_PIN=13
+# -mcpu=cortex-m3
+# -DF_CPU=72000000L
+# -DARDUINO=10607
+# -DARDUINO_GENERIC_STM32F103C
+# -DARDUINO_ARCH_STM32F1
+# -DCONFIG_MAPLE_MINI_NO_DISABLE_DEBUG=1
+# -DSERIAL_USB
+# -DGENERIC_BOOTLOADER
+# -D
+# -mthumb
+# -march=armv7-m
+# -D__STM32F1__
+# -I/Users/pronvis/Documents/Arduino/hardware/Arduino_STM32/STM32F1/system/libmaple
+# -I/Users/pronvis/Documents/Arduino/hardware/Arduino_STM32/STM32F1/system/libmaple/include
+# -I/Users/pronvis/Documents/Arduino/hardware/Arduino_STM32/STM32F1/system/libmaple/stm32f1/include
+# -I/Users/pronvis/Documents/Arduino/hardware/Arduino_STM32/STM32F1/system/libmaple/usb/stm32f1
+# -I/Users/pronvis/Documents/Arduino/hardware/Arduino_STM32/STM32F1/system/libmaple/usb/usb_lib
+# -I/Users/pronvis/Documents/Arduino/hardware/Arduino_STM32/STM32F1/cores/maple
+# -I/Users/pronvis/Documents/Arduino/hardware/Arduino_STM32/STM32F1/variants/generic_stm32f103c
+# /Users/pronvis/Documents/Arduino/hardware/Arduino_STM32/STM32F1/variants/generic_stm32f103c/wirish/syscalls.c
+# -o
+# /private/var/folders/n3/xdk6njln73sg_kmlcd076cth0000gn/T/arduino/sketches/879DAD20BC9E9FAD6E52CDDC4903C2B9/core/wirish/syscalls.c.o
+

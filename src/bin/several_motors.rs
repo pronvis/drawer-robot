@@ -31,9 +31,11 @@ mod app {
         timer::{Counter, Event},
     };
 
+    use heapless::pool::singleton::Box;
+
     const TIMER_CLOCK_FREQ: u32 = 10_000; // step = 100_000 nanos, 100 micros
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
-    const CHANNEL_CAPACITY: usize = 1;
+    const CHANNEL_CAPACITY: usize = 2;
 
     pub type X_EnPin = stm32f1xx_hal::gpio::Pin<'C', 7, stm32f1xx_hal::gpio::Output>;
     pub type X_StepPin = stm32f1xx_hal::gpio::Pin<'C', 6, stm32f1xx_hal::gpio::Output>;
@@ -86,6 +88,8 @@ mod app {
         if !clocks.usbclk_valid() {
             panic!("Clock parameter values are wrong!");
         }
+        let (mut display_sender, display_receiver) =
+            make_channel!(Box<DisplayMemoryPool>, CHANNEL_CAPACITY);
 
         // Acquire the GPIOC peripheral
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
@@ -116,6 +120,7 @@ mod app {
             cx.device.TIM3,
             cx.device.TIM4,
             cx.device.TIM5,
+            display_sender.clone(),
         );
 
         (
