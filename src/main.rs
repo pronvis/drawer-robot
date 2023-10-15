@@ -73,6 +73,49 @@ mod app {
         robot: robot::Robot,
     }
 
+    fn u32_to_bytes(u: u32) -> [u8; 4] {
+        let b0 = (u >> 24) as u8;
+        let b1 = (u >> 16) as u8;
+        let b2 = (u >> 8) as u8;
+        let b3 = u as u8;
+        [b0, b1, b2, b3]
+    }
+
+    fn from_state(slave_addr: u8, data: u32) -> [u8; 8] {
+        const WRITE: u8 = 0b10000000;
+        const SYNC_AND_RESERVED: u8 = 0b00000101;
+        let reg_addr_rw = 0x22 as u8 | WRITE; // VACTUAL addr
+        let [b0, b1, b2, b3] = u32_to_bytes(data);
+        let mut bytes = [
+            SYNC_AND_RESERVED,
+            slave_addr,
+            reg_addr_rw,
+            b0,
+            b1,
+            b2,
+            b3,
+            0u8,
+        ];
+        let crc_ix = bytes.len() - 1;
+        bytes[crc_ix] = crc(&bytes[..crc_ix]);
+        bytes
+    }
+
+    fn crc(data: &[u8]) -> u8 {
+        let mut crc = 0u8;
+        for mut byte in data.iter().cloned() {
+            for _ in 0..8 {
+                if ((crc >> 7) ^ (byte & 0x01)) != 0 {
+                    crc = (crc << 1) ^ 0x07;
+                } else {
+                    crc = crc << 1;
+                }
+                byte = byte >> 1;
+            }
+        }
+        crc
+    }
+
     #[init]
     fn init(cx: init::Context) -> (Shared, Local) {
         defmt::info!("init");
@@ -105,13 +148,16 @@ mod app {
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
         let mut afio = cx.device.AFIO.constrain();
 
+        let mut X_MOTOR_UART_o = gpioc.pc10.into_alternate_push_pull(&mut gpioc.crh);
+        let mut X_MOTOR_UART_i = gpioc.pc11.into_pull_up_input(&mut gpioc.crh);
+
         // SSD1306 display pins
         let scl: Scl1Pin = gpiob.pb8.into_alternate_open_drain(&mut gpiob.crh);
         let sda: Sda1Pin = gpiob.pb9.into_alternate_open_drain(&mut gpiob.crh);
         //init ssd1306 display
         let mut display = OledDisplay::new(scl, sda, &mut afio, clocks.clone(), cx.device.I2C1);
 
-        // UART1
+        // UART1 (bluetooth HC-05)
         let tx_usart1 = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
         let rx_usart1 = gpioa.pa10.into_pull_up_input(&mut gpioa.crh);
         let mut serial_usart1 = Serial::new(
@@ -125,7 +171,7 @@ mod app {
                 .parity_none(),
             &clocks,
         );
-        // UART2
+        // UART2 (esp32)
         let tx_usart2 = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
         let rx_usart2 = gpioa.pa3.into_pull_up_input(&mut gpioa.crl);
         let mut serial_usart2 = Serial::new(
@@ -171,6 +217,20 @@ mod app {
             cx.device.TIM5,
             display_sender.clone(),
         );
+
+        let data_to_write = from_state(0u8, 10000);
+        let mut serial_usart3 = Serial::new(
+            cx.device.USART3,
+            (X_MOTOR_UART_o, X_MOTOR_UART_i),
+            &mut afio.mapr,
+            Config::default()
+                .baudrate(115_200.bps())
+                .wordlength_8bits()
+                .stopbits(stm32f1xx_hal::serial::StopBits::STOP1)
+                .parity_none(),
+            &clocks,
+        );
+        serial_usart3.bwrite_all(&data_to_write);
 
         let (mut ps3_bytes_sender, ps3_bytes_receiver) = make_channel!(u8, PS3_CHANNEL_CAPACITY);
         let (mut ps3_events_sender, ps3_events_receiver) =
