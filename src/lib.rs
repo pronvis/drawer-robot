@@ -18,6 +18,7 @@ pub mod display;
 pub mod my_stepper;
 pub mod ps3;
 pub mod robot;
+pub mod soft_serial;
 pub const CHANNEL_CAPACITY: usize = 2;
 pub const PS3_CHANNEL_CAPACITY: usize = 32;
 

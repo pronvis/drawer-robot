@@ -42,6 +42,7 @@ mod app {
     };
 
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
+    const SOFT_CLOCK_FREQ: u32 = 115_200; // this doesn't mean 115_200 baudrate
     static mut DISPLAY_MEMORY_POOL_MEMORY: [u8; 96] = [32u8; 96];
 
     // Import the memory pool into scope
@@ -64,6 +65,11 @@ mod app {
         stepper_2: MyStepper2,
         stepper_3: MyStepper3,
         stepper_4: MyStepper4,
+        software_serial: soft_serial::SoftSerial<
+            stm32f1xx_hal::gpio::gpioc::PC10<stm32f1xx_hal::gpio::Output>,
+            stm32f1xx_hal::pac::TIM6,
+            SOFT_CLOCK_FREQ,
+        >,
         display_receiver: Receiver<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
         display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
         display: OledDisplay,
@@ -146,10 +152,13 @@ mod app {
         let mut gpioa: stm32f1xx_hal::gpio::gpioa::Parts = cx.device.GPIOA.split();
         let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
+        let mut gpiod: stm32f1xx_hal::gpio::gpiod::Parts = cx.device.GPIOD.split();
         let mut afio = cx.device.AFIO.constrain();
 
-        let mut X_MOTOR_UART_o = gpioc.pc10.into_alternate_push_pull(&mut gpioc.crh);
-        let mut X_MOTOR_UART_i = gpioc.pc11.into_pull_up_input(&mut gpioc.crh);
+        let mut x_stepper_uart_pin = gpioc.pc10.into_push_pull_output(&mut gpioc.crh);
+        let mut y_stepper_uart_pin = gpioc.pc11.into_push_pull_output(&mut gpioc.crh);
+        let mut z_stepper_uart_pin = gpioc.pc12.into_push_pull_output(&mut gpioc.crh);
+        let mut e_stepper_uart_pin = gpiod.pd2.into_push_pull_output(&mut gpiod.crl);
 
         // SSD1306 display pins
         let scl: Scl1Pin = gpiob.pb8.into_alternate_open_drain(&mut gpiob.crh);
@@ -218,19 +227,17 @@ mod app {
             display_sender.clone(),
         );
 
-        let data_to_write = from_state(0u8, 10000);
-        let mut serial_usart3 = Serial::new(
-            cx.device.USART3,
-            (X_MOTOR_UART_o, X_MOTOR_UART_i),
-            &mut afio.mapr,
-            Config::default()
-                .baudrate(115_200.bps())
-                .wordlength_8bits()
-                .stopbits(stm32f1xx_hal::serial::StopBits::STOP1)
-                .parity_none(),
+        let tim6 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM6, SOFT_CLOCK_FREQ>::new(
+            cx.device.TIM6,
             &clocks,
         );
-        serial_usart3.bwrite_all(&data_to_write);
+        let mut timer_6: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM6, SOFT_CLOCK_FREQ> =
+            tim6.counter();
+        timer_6.start(20.micros()).unwrap(); // some nonimportant timer start time
+        timer_6.listen(Event::Update);
+
+        let data_to_write = from_state(0u8, 3000);
+        let software_serial = soft_serial::SoftSerial::new(X_MOTOR_UART_o, timer_6, data_to_write);
 
         let (mut ps3_bytes_sender, ps3_bytes_receiver) = make_channel!(u8, PS3_CHANNEL_CAPACITY);
         let (mut ps3_events_sender, ps3_events_receiver) =
@@ -277,6 +284,7 @@ mod app {
                 stepper_2,
                 stepper_3,
                 stepper_4,
+                software_serial,
                 display_receiver,
                 display_sender,
                 display,
@@ -358,24 +366,29 @@ mod app {
         }
     }
 
-    #[task(binds = TIM2, priority = 10, local = [ stepper_1 ])]
-    fn delay_task_1(cx: delay_task_1::Context) {
-        cx.local.stepper_1.work();
-    }
+    //     #[task(binds = TIM2, priority = 10, local = [ stepper_1 ])]
+    //     fn delay_task_1(cx: delay_task_1::Context) {
+    //         cx.local.stepper_1.work();
+    //     }
 
-    #[task(binds = TIM3, priority = 10, local = [ stepper_2 ])]
-    fn delay_task_2(cx: delay_task_2::Context) {
-        cx.local.stepper_2.work();
-    }
+    //     #[task(binds = TIM3, priority = 10, local = [ stepper_2 ])]
+    //     fn delay_task_2(cx: delay_task_2::Context) {
+    //         cx.local.stepper_2.work();
+    //     }
 
-    #[task(binds = TIM4, priority = 10, local = [ stepper_3 ])]
-    fn delay_task_3(cx: delay_task_3::Context) {
-        cx.local.stepper_3.work();
-    }
+    //     #[task(binds = TIM4, priority = 10, local = [ stepper_3 ])]
+    //     fn delay_task_3(cx: delay_task_3::Context) {
+    //         cx.local.stepper_3.work();
+    //     }
 
-    #[task(binds = TIM5, priority = 10, local = [ stepper_4 ])]
-    fn delay_task_4(cx: delay_task_4::Context) {
-        cx.local.stepper_4.work();
+    // #[task(binds = TIM5, priority = 10, local = [ stepper_4 ])]
+    // fn delay_task_4(cx: delay_task_4::Context) {
+    //     cx.local.stepper_4.work();
+    // }
+
+    #[task(binds = TIM6, priority = 10, local = [ software_serial ])]
+    fn delay_task_5(cx: delay_task_5::Context) {
+        cx.local.software_serial.work();
     }
 
     use core::fmt::Write;
