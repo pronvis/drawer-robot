@@ -100,51 +100,37 @@ impl Ps3EventParser {
 }
 
 fn digital_signal_to_robot_command(signal: u8) -> Option<RobotCommand> {
-    let mut robot_command = None;
-    if signal == 0x55 {
+    let robot_command = match signal {
         // up button down
-        robot_command.replace(RobotCommand::AddSteps(100));
-    } else if signal == 0x53 {
-        // square button down
-        robot_command.replace(RobotCommand::SelectStepper(0));
-    } else if signal == 0x54 {
-        // triangle button down
-        robot_command.replace(RobotCommand::SelectStepper(1));
-    } else if signal == 0x43 {
-        // circle button down
-        robot_command.replace(RobotCommand::SelectStepper(2));
-    } else if signal == 0x58 {
-        // cross button down
-        robot_command.replace(RobotCommand::SelectStepper(3));
-    } else if signal == 0x52 {
-        // right button down
-        robot_command.replace(RobotCommand::IncreaseSpeed);
-    } else if signal == 0x4c {
-        // left button down
-        robot_command.replace(RobotCommand::ReduceSpeed);
-    } else if signal == 0x44 {
+        0x55 => Some(RobotCommand::AddSteps(100)),
         // down button down
-        robot_command.replace(RobotCommand::Stay);
-    } else if signal == 0x57 {
+        0x44 => Some(RobotCommand::Stay),
+        // right button down
+        0x52 => Some(RobotCommand::IncreaseSpeed),
+        // left button down
+        0x4c => Some(RobotCommand::ReduceSpeed),
+        // square button down
+        0x53 => Some(RobotCommand::SelectStepper(0)),
+        // triangle button down
+        0x54 => Some(RobotCommand::SelectStepper(1)),
+        // circle button down
+        0x43 => Some(RobotCommand::SelectStepper(2)),
+        // cross button down
+        0x58 => Some(RobotCommand::SelectStepper(3)),
         // Start button down
-        robot_command.replace(RobotCommand::StartMove);
-    } else if signal == 0x59 {
+        0x57 => Some(RobotCommand::StartMove),
         // Select button down
-        robot_command.replace(RobotCommand::AllMode);
-    } else if signal == 0x60 {
+        0x59 => Some(RobotCommand::AllMode),
         // L1 button down
-        robot_command.replace(RobotCommand::AddSteps(1));
-    } else if signal == 0x61 {
+        0x60 => Some(RobotCommand::AddSteps(1)),
         // L2 button down
-        robot_command.replace(RobotCommand::ChangeDirection(false));
-    } else if signal == 0x62 {
+        0x61 => Some(RobotCommand::ChangeDirection(false)),
         // R1 button down
-        robot_command.replace(RobotCommand::AddSteps(10));
-    } else if signal == 0x65 {
+        0x62 => Some(RobotCommand::AddSteps(10)),
         // R2 button down
-        robot_command.replace(RobotCommand::ChangeDirection(true));
-    }
-
+        0x65 => Some(RobotCommand::ChangeDirection(true)),
+        _ => None,
+    };
     robot_command
 }
 

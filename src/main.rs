@@ -79,49 +79,6 @@ mod app {
         robot: robot::Robot,
     }
 
-    fn u32_to_bytes(u: u32) -> [u8; 4] {
-        let b0 = (u >> 24) as u8;
-        let b1 = (u >> 16) as u8;
-        let b2 = (u >> 8) as u8;
-        let b3 = u as u8;
-        [b0, b1, b2, b3]
-    }
-
-    fn from_state(slave_addr: u8, data: u32) -> [u8; 8] {
-        const WRITE: u8 = 0b10000000;
-        const SYNC_AND_RESERVED: u8 = 0b00000101;
-        let reg_addr_rw = 0x22 as u8 | WRITE; // VACTUAL addr
-        let [b0, b1, b2, b3] = u32_to_bytes(data);
-        let mut bytes = [
-            SYNC_AND_RESERVED,
-            slave_addr,
-            reg_addr_rw,
-            b0,
-            b1,
-            b2,
-            b3,
-            0u8,
-        ];
-        let crc_ix = bytes.len() - 1;
-        bytes[crc_ix] = crc(&bytes[..crc_ix]);
-        bytes
-    }
-
-    fn crc(data: &[u8]) -> u8 {
-        let mut crc = 0u8;
-        for mut byte in data.iter().cloned() {
-            for _ in 0..8 {
-                if ((crc >> 7) ^ (byte & 0x01)) != 0 {
-                    crc = (crc << 1) ^ 0x07;
-                } else {
-                    crc = crc << 1;
-                }
-                byte = byte >> 1;
-            }
-        }
-        crc
-    }
-
     #[init]
     fn init(cx: init::Context) -> (Shared, Local) {
         defmt::info!("init");
@@ -233,11 +190,13 @@ mod app {
         );
         let mut timer_6: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM6, SOFT_CLOCK_FREQ> =
             tim6.counter();
-        timer_6.start(20.micros()).unwrap(); // some nonimportant timer start time
+        timer_6.start(18.micros()).unwrap(); // some nonimportant timer start time
         timer_6.listen(Event::Update);
 
-        let data_to_write = from_state(0u8, 3000);
-        let software_serial = soft_serial::SoftSerial::new(X_MOTOR_UART_o, timer_6, data_to_write);
+        let (mut soft_serial_sender, soft_serial_receiver) =
+            make_channel!(soft_serial::TMC2209SoftSerialCommands, CHANNEL_CAPACITY);
+        let software_serial =
+            soft_serial::SoftSerial::new(1, x_stepper_uart_pin, timer_6, soft_serial_receiver);
 
         let (mut ps3_bytes_sender, ps3_bytes_receiver) = make_channel!(u8, PS3_CHANNEL_CAPACITY);
         let (mut ps3_events_sender, ps3_events_receiver) =
@@ -266,6 +225,7 @@ mod app {
             stepper_4_sender,
             robot_commands_receiver,
             display_sender.clone(),
+            soft_serial_sender,
         );
 
         // display_task_writer::spawn().unwrap();
@@ -366,25 +326,25 @@ mod app {
         }
     }
 
-    //     #[task(binds = TIM2, priority = 10, local = [ stepper_1 ])]
-    //     fn delay_task_1(cx: delay_task_1::Context) {
-    //         cx.local.stepper_1.work();
-    //     }
+    #[task(binds = TIM2, priority = 10, local = [ stepper_1 ])]
+    fn delay_task_1(cx: delay_task_1::Context) {
+        cx.local.stepper_1.work();
+    }
 
-    //     #[task(binds = TIM3, priority = 10, local = [ stepper_2 ])]
-    //     fn delay_task_2(cx: delay_task_2::Context) {
-    //         cx.local.stepper_2.work();
-    //     }
+    #[task(binds = TIM3, priority = 10, local = [ stepper_2 ])]
+    fn delay_task_2(cx: delay_task_2::Context) {
+        cx.local.stepper_2.work();
+    }
 
-    //     #[task(binds = TIM4, priority = 10, local = [ stepper_3 ])]
-    //     fn delay_task_3(cx: delay_task_3::Context) {
-    //         cx.local.stepper_3.work();
-    //     }
+    #[task(binds = TIM4, priority = 10, local = [ stepper_3 ])]
+    fn delay_task_3(cx: delay_task_3::Context) {
+        cx.local.stepper_3.work();
+    }
 
-    // #[task(binds = TIM5, priority = 10, local = [ stepper_4 ])]
-    // fn delay_task_4(cx: delay_task_4::Context) {
-    //     cx.local.stepper_4.work();
-    // }
+    #[task(binds = TIM5, priority = 10, local = [ stepper_4 ])]
+    fn delay_task_4(cx: delay_task_4::Context) {
+        cx.local.stepper_4.work();
+    }
 
     #[task(binds = TIM6, priority = 10, local = [ software_serial ])]
     fn delay_task_5(cx: delay_task_5::Context) {
