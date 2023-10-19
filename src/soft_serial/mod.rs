@@ -4,6 +4,22 @@ use fugit::{ExtU32, TimerDurationU32};
 use rtic_sync::channel::*;
 use stm32f1xx_hal::timer::{Counter, Event, Instance};
 
+trait Tmc2209Request {
+    fn bytes(&self) -> &[u8];
+}
+
+impl Tmc2209Request for tmc2209::WriteRequest {
+    fn bytes(&self) -> &[u8] {
+        self.bytes()
+    }
+}
+
+impl Tmc2209Request for tmc2209::ReadRequest {
+    fn bytes(&self) -> &[u8] {
+        self.bytes()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum TMC2209SoftSerialCommands {
     Write(tmc2209::WriteRequest),
@@ -26,6 +42,7 @@ pub struct SoftSerial<T, Tim, const TIMER_CLOCK_FREQ: u32> {
     bit_index: u8,
     byte_index: u8,
     data_to_write: Option<tmc2209::WriteRequest>,
+    data_to_read: Option<tmc2209::ReadRequest>,
     byte_sending_state: ByteSendingState,
 }
 
@@ -56,6 +73,7 @@ impl<T: OutputPin, Tim: Instance, const TIMER_CLOCK_FREQ: u32>
             bit_index: 0,
             byte_index: 0,
             data_to_write: None,
+            data_to_read: None,
             byte_sending_state: ByteSendingState::Start,
         }
     }
@@ -80,17 +98,20 @@ impl<T: OutputPin, Tim: Instance, const TIMER_CLOCK_FREQ: u32>
             }
         }
 
-        match self.data_to_write {
-            None => self
-                .timer
+        if let Some(w_data) = self.data_to_write {
+            self.sending_logic(&w_data);
+            self.timer
+                .start(Self::BIT_SEND_MICROS_DUR.micros())
+                .unwrap()
+        } else if let Some(r_data) = self.data_to_read {
+            self.sending_logic(&r_data);
+            self.timer
+                .start(Self::BIT_SEND_MICROS_DUR.micros())
+                .unwrap()
+        } else {
+            self.timer
                 .start(Self::AWAITING_MICROS_DUR.micros())
-                .unwrap(),
-            Some(wr_data) => {
-                self.sending_logic(wr_data);
-                self.timer
-                    .start(Self::BIT_SEND_MICROS_DUR.micros())
-                    .unwrap()
-            }
+                .unwrap();
         }
     }
 
@@ -104,14 +125,16 @@ impl<T: OutputPin, Tim: Instance, const TIMER_CLOCK_FREQ: u32>
         match command {
             TMC2209SoftSerialCommands::Write(wr_req) => {
                 self.data_to_write = Some(wr_req);
+                self.data_to_read = None;
             }
-            _ => {
-                todo!();
+            TMC2209SoftSerialCommands::Read(r_req) => {
+                self.data_to_read = Some(r_req);
+                self.data_to_write = None;
             }
         }
     }
 
-    fn sending_logic(&mut self, wr_data: tmc2209::WriteRequest) {
+    fn sending_logic(&mut self, request: &dyn Tmc2209Request) {
         match self.byte_sending_state {
             ByteSendingState::Start => {
                 self.byte_sending_state = ByteSendingState::Data;
@@ -119,7 +142,7 @@ impl<T: OutputPin, Tim: Instance, const TIMER_CLOCK_FREQ: u32>
             }
 
             ByteSendingState::Data => {
-                let current_byte: &u8 = wr_data.bytes().get(self.byte_index as usize).unwrap();
+                let current_byte: &u8 = request.bytes().get(self.byte_index as usize).unwrap();
                 let bit_to_send = Self::bit_value(*current_byte, self.bit_index);
                 self.bit_index += 1;
                 if self.bit_index > 7 {
@@ -137,7 +160,7 @@ impl<T: OutputPin, Tim: Instance, const TIMER_CLOCK_FREQ: u32>
                 self.byte_sending_state = ByteSendingState::Start;
                 self.byte_index += 1;
                 self.pin.set_high().ok();
-                if self.byte_index as usize == wr_data.bytes().len() {
+                if self.byte_index as usize == request.bytes().len() {
                     self.data_to_write = None;
                 }
             }
