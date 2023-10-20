@@ -74,6 +74,7 @@ mod app {
         ps3_reader: ps3::Ps3Reader,
         ps3_event_parser: ps3::Ps3EventParser,
         robot: robot::Robot,
+        cr: stm32f1xx_hal::gpio::Cr<'C', true>,
     }
 
     #[init]
@@ -254,6 +255,7 @@ mod app {
                 ps3_reader,
                 ps3_event_parser,
                 robot,
+                cr: gpioc.crh,
             },
         )
     }
@@ -281,7 +283,7 @@ mod app {
         }
     }
 
-    #[task( priority = 5, local = [  robot  ])]
+    #[task( priority = 5, local = [  robot])]
     async fn robot_task(mut cx: robot_task::Context) {
         loop {
             cx.local.robot.work().await;
@@ -348,9 +350,9 @@ mod app {
         cx.local.stepper_4.work();
     }
 
-    #[task(binds = TIM6, priority = 10, local = [ software_serial ])]
+    #[task(binds = TIM6, priority = 10, local = [ software_serial, cr ])]
     fn delay_task_5(cx: delay_task_5::Context) {
-        cx.local.software_serial.work();
+        cx.local.software_serial.work(cx.local.cr);
     }
 
     use core::fmt::Write;

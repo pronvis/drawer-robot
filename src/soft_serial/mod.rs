@@ -50,9 +50,10 @@ where
     data_to_read: Option<tmc2209::ReadRequest>,
     byte_sending_state: ByteSendingState,
     reading: bool,
+    reading_index: u32,
     pin: Pin<pinC, pinN, Dynamic>,
-    //TODO: how to store CR without 'static???
-    cr: &'static mut <Pin<pinC, pinN, Dynamic> as HL>::Cr,
+    reading_data: [u8; 8],
+    reading_data_cur: u8,
 }
 
 impl<const pinC: char, const pinN: u8, Tim: Instance, const TIMER_CLOCK_FREQ: u32>
@@ -61,6 +62,7 @@ where
     Pin<pinC, pinN, Dynamic>: HL,
 {
     const BIT_SEND_MICROS_DUR: u32 = 18;
+    const READING_BIT_SEND_MICROS_DUR: u32 = 50;
     //TODO: maybe should be smaller when processing g-code. But for PS3 controller it is fine for
     //now.
     const AWAITING_MICROS_DUR: u32 = 500;
@@ -70,14 +72,14 @@ where
         mut pin: Pin<pinC, pinN, Dynamic>,
         timer: Counter<Tim, TIMER_CLOCK_FREQ>,
         commands_channel: Receiver<'static, TMC2209SoftSerialCommands, CHANNEL_CAPACITY>,
-        cr: &'static mut <Pin<pinC, pinN, Dynamic> as HL>::Cr,
+        cr: &mut <Pin<pinC, pinN, Dynamic> as HL>::Cr,
     ) -> Self {
         let timer_dur: TimerDurationU32<TIMER_CLOCK_FREQ> = Self::BIT_SEND_MICROS_DUR.micros();
         let bit_send_micros = timer_dur.to_micros();
         assert!(bit_send_micros < 330, "bit send duration > 330. experimentally found that 330 is the maximum which TMC2209 can understand");
 
         pin.make_push_pull_output(cr);
-        pin.set_high().ok();
+        pin.set_high().ok().unwrap();
 
         Self {
             index,
@@ -89,15 +91,17 @@ where
             data_to_write: None,
             data_to_read: None,
             byte_sending_state: ByteSendingState::Start,
+            reading_index: 0,
             reading: false,
-            cr,
+            reading_data: [0; 8],
+            reading_data_cur: 0,
         }
     }
 
     /// Receive message from channel and send it via UART.
     /// If new message comes when in process of sending previous one,
     /// then stop sending previous and start last one.
-    pub fn work(&mut self) {
+    pub fn work(&mut self, cr: &mut <Pin<pinC, pinN, Dynamic> as HL>::Cr) {
         self.timer.clear_interrupt(Event::Update);
 
         match self.commands_channel.try_recv() {
@@ -110,7 +114,7 @@ where
 
             Ok(new_command) => {
                 self.reset_state();
-                self.handle_command(new_command);
+                self.handle_command(new_command, cr);
             }
         }
 
@@ -118,18 +122,21 @@ where
             self.sending_logic(&w_data);
             self.timer
                 .start(Self::BIT_SEND_MICROS_DUR.micros())
-                .unwrap()
+                .unwrap();
         } else if let Some(r_data) = self.data_to_read {
             self.sending_logic(&r_data);
             self.timer
                 .start(Self::BIT_SEND_MICROS_DUR.micros())
-                .unwrap()
+                .unwrap();
+            if self.reading {
+                self.pin.make_pull_up_input(cr);
+            }
         } else {
             if self.reading {
                 self.reading_response();
                 self.timer
-                    .start(Self::BIT_SEND_MICROS_DUR.micros())
-                    .unwrap()
+                    .start(Self::READING_BIT_SEND_MICROS_DUR.micros())
+                    .unwrap();
             } else {
                 self.timer
                     .start(Self::AWAITING_MICROS_DUR.micros())
@@ -144,14 +151,21 @@ where
         self.data_to_write = None;
     }
 
-    fn handle_command(&mut self, command: TMC2209SoftSerialCommands) {
+    fn handle_command(
+        &mut self,
+        command: TMC2209SoftSerialCommands,
+        cr: &mut <Pin<pinC, pinN, Dynamic> as HL>::Cr,
+    ) {
         match command {
             TMC2209SoftSerialCommands::Write(wr_req) => {
                 self.data_to_write = Some(wr_req);
+                self.pin.make_push_pull_output(cr);
                 self.data_to_read = None;
             }
             TMC2209SoftSerialCommands::Read(r_req) => {
                 self.data_to_read = Some(r_req);
+                self.pin.make_push_pull_output(cr);
+                self.reading_index = 0;
                 self.data_to_write = None;
             }
         }
@@ -195,10 +209,42 @@ where
     }
 
     fn reading_response(&mut self) {
-        todo!();
+        let bit_value = self.pin.is_high().ok().unwrap();
+        Self::change_byte(
+            &mut self.reading_data_cur,
+            ((self.reading_index) % 8) as u8,
+            bit_value,
+        );
+        defmt::debug!(
+            "{} bit value: {}, and current byte: {}",
+            self.reading_index,
+            bit_value,
+            self.reading_data_cur
+        );
+        self.reading_index += 1;
+
+        if self.reading_index % 8 == 0 {
+            let byte_index = (self.reading_index / 8 - 1) as usize;
+            self.reading_data[byte_index] = self.reading_data_cur;
+            self.reading_data_cur = 0;
+        }
+
+        if self.reading_index == 64 {
+            self.reading = false;
+            defmt::debug!("read data: {}", self.reading_data);
+            self.reading_data = [0; 8];
+            self.reading_data_cur = 0;
+        }
     }
 
     fn bit_value(byte: u8, index: u8) -> bool {
         (byte >> index & 1) == 1
+    }
+
+    fn change_byte(byte: &mut u8, index: u8, data: bool) {
+        if data {
+            let mask = 1 << index;
+            *byte = *byte | mask;
+        }
     }
 }

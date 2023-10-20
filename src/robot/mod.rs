@@ -142,8 +142,10 @@ impl Robot {
             },
 
             RobotCommand::StartMove => {
-                let command = MyStepperCommands::StartMove;
-                self.send_command(command).await;
+                // let command = MyStepperCommands::StartMove;
+                let read_req = tmc2209::read_request::<tmc2209::reg::IFCNT>(0);
+                let send_res = self.software_serial_sender.send(crate::soft_serial::TMC2209SoftSerialCommands::Read(read_req)).await;
+                // self.send_command(command).await;
             }
 
             RobotCommand::AllMode => {
