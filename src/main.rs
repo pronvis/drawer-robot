@@ -65,11 +65,8 @@ mod app {
         stepper_2: MyStepper2,
         stepper_3: MyStepper3,
         stepper_4: MyStepper4,
-        software_serial: soft_serial::SoftSerial<
-            stm32f1xx_hal::gpio::gpioc::PC10<stm32f1xx_hal::gpio::Output>,
-            stm32f1xx_hal::pac::TIM6,
-            SOFT_CLOCK_FREQ,
-        >,
+        software_serial:
+            soft_serial::SoftSerial<'C', 10, stm32f1xx_hal::pac::TIM6, SOFT_CLOCK_FREQ>,
         display_receiver: Receiver<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
         display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
         display: OledDisplay,
@@ -103,7 +100,7 @@ mod app {
             .freeze(&mut flash.acr);
 
         if !clocks.usbclk_valid() {
-            panic!("Clock parameter values are wrong!");
+            panic!("Clock parameter values is wrong!");
         }
 
         let mut gpioa: stm32f1xx_hal::gpio::gpioa::Parts = cx.device.GPIOA.split();
@@ -112,7 +109,7 @@ mod app {
         let mut gpiod: stm32f1xx_hal::gpio::gpiod::Parts = cx.device.GPIOD.split();
         let mut afio = cx.device.AFIO.constrain();
 
-        let mut x_stepper_uart_pin = gpioc.pc10.into_push_pull_output(&mut gpioc.crh);
+        let mut x_stepper_uart_pin = gpioc.pc10.into_dynamic(&mut gpioc.crh);
         let mut y_stepper_uart_pin = gpioc.pc11.into_push_pull_output(&mut gpioc.crh);
         let mut z_stepper_uart_pin = gpioc.pc12.into_push_pull_output(&mut gpioc.crh);
         let mut e_stepper_uart_pin = gpiod.pd2.into_push_pull_output(&mut gpiod.crl);
@@ -195,8 +192,13 @@ mod app {
 
         let (mut soft_serial_sender, soft_serial_receiver) =
             make_channel!(soft_serial::TMC2209SoftSerialCommands, CHANNEL_CAPACITY);
-        let software_serial =
-            soft_serial::SoftSerial::new(1, x_stepper_uart_pin, timer_6, soft_serial_receiver);
+        let software_serial = soft_serial::SoftSerial::new(
+            1,
+            x_stepper_uart_pin,
+            timer_6,
+            soft_serial_receiver,
+            &mut gpioc.crh,
+        );
 
         let (mut ps3_bytes_sender, ps3_bytes_receiver) = make_channel!(u8, PS3_CHANNEL_CAPACITY);
         let (mut ps3_events_sender, ps3_events_receiver) =

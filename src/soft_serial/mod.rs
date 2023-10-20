@@ -1,7 +1,10 @@
 use crate::CHANNEL_CAPACITY;
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::v2::{InputPin, OutputPin};
 use fugit::{ExtU32, TimerDurationU32};
 use rtic_sync::channel::*;
+use stm32f1xx_hal::gpio::*;
+use stm32f1xx_hal::gpio::{Cr, Dynamic, Pin, HL};
+use stm32f1xx_hal::prelude::*;
 use stm32f1xx_hal::timer::{Counter, Event, Instance};
 
 trait Tmc2209Request {
@@ -32,9 +35,11 @@ enum ByteSendingState {
     Stop,
 }
 
-pub struct SoftSerial<T, Tim, const TIMER_CLOCK_FREQ: u32> {
+pub struct SoftSerial<const pinC: char, const pinN: u8, Tim, const TIMER_CLOCK_FREQ: u32>
+where
+    Pin<pinC, pinN, Dynamic>: HL,
+{
     index: u8, // need for logging
-    pin: T,
     timer: Counter<Tim, TIMER_CLOCK_FREQ>,
 
     commands_channel: Receiver<'static, TMC2209SoftSerialCommands, CHANNEL_CAPACITY>,
@@ -44,10 +49,16 @@ pub struct SoftSerial<T, Tim, const TIMER_CLOCK_FREQ: u32> {
     data_to_write: Option<tmc2209::WriteRequest>,
     data_to_read: Option<tmc2209::ReadRequest>,
     byte_sending_state: ByteSendingState,
+    reading: bool,
+    pin: Pin<pinC, pinN, Dynamic>,
+    //TODO: how to store CR without 'static???
+    cr: &'static mut <Pin<pinC, pinN, Dynamic> as HL>::Cr,
 }
 
-impl<T: OutputPin, Tim: Instance, const TIMER_CLOCK_FREQ: u32>
-    SoftSerial<T, Tim, TIMER_CLOCK_FREQ>
+impl<const pinC: char, const pinN: u8, Tim: Instance, const TIMER_CLOCK_FREQ: u32>
+    SoftSerial<pinC, pinN, Tim, TIMER_CLOCK_FREQ>
+where
+    Pin<pinC, pinN, Dynamic>: HL,
 {
     const BIT_SEND_MICROS_DUR: u32 = 18;
     //TODO: maybe should be smaller when processing g-code. But for PS3 controller it is fine for
@@ -56,15 +67,18 @@ impl<T: OutputPin, Tim: Instance, const TIMER_CLOCK_FREQ: u32>
 
     pub fn new(
         index: u8,
-        mut pin: T,
+        mut pin: Pin<pinC, pinN, Dynamic>,
         timer: Counter<Tim, TIMER_CLOCK_FREQ>,
         commands_channel: Receiver<'static, TMC2209SoftSerialCommands, CHANNEL_CAPACITY>,
+        cr: &'static mut <Pin<pinC, pinN, Dynamic> as HL>::Cr,
     ) -> Self {
         let timer_dur: TimerDurationU32<TIMER_CLOCK_FREQ> = Self::BIT_SEND_MICROS_DUR.micros();
         let bit_send_micros = timer_dur.to_micros();
         assert!(bit_send_micros < 330, "bit send duration > 330. experimentally found that 330 is the maximum which TMC2209 can understand");
 
+        pin.make_push_pull_output(cr);
         pin.set_high().ok();
+
         Self {
             index,
             pin,
@@ -75,6 +89,8 @@ impl<T: OutputPin, Tim: Instance, const TIMER_CLOCK_FREQ: u32>
             data_to_write: None,
             data_to_read: None,
             byte_sending_state: ByteSendingState::Start,
+            reading: false,
+            cr,
         }
     }
 
@@ -109,9 +125,16 @@ impl<T: OutputPin, Tim: Instance, const TIMER_CLOCK_FREQ: u32>
                 .start(Self::BIT_SEND_MICROS_DUR.micros())
                 .unwrap()
         } else {
-            self.timer
-                .start(Self::AWAITING_MICROS_DUR.micros())
-                .unwrap();
+            if self.reading {
+                self.reading_response();
+                self.timer
+                    .start(Self::BIT_SEND_MICROS_DUR.micros())
+                    .unwrap()
+            } else {
+                self.timer
+                    .start(Self::AWAITING_MICROS_DUR.micros())
+                    .unwrap();
+            }
         }
     }
 
@@ -162,9 +185,17 @@ impl<T: OutputPin, Tim: Instance, const TIMER_CLOCK_FREQ: u32>
                 self.pin.set_high().ok();
                 if self.byte_index as usize == request.bytes().len() {
                     self.data_to_write = None;
+                    if self.data_to_read.is_some() {
+                        self.data_to_read = None;
+                        self.reading = true;
+                    }
                 }
             }
         };
+    }
+
+    fn reading_response(&mut self) {
+        todo!();
     }
 
     fn bit_value(byte: u8, index: u8) -> bool {
