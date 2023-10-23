@@ -107,8 +107,16 @@ impl Robot {
             },
 
             RobotCommand::AddSteps(steps_amount) => {
+                //up button
+                if steps_amount == 100 {
+                let write_req = tmc2209::write_request(0, tmc2209::reg::GCONF(0x00000041));
+                let _ = self.software_serial_sender.send(crate::soft_serial::TMC2209SoftSerialCommands::Write(write_req)).await;
+
+                } else {
+
                 let command = MyStepperCommands::AddSteps(steps_amount);
                 self.send_command(command).await;
+                }
             },
 
             RobotCommand::ReduceSpeed => {
@@ -143,7 +151,7 @@ impl Robot {
 
             RobotCommand::StartMove => {
                 // let command = MyStepperCommands::StartMove;
-                let read_req = tmc2209::read_request::<tmc2209::reg::IFCNT>(0);
+                let read_req = tmc2209::read_request::<tmc2209::reg::GCONF>(0);
                 let send_res = self.software_serial_sender.send(crate::soft_serial::TMC2209SoftSerialCommands::Read(read_req)).await;
                 // self.send_command(command).await;
             }

@@ -4,16 +4,16 @@ use <gears.scad>
 //---------------------------------------------------------------
 //DISPLAY OPTIONS
 //---------------------------------------------------------------
-split=0; // disasemble gearbox
+split=1; // disasemble gearbox
 //---------------------------------------------------------------
-show_carrier_top=0;        // display gearbox carrier top part with sun gear
-show_carrier_bottom=0;     // display gearbox carrier bottom part 
-show_planets=0;            // display gearbox planets
-show_ring_gear=0;          // display ring gear
+show_carrier_top=1;        // display gearbox carrier top part with sun gear
+show_carrier_bottom=1;     // display gearbox carrier bottom part 
+show_planets=1;            // display gearbox planets
+show_ring_gear=1;          // display ring gear
 show_motor_gear=1;         // display motor gear
-show_motor_mount=0;        // display motor mounting base
-show_distancer=0;          // display distancer
-show_nema=0;               // display nema07
+show_motor_mount=1;        // display motor mounting base
+show_distancer=1;          // display distancer
+show_nema=1;               // display nema07
 //---------------------------------------------------------------
 //PARAMETERS
 //---------------------------------------------------------------
