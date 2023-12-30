@@ -1,4 +1,5 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
+# to get probe id: `probe-run --list-probes`
 # runner = "probe-run --probe C296C294070132124647524B4E00 --chip STM32F103C8"
 runner = "probe-run --probe 15003200090000524A51544E --chip STM32F103RE"
 rustflags = [
