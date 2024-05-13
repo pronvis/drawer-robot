@@ -13,8 +13,13 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 )]
 mod app {
 
+    use core::borrow::BorrowMut;
+    use core::ops::Not;
+
     use drawer_robot::*;
+    use embedded_hal::digital::v2::{InputPin, OutputPin};
     use rtic_monotonics::systick::*;
+    use stm32f1xx_hal::gpio::{Cr, Dynamic, Pin, HL};
     use stm32f1xx_hal::{
         gpio::PinState,
         pac,
@@ -25,18 +30,25 @@ mod app {
         timer::{Counter, Event},
     };
 
-    const TIMER_CLOCK_FREQ: u32 = 72_000_000; // step = 1000 nanos
+    const TIMER_1_CLOCK_FREQ: u32 = 72_00; // step = 10 millis
+    const TIMER_2_CLOCK_FREQ: u32 = 72_000_000; // step = 1 micros
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
+    const BIT_SEND_MICROS_DUR: u32 = 18;
 
     #[shared]
     struct Shared {
-        nanos_between_steps: u32,
+        write_req: Option<tmc2209::WriteRequest>,
+        timer_2: Counter<stm32f1xx_hal::pac::TIM2, TIMER_2_CLOCK_FREQ>,
     }
+
+    type X_UART_PIN = Pin<'C', 10, Dynamic>;
 
     #[local]
     struct Local {
-        step_pin: StepPin,
-        timer_1: Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>,
+        speed: u32,
+        x_stepper_uart_pin: X_UART_PIN,
+        timer_1: Counter<stm32f1xx_hal::pac::TIM1, TIMER_1_CLOCK_FREQ>,
+        cr: <X_UART_PIN as HL>::Cr,
     }
 
     #[init]
@@ -72,24 +84,45 @@ mod app {
 
         let mut en = gpioc.pc7.into_push_pull_output(&mut gpioc.crl);
         en.set_low();
+        let x_stepper_uart_pin = gpioc.pc10.into_dynamic(&mut gpioc.crh);
 
-        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>::new(
-            cx.device.TIM1,
-            &clocks,
-        );
-        let mut timer_1: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ> =
-            timer.counter();
-        timer_1.start(2000.nanos()).unwrap();
+        let timer =
+            stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_1_CLOCK_FREQ>::new(
+                cx.device.TIM1,
+                &clocks,
+            );
+        let mut timer_1: stm32f1xx_hal::timer::Counter<
+            stm32f1xx_hal::pac::TIM1,
+            TIMER_1_CLOCK_FREQ,
+        > = timer.counter();
+        timer_1.start(1.secs()).unwrap();
         timer_1.listen(Event::Update);
+
+        let timer =
+            stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM2, TIMER_2_CLOCK_FREQ>::new(
+                cx.device.TIM2,
+                &clocks,
+            );
+        let mut timer_2: stm32f1xx_hal::timer::Counter<
+            stm32f1xx_hal::pac::TIM2,
+            TIMER_2_CLOCK_FREQ,
+        > = timer.counter();
+        timer_2.listen(Event::Update);
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
 
         (
             Shared {
-                nanos_between_steps: 710_000,
+                timer_2,
+                write_req: None,
             },
-            Local { step_pin, timer_1 },
+            Local {
+                timer_1,
+                x_stepper_uart_pin,
+                cr: gpioc.crh,
+                speed: 100,
+            },
         )
     }
 
@@ -103,21 +136,96 @@ mod app {
         }
     }
 
-    #[task(binds = TIM1_UP, priority = 3, local = [  timer_1, step_pin, is_step: bool = true], shared = [&nanos_between_steps])]
-    fn delay_task_1(cx: delay_task_1::Context) {
-        if *cx.local.is_step {
-            cx.local.step_pin.set_low();
-            *cx.local.is_step = false;
-            cx.local
-                .timer_1
-                .start(cx.shared.nanos_between_steps.nanos())
-                .unwrap();
-        } else {
-            cx.local.step_pin.set_high();
-            *cx.local.is_step = true;
-            cx.local.timer_1.start(1900.nanos()).unwrap();
+    #[task(binds = TIM1_UP, priority = 3, local = [timer_1, speed, direction: bool = true], shared = [write_req, timer_2])]
+    fn send_command_timer(mut cx: send_command_timer::Context) {
+        defmt::debug!("in tim1");
+        let speed_step: i32 = {
+            if *cx.local.direction {
+                100
+            } else {
+                -100
+            }
+        };
+
+        *cx.local.speed = (*cx.local.speed as i32 + speed_step) as u32;
+        if *cx.local.speed >= 1200 || *cx.local.speed <= 100 {
+            cx.local.direction.not();
         }
 
+        cx.shared.write_req.lock(|write_req| {
+            *write_req = Some(tmc2209::write_request(
+                0,
+                tmc2209::reg::VACTUAL(*cx.local.speed),
+            ))
+        });
+
+        cx.shared.timer_2.lock(|timer_2| {
+            timer_2.start(BIT_SEND_MICROS_DUR.micros()).unwrap();
+        });
+
+        cx.local.timer_1.start(2.secs()).unwrap();
         cx.local.timer_1.clear_interrupt(Event::Update);
     }
+
+    #[task(binds = TIM2, priority = 5, local = [x_stepper_uart_pin, cr, byte_index: usize = 0], shared = [write_req, timer_2])]
+    fn write_command_task(mut cx: write_command_task::Context) {
+        defmt::debug!("in tim2");
+        cx.shared.timer_2.lock(|timer_2| {
+            timer_2.unlisten(Event::Update);
+            timer_2.clear_interrupt(Event::Update);
+        });
+        // let current_byte = write_req.bytes().get(cx.local.byte_index).unwrap();
+
+        // send_stepper_command(
+        //     &mut cx.local.x_stepper_uart_pin,
+        //     &mut cx.local.cr,
+        //     write_req,
+        // );
+    }
+
+    // fn send_stepper_command(
+    //     pin: &mut X_UART_PIN,
+    //     cr: &mut <X_UART_PIN as HL>::Cr,
+    //     command: tmc2209::WriteRequest,
+    // ) {
+    //     pin.make_push_pull_output(cr);
+    //     pin.set_low().ok();
+    // }
+
+    // fn sending_logic(&mut self, request: &dyn Tmc2209Request) {
+    //     match self.byte_sending_state {
+    //         ByteSendingState::Start => {
+    //             self.byte_sending_state = ByteSendingState::Data;
+    //             self.pin.set_low().ok();
+    //         }
+
+    //         ByteSendingState::Data => {
+    //             let current_byte: &u8 = request.bytes().get(self.byte_index as usize).unwrap();
+    //             let bit_to_send = Self::bit_value(*current_byte, self.bit_index);
+    //             self.bit_index += 1;
+    //             if self.bit_index > 7 {
+    //                 self.byte_sending_state = ByteSendingState::Stop;
+    //                 self.bit_index = 0;
+    //             }
+    //             if bit_to_send {
+    //                 self.pin.set_high().ok();
+    //             } else {
+    //                 self.pin.set_low().ok();
+    //             }
+    //         }
+
+    //         ByteSendingState::Stop => {
+    //             self.byte_sending_state = ByteSendingState::Start;
+    //             self.byte_index += 1;
+    //             self.pin.set_high().ok();
+    //             if self.byte_index as usize == request.bytes().len() {
+    //                 self.data_to_write = None;
+    //                 if self.data_to_read.is_some() {
+    //                     self.data_to_read = None;
+    //                     self.reading = true;
+    //                 }
+    //             }
+    //         }
+    //     };
+    // }
 }
