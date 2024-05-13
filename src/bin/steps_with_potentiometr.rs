@@ -126,7 +126,7 @@ mod app {
         defmt::debug!("idle");
 
         loop {
-            rtic::export::nop();
+            cortex_m::asm::nop();
         }
     }
 

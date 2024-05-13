@@ -15,8 +15,7 @@ rtic = { version = "2.0.0-alpha.1", features = [ "thumbv7-backend" ] }
 rtic-sync = "1.0.1"
 # stm32f1xx-hal = { version = "0.10.0", features = ["rt", "stm32f103", "medium", "stm32-usbd"] }
 stm32f1xx-hal = { version = "0.10.0", features = ["rt", "stm32f103", "high", "stm32-usbd"] }
-rtic-monotonics = { version = "1.0.0", features = [ "cortex-m-systick" ]}
-stepper = "0.6.0"
+rtic-monotonics = { version = "= 1.5.0", features = [ "cortex-m-systick" ]}
 ramp-maker = "0.2.0"
 embedded-hal = "0.2.7"
 ssd1306 = "0.8.0"

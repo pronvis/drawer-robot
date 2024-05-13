@@ -18,10 +18,6 @@ mod app {
     use heapless::pool::singleton::Box;
     use rtic_monotonics::systick::*;
     use rtic_sync::{channel::*, make_channel};
-    use stepper::{
-        compat, fugit::NanosDurationU32 as Nanoseconds, motion_control,
-        motion_control::SoftwareMotionControl, ramp_maker, Direction, Stepper,
-    };
     use stm32f1xx_hal::{
         gpio::PinState,
         pac,
@@ -141,7 +137,7 @@ mod app {
         defmt::debug!("idle");
 
         loop {
-            rtic::export::nop();
+            cortex_m::asm::nop();
         }
     }
 
