@@ -32,12 +32,11 @@ mod app {
     use fugit::{HertzU32 as Hertz, MicrosDurationU32, TimerDurationU32, TimerInstantU32};
 
     const TIMER_1_CLOCK_FREQ: u32 = 72_00; // tick = 138.89 micros
-    const TIMER_2_CLOCK_FREQ: u32 = 72_000_000; // tick = 2 micros
+    const TIMER_2_CLOCK_FREQ: u32 = 72_000_000; // tick = 13.89 nanos
     // const TIMER_2_CLOCK_FREQ: u32 = 500_000; // tick = 2 micros
     
     // in 1 second 72_000_000 ticks happens
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
-    const BIT_SEND_MICROS_DUR: u32 = 4;
     const BIT_SEND_NANOS_DUR: u32 = 28;
     const WRITE_REQ_BYTE_COUNT: usize = 8;
 
@@ -103,7 +102,7 @@ mod app {
             stm32f1xx_hal::pac::TIM1,
             TIMER_1_CLOCK_FREQ,
         > = timer.counter();
-        timer_1.start(1.secs()).unwrap();
+        timer_1.start(100.millis()).unwrap();
         timer_1.listen(Event::Update);
 
         let timer =
@@ -115,8 +114,6 @@ mod app {
             stm32f1xx_hal::pac::TIM2,
             TIMER_2_CLOCK_FREQ,
         > = timer.counter();
-        // defmt::debug!("timer2_ticks: {}", BIT_SEND_MICROS_DUR.micros::<1, TIMER_2_CLOCK_FREQ>().ticks());
-        // timer_2.start(BIT_SEND_MICROS_DUR.micros()).unwrap();
         defmt::debug!("timer2_ticks: {}", BIT_SEND_NANOS_DUR.nanos::<1, TIMER_2_CLOCK_FREQ>().ticks());
         timer_2.start(BIT_SEND_NANOS_DUR.nanos()).unwrap();
 
@@ -149,31 +146,25 @@ mod app {
 
     #[task(binds = TIM1_UP, priority = 3, local = [timer_1, speed, direction: bool = true], shared = [write_req, timer_2])]
     fn send_command_timer(mut cx: send_command_timer::Context) {
-        // let speed_step: i32 = {
-        //     if *cx.local.direction {
-        //         100
-        //     } else {
-        //         -100
-        //     }
-        // };
-
-        // *cx.local.speed = (*cx.local.speed as i32 + speed_step) as u32;
-        // if *cx.local.speed >= 1200 || *cx.local.speed <= 100 {
-        //     cx.local.direction.not();
-        // }
-
-        if *cx.local.direction {
-            *cx.local.speed = 8000;
-        } else {
-            *cx.local.speed = 100;
+        let speed_step: i32 = {
+            if *cx.local.direction {
+                100
+            } else {
+                -100
+            }
         };
-        *cx.local.direction = cx.local.direction.not();
+
+        *cx.local.speed = (*cx.local.speed as i32 + speed_step) as u32;
+        if *cx.local.speed >= 10000 || *cx.local.speed <= 100 {
+            *cx.local.direction = cx.local.direction.not();
+        }
 
         cx.shared.write_req.lock(|write_req| {
             if write_req.is_some() {
                 return;
             }
 
+            defmt::debug!("curr speed: {}", *cx.local.speed);
             *write_req = Some(tmc2209::write_request(
                 0,
                 tmc2209::reg::VACTUAL(*cx.local.speed),
@@ -184,7 +175,7 @@ mod app {
             });
         });
 
-        cx.local.timer_1.start(1.secs()).unwrap();
+        cx.local.timer_1.clear_interrupt(Event::Update);
     }
 
     #[task(binds = TIM2, priority = 5, local = [
@@ -213,7 +204,7 @@ mod app {
                 cx.local.x_stepper_uart_pin.make_push_pull_output(cx.local.cr);
                 cx.local.x_stepper_uart_pin.set_high();
 
-                defmt::debug!("bytes to send: {:?}", cx.local.bytes_to_send);
+                // defmt::debug!("bytes to send: {:?}", cx.local.bytes_to_send);
             });
         }
 
