@@ -32,11 +32,13 @@ mod app {
     use fugit::{HertzU32 as Hertz, MicrosDurationU32, TimerDurationU32, TimerInstantU32};
 
     const TIMER_1_CLOCK_FREQ: u32 = 72_00; // tick = 138.89 micros
-    const TIMER_2_CLOCK_FREQ: u32 = 100_000; // tick = 10 micros
+    const TIMER_2_CLOCK_FREQ: u32 = 72_000_000; // tick = 2 micros
+    // const TIMER_2_CLOCK_FREQ: u32 = 500_000; // tick = 2 micros
     
     // in 1 second 72_000_000 ticks happens
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
-    const BIT_SEND_MICROS_DUR: u32 = 20;
+    const BIT_SEND_MICROS_DUR: u32 = 4;
+    const BIT_SEND_NANOS_DUR: u32 = 28;
     const WRITE_REQ_BYTE_COUNT: usize = 8;
 
     #[shared]
@@ -101,7 +103,7 @@ mod app {
             stm32f1xx_hal::pac::TIM1,
             TIMER_1_CLOCK_FREQ,
         > = timer.counter();
-        timer_1.start(2.secs()).unwrap();
+        timer_1.start(1.secs()).unwrap();
         timer_1.listen(Event::Update);
 
         let timer =
@@ -113,8 +115,10 @@ mod app {
             stm32f1xx_hal::pac::TIM2,
             TIMER_2_CLOCK_FREQ,
         > = timer.counter();
-        defmt::debug!("timer2_ticks: {}", BIT_SEND_MICROS_DUR.micros::<1, TIMER_2_CLOCK_FREQ>().ticks());
-        timer_2.start(BIT_SEND_MICROS_DUR.micros()).unwrap();
+        // defmt::debug!("timer2_ticks: {}", BIT_SEND_MICROS_DUR.micros::<1, TIMER_2_CLOCK_FREQ>().ticks());
+        // timer_2.start(BIT_SEND_MICROS_DUR.micros()).unwrap();
+        defmt::debug!("timer2_ticks: {}", BIT_SEND_NANOS_DUR.nanos::<1, TIMER_2_CLOCK_FREQ>().ticks());
+        timer_2.start(BIT_SEND_NANOS_DUR.nanos()).unwrap();
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, MAIN_CLOCK_FREQ, systick_mono_token);
@@ -145,7 +149,6 @@ mod app {
 
     #[task(binds = TIM1_UP, priority = 3, local = [timer_1, speed, direction: bool = true], shared = [write_req, timer_2])]
     fn send_command_timer(mut cx: send_command_timer::Context) {
-        defmt::debug!("in tim1");
         // let speed_step: i32 = {
         //     if *cx.local.direction {
         //         100
@@ -160,10 +163,8 @@ mod app {
         // }
 
         if *cx.local.direction {
-            defmt::debug!("direction is true");
             *cx.local.speed = 8000;
         } else {
-            defmt::debug!("direction is false");
             *cx.local.speed = 100;
         };
         *cx.local.direction = cx.local.direction.not();
@@ -183,7 +184,7 @@ mod app {
             });
         });
 
-        cx.local.timer_1.start(2.secs()).unwrap();
+        cx.local.timer_1.start(1.secs()).unwrap();
     }
 
     #[task(binds = TIM2, priority = 5, local = [
