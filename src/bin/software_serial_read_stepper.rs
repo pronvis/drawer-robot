@@ -31,6 +31,7 @@ mod app {
     };
 
     const TIMER_1_CLOCK_FREQ: u32 = 72_00; // step = 10 millis
+    // const TIMER_2_CLOCK_FREQ: u32 = 115_200; 
     const TIMER_2_CLOCK_FREQ: u32 = 72_000_000; // step = 1 micros
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
     const BIT_SEND_MICROS_DUR: u32 = 18;
@@ -161,15 +162,14 @@ mod app {
             *write_req = Some(tmc2209::write_request(
                 0,
                 tmc2209::reg::VACTUAL(*cx.local.speed),
-            ))
-        });
+            ));
 
-        cx.shared.timer_2.lock(|timer_2| {
-            timer_2.listen(Event::Update);
+            cx.shared.timer_2.lock(|timer_2| {
+                timer_2.listen(Event::Update);
+            });
         });
 
         cx.local.timer_1.start(2.secs()).unwrap();
-        cx.local.timer_1.clear_interrupt(Event::Update);
     }
 
     #[task(binds = TIM2, priority = 5, local = [
@@ -201,16 +201,7 @@ mod app {
             });
         }
 
-        if !*cx.local.initialized {
-            cx.shared.timer_2.lock(|timer_2| {
-                timer_2.unlisten(Event::Update);
-                timer_2.clear_interrupt(Event::Update);
-            });
-            return;
-        }
-
-        if *cx.local.sending_byte_index == WRITE_REQ_BYTE_COUNT {
-            // this is how request sending should be ended
+        if !*cx.local.initialized || *cx.local.sending_byte_index == WRITE_REQ_BYTE_COUNT {
             *cx.local.initialized = false;
             cx.shared.timer_2.lock(|timer_2| {
                 timer_2.unlisten(Event::Update);
@@ -221,7 +212,7 @@ mod app {
 
         if *cx.local.tx_buffer == 0 {
             *cx.local.tx_buffer = (cx.local.bytes_to_send[*cx.local.sending_byte_index] as u16) << 1 | 0x200;
-            defmt::debug!("sending byte: {:b}", cx.local.tx_buffer);
+            // defmt::debug!("sending byte: {:b}", cx.local.tx_buffer);
             *cx.local.sending_byte_index += 1;
         }
 
@@ -238,6 +229,7 @@ mod app {
         *cx.local.tx_buffer >>= 1;
  
         cx.shared.timer_2.lock(|timer_2| {
+            // timer_2.start(BIT_SEND_MICROS_DUR.micros()).unwrap();
             timer_2.clear_interrupt(Event::Update);
         });
     }
