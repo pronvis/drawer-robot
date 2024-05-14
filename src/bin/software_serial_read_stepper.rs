@@ -34,6 +34,7 @@ mod app {
     const TIMER_2_CLOCK_FREQ: u32 = 72_000_000; // step = 1 micros
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
     const BIT_SEND_MICROS_DUR: u32 = 18;
+    const WRITE_REQ_BYTE_COUNT: usize = 8;
 
     #[shared]
     struct Shared {
@@ -107,7 +108,7 @@ mod app {
             stm32f1xx_hal::pac::TIM2,
             TIMER_2_CLOCK_FREQ,
         > = timer.counter();
-        timer_2.listen(Event::Update);
+        timer_2.start(BIT_SEND_MICROS_DUR.micros()).unwrap();
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
@@ -153,6 +154,10 @@ mod app {
         }
 
         cx.shared.write_req.lock(|write_req| {
+            if write_req.is_some() {
+                return;
+            }
+
             *write_req = Some(tmc2209::write_request(
                 0,
                 tmc2209::reg::VACTUAL(*cx.local.speed),
@@ -160,27 +165,81 @@ mod app {
         });
 
         cx.shared.timer_2.lock(|timer_2| {
-            timer_2.start(BIT_SEND_MICROS_DUR.micros()).unwrap();
+            timer_2.listen(Event::Update);
         });
 
         cx.local.timer_1.start(2.secs()).unwrap();
         cx.local.timer_1.clear_interrupt(Event::Update);
     }
 
-    #[task(binds = TIM2, priority = 5, local = [x_stepper_uart_pin, cr, byte_index: usize = 0], shared = [write_req, timer_2])]
+    #[task(binds = TIM2, priority = 5, local = [
+           x_stepper_uart_pin, 
+           cr, 
+           bytes_to_send: [u8; 8] = [0; 8], 
+           initialized: bool = false,
+           tx_buffer: u16 = 0,
+           sending_byte_index: usize = 0,
+    ], shared = [write_req, timer_2])]
     fn write_command_task(mut cx: write_command_task::Context) {
-        defmt::debug!("in tim2");
+        if !*cx.local.initialized {
+            cx.shared.write_req.lock(|write_req| {
+                if write_req.is_none() {
+                    defmt::debug!("Write request is None! Fail to initialize");
+                    return;
+                }
+
+                let write_req_unwrapped = write_req.take().unwrap();
+                for i in 0..WRITE_REQ_BYTE_COUNT {
+                    cx.local.bytes_to_send[i] = write_req_unwrapped.bytes()[i];
+                }
+                *cx.local.initialized = true;
+                *cx.local.tx_buffer = 0;
+                *cx.local.sending_byte_index = 0;
+                cx.local.x_stepper_uart_pin.make_push_pull_output(cx.local.cr);
+
+                defmt::debug!("bytes to send: {:?}", cx.local.bytes_to_send);
+            });
+        }
+
+        if !*cx.local.initialized {
+            cx.shared.timer_2.lock(|timer_2| {
+                timer_2.unlisten(Event::Update);
+                timer_2.clear_interrupt(Event::Update);
+            });
+            return;
+        }
+
+        if *cx.local.sending_byte_index == WRITE_REQ_BYTE_COUNT {
+            // this is how request sending should be ended
+            *cx.local.initialized = false;
+            cx.shared.timer_2.lock(|timer_2| {
+                timer_2.unlisten(Event::Update);
+                timer_2.clear_interrupt(Event::Update);
+            });
+            return;
+        }
+
+        if *cx.local.tx_buffer == 0 {
+            *cx.local.tx_buffer = (cx.local.bytes_to_send[*cx.local.sending_byte_index] as u16) << 1 | 0x200;
+            defmt::debug!("sending byte: {:b}", cx.local.tx_buffer);
+            *cx.local.sending_byte_index += 1;
+        }
+
+        if (*cx.local.tx_buffer & 1 == 1) {
+            // cx.local.x_stepper_uart_pin.set_high().ok();
+            if cx.local.x_stepper_uart_pin.set_high().is_err() {
+                defmt::debug!("fail to set pin to high");
+            }
+          } else {
+              if cx.local.x_stepper_uart_pin.set_low().is_err() {
+                defmt::debug!("fail to set pin to low");
+              }
+        }
+        *cx.local.tx_buffer >>= 1;
+ 
         cx.shared.timer_2.lock(|timer_2| {
-            timer_2.unlisten(Event::Update);
             timer_2.clear_interrupt(Event::Update);
         });
-        // let current_byte = write_req.bytes().get(cx.local.byte_index).unwrap();
-
-        // send_stepper_command(
-        //     &mut cx.local.x_stepper_uart_pin,
-        //     &mut cx.local.cr,
-        //     write_req,
-        // );
     }
 
     // fn send_stepper_command(
