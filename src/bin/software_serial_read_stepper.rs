@@ -29,12 +29,14 @@ mod app {
         timer::Timer,
         timer::{Counter, Event},
     };
+    use fugit::{HertzU32 as Hertz, MicrosDurationU32, TimerDurationU32, TimerInstantU32};
 
-    const TIMER_1_CLOCK_FREQ: u32 = 72_00; // step = 10 millis
-    // const TIMER_2_CLOCK_FREQ: u32 = 115_200; 
-    const TIMER_2_CLOCK_FREQ: u32 = 72_000_000; // step = 1 micros
-    const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
-    const BIT_SEND_MICROS_DUR: u32 = 18;
+    const TIMER_1_CLOCK_FREQ: u32 = 72_00; // tick = 138.89 micros
+    const TIMER_2_CLOCK_FREQ: u32 = 100_000; // tick = 10 micros
+    
+    // in 1 second 72_000_000 ticks happens
+    const MAIN_CLOCK_FREQ: u32 = 72_000_000;
+    const BIT_SEND_MICROS_DUR: u32 = 20;
     const WRITE_REQ_BYTE_COUNT: usize = 8;
 
     #[shared]
@@ -86,7 +88,9 @@ mod app {
 
         let mut en = gpioc.pc7.into_push_pull_output(&mut gpioc.crl);
         en.set_low();
-        let x_stepper_uart_pin = gpioc.pc10.into_dynamic(&mut gpioc.crh);
+        let mut x_stepper_uart_pin = gpioc.pc10.into_dynamic(&mut gpioc.crh);
+        x_stepper_uart_pin.make_push_pull_output(&mut gpioc.crh);
+        x_stepper_uart_pin.set_high().ok().unwrap();
 
         let timer =
             stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_1_CLOCK_FREQ>::new(
@@ -97,7 +101,7 @@ mod app {
             stm32f1xx_hal::pac::TIM1,
             TIMER_1_CLOCK_FREQ,
         > = timer.counter();
-        timer_1.start(1.secs()).unwrap();
+        timer_1.start(2.secs()).unwrap();
         timer_1.listen(Event::Update);
 
         let timer =
@@ -109,10 +113,11 @@ mod app {
             stm32f1xx_hal::pac::TIM2,
             TIMER_2_CLOCK_FREQ,
         > = timer.counter();
+        defmt::debug!("timer2_ticks: {}", BIT_SEND_MICROS_DUR.micros::<1, TIMER_2_CLOCK_FREQ>().ticks());
         timer_2.start(BIT_SEND_MICROS_DUR.micros()).unwrap();
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
-        Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
+        Systick::start(cx.core.SYST, MAIN_CLOCK_FREQ, systick_mono_token);
 
         (
             Shared {
@@ -123,7 +128,7 @@ mod app {
                 timer_1,
                 x_stepper_uart_pin,
                 cr: gpioc.crh,
-                speed: 100,
+                speed: 1000,
             },
         )
     }
@@ -141,18 +146,27 @@ mod app {
     #[task(binds = TIM1_UP, priority = 3, local = [timer_1, speed, direction: bool = true], shared = [write_req, timer_2])]
     fn send_command_timer(mut cx: send_command_timer::Context) {
         defmt::debug!("in tim1");
-        let speed_step: i32 = {
-            if *cx.local.direction {
-                100
-            } else {
-                -100
-            }
-        };
+        // let speed_step: i32 = {
+        //     if *cx.local.direction {
+        //         100
+        //     } else {
+        //         -100
+        //     }
+        // };
 
-        *cx.local.speed = (*cx.local.speed as i32 + speed_step) as u32;
-        if *cx.local.speed >= 1200 || *cx.local.speed <= 100 {
-            cx.local.direction.not();
-        }
+        // *cx.local.speed = (*cx.local.speed as i32 + speed_step) as u32;
+        // if *cx.local.speed >= 1200 || *cx.local.speed <= 100 {
+        //     cx.local.direction.not();
+        // }
+
+        if *cx.local.direction {
+            defmt::debug!("direction is true");
+            *cx.local.speed = 8000;
+        } else {
+            defmt::debug!("direction is false");
+            *cx.local.speed = 100;
+        };
+        *cx.local.direction = cx.local.direction.not();
 
         cx.shared.write_req.lock(|write_req| {
             if write_req.is_some() {
@@ -196,12 +210,13 @@ mod app {
                 *cx.local.tx_buffer = 0;
                 *cx.local.sending_byte_index = 0;
                 cx.local.x_stepper_uart_pin.make_push_pull_output(cx.local.cr);
+                cx.local.x_stepper_uart_pin.set_high();
 
                 defmt::debug!("bytes to send: {:?}", cx.local.bytes_to_send);
             });
         }
 
-        if !*cx.local.initialized || *cx.local.sending_byte_index == WRITE_REQ_BYTE_COUNT {
+        if !*cx.local.initialized || (*cx.local.sending_byte_index == WRITE_REQ_BYTE_COUNT  && *cx.local.tx_buffer == 0) {
             *cx.local.initialized = false;
             cx.shared.timer_2.lock(|timer_2| {
                 timer_2.unlisten(Event::Update);
@@ -217,7 +232,6 @@ mod app {
         }
 
         if (*cx.local.tx_buffer & 1 == 1) {
-            // cx.local.x_stepper_uart_pin.set_high().ok();
             if cx.local.x_stepper_uart_pin.set_high().is_err() {
                 defmt::debug!("fail to set pin to high");
             }
@@ -229,7 +243,6 @@ mod app {
         *cx.local.tx_buffer >>= 1;
  
         cx.shared.timer_2.lock(|timer_2| {
-            // timer_2.start(BIT_SEND_MICROS_DUR.micros()).unwrap();
             timer_2.clear_interrupt(Event::Update);
         });
     }
