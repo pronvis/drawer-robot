@@ -39,6 +39,7 @@ mod app {
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
     const BIT_SEND_NANOS_DUR: u32 = 28;
     const WRITE_REQ_BYTE_COUNT: usize = 8;
+    const OVERSAMPLE: u8 = 3;
 
     #[shared]
     struct Shared {
@@ -51,7 +52,7 @@ mod app {
     #[local]
     struct Local {
         speed: u32,
-        x_stepper_uart_pin: X_UART_PIN,
+        tmc2209: TMC2209Communicator<'C', 10>,
         timer_1: Counter<stm32f1xx_hal::pac::TIM1, TIMER_1_CLOCK_FREQ>,
         cr: <X_UART_PIN as HL>::Cr,
     }
@@ -127,9 +128,9 @@ mod app {
             },
             Local {
                 timer_1,
-                x_stepper_uart_pin,
                 cr: gpioc.crh,
                 speed: 1000,
+                tmc2209: TMC2209Communicator::new(x_stepper_uart_pin)
             },
         )
     }
@@ -148,9 +149,9 @@ mod app {
     fn send_command_timer(mut cx: send_command_timer::Context) {
         let speed_step: i32 = {
             if *cx.local.direction {
-                100
+                300
             } else {
-                -100
+                -300
             }
         };
 
@@ -159,12 +160,12 @@ mod app {
             *cx.local.direction = cx.local.direction.not();
         }
 
+        defmt::debug!("curr speed: {}", *cx.local.speed);
         cx.shared.write_req.lock(|write_req| {
             if write_req.is_some() {
                 return;
             }
 
-            defmt::debug!("curr speed: {}", *cx.local.speed);
             *write_req = Some(tmc2209::write_request(
                 0,
                 tmc2209::reg::VACTUAL(*cx.local.speed),
@@ -179,109 +180,210 @@ mod app {
     }
 
     #[task(binds = TIM2, priority = 5, local = [
-           x_stepper_uart_pin, 
            cr, 
+           tmc2209,
            bytes_to_send: [u8; 8] = [0; 8], 
            initialized: bool = false,
            tx_buffer: u16 = 0,
            sending_byte_index: usize = 0,
     ], shared = [write_req, timer_2])]
     fn write_command_task(mut cx: write_command_task::Context) {
-        if !*cx.local.initialized {
+         if !*cx.local.initialized {
             cx.shared.write_req.lock(|write_req| {
                 if write_req.is_none() {
-                    defmt::debug!("Write request is None! Fail to initialize");
                     return;
                 }
 
-                let write_req_unwrapped = write_req.take().unwrap();
-                for i in 0..WRITE_REQ_BYTE_COUNT {
-                    cx.local.bytes_to_send[i] = write_req_unwrapped.bytes()[i];
-                }
-                *cx.local.initialized = true;
-                *cx.local.tx_buffer = 0;
-                *cx.local.sending_byte_index = 0;
-                cx.local.x_stepper_uart_pin.make_push_pull_output(cx.local.cr);
-                cx.local.x_stepper_uart_pin.set_high();
-
-                // defmt::debug!("bytes to send: {:?}", cx.local.bytes_to_send);
+                cx.local.tmc2209.write(write_req.take().unwrap());
             });
-        }
+            *cx.local.initialized = true;
+         }
 
-        if !*cx.local.initialized || (*cx.local.sending_byte_index == WRITE_REQ_BYTE_COUNT  && *cx.local.tx_buffer == 0) {
-            *cx.local.initialized = false;
+         if cx.local.tmc2209.working() {
+            cx.local.tmc2209.handle_interrupt();
+         } else {
             cx.shared.timer_2.lock(|timer_2| {
                 timer_2.unlisten(Event::Update);
-                timer_2.clear_interrupt(Event::Update);
+                *cx.local.initialized = false;
             });
-            return;
-        }
+         }
 
-        if *cx.local.tx_buffer == 0 {
-            *cx.local.tx_buffer = (cx.local.bytes_to_send[*cx.local.sending_byte_index] as u16) << 1 | 0x200;
-            // defmt::debug!("sending byte: {:b}", cx.local.tx_buffer);
-            *cx.local.sending_byte_index += 1;
-        }
+        
+        // if !*cx.local.initialized {
+        //     cx.shared.write_req.lock(|write_req| {
+        //         if write_req.is_none() {
+        //             defmt::debug!("Write request is None! Fail to initialize");
+        //             return;
+        //         }
 
-        if (*cx.local.tx_buffer & 1 == 1) {
-            if cx.local.x_stepper_uart_pin.set_high().is_err() {
-                defmt::debug!("fail to set pin to high");
-            }
-          } else {
-              if cx.local.x_stepper_uart_pin.set_low().is_err() {
-                defmt::debug!("fail to set pin to low");
-              }
-        }
-        *cx.local.tx_buffer >>= 1;
+        //         let write_req_unwrapped = write_req.take().unwrap();
+        //         for i in 0..WRITE_REQ_BYTE_COUNT {
+        //             cx.local.bytes_to_send[i] = write_req_unwrapped.bytes()[i];
+        //         }
+        //         *cx.local.initialized = true;
+        //         *cx.local.tx_buffer = 0;
+        //         *cx.local.sending_byte_index = 0;
+        //         cx.local.x_stepper_uart_pin.make_push_pull_output(cx.local.cr);
+        //         cx.local.x_stepper_uart_pin.set_high();
+
+        //         // defmt::debug!("bytes to send: {:?}", cx.local.bytes_to_send);
+        //     });
+        // }
+
+        // if !*cx.local.initialized || (*cx.local.sending_byte_index == WRITE_REQ_BYTE_COUNT  && *cx.local.tx_buffer == 0) {
+        //     *cx.local.initialized = false;
+        //     cx.shared.timer_2.lock(|timer_2| {
+        //         timer_2.unlisten(Event::Update);
+        //         timer_2.clear_interrupt(Event::Update);
+        //     });
+        //     return;
+        // }
+
+        // if *cx.local.tx_buffer == 0 {
+        //     *cx.local.tx_buffer = (cx.local.bytes_to_send[*cx.local.sending_byte_index] as u16) << 1 | 0x200;
+        //     // defmt::debug!("sending byte: {:b}", cx.local.tx_buffer);
+        //     *cx.local.sending_byte_index += 1;
+        // }
+
+        // if (*cx.local.tx_buffer & 1 == 1) {
+        //     if cx.local.x_stepper_uart_pin.set_high().is_err() {
+        //         defmt::debug!("fail to set pin to high");
+        //     }
+        //   } else {
+        //       if cx.local.x_stepper_uart_pin.set_low().is_err() {
+        //         defmt::debug!("fail to set pin to low");
+        //       }
+        // }
+        // *cx.local.tx_buffer >>= 1;
  
-        cx.shared.timer_2.lock(|timer_2| {
-            timer_2.clear_interrupt(Event::Update);
-        });
+        // cx.shared.timer_2.lock(|timer_2| {
+        //     timer_2.clear_interrupt(Event::Update);
+        // });
     }
 
-    // fn send_stepper_command(
-    //     pin: &mut X_UART_PIN,
-    //     cr: &mut <X_UART_PIN as HL>::Cr,
-    //     command: tmc2209::WriteRequest,
-    // ) {
-    //     pin.make_push_pull_output(cr);
-    //     pin.set_low().ok();
-    // }
+//     #[task(binds = TIM3, priority = 6, local = [
+//            x_stepper_uart_pin,
+//            cr,
+//            bytes_to_send: [u8; 8] = [0; 8], 
+//            initialized: bool = false,
+//            tx_buffer: u16 = 0,
+//            sending_byte_index: usize = 0,
+//     ], shared = [write_req, timer_2])]
+//     fn read_command_task(mut cx: read_command_task::Context) {
 
-    // fn sending_logic(&mut self, request: &dyn Tmc2209Request) {
-    //     match self.byte_sending_state {
-    //         ByteSendingState::Start => {
-    //             self.byte_sending_state = ByteSendingState::Data;
-    //             self.pin.set_low().ok();
-    //         }
+//     }
 
-    //         ByteSendingState::Data => {
-    //             let current_byte: &u8 = request.bytes().get(self.byte_index as usize).unwrap();
-    //             let bit_to_send = Self::bit_value(*current_byte, self.bit_index);
-    //             self.bit_index += 1;
-    //             if self.bit_index > 7 {
-    //                 self.byte_sending_state = ByteSendingState::Stop;
-    //                 self.bit_index = 0;
-    //             }
-    //             if bit_to_send {
-    //                 self.pin.set_high().ok();
-    //             } else {
-    //                 self.pin.set_low().ok();
-    //             }
-    //         }
+    struct TMC2209Communicator<const pinC: char, const pinN: u8>
+    where
+        Pin<pinC, pinN, Dynamic>: HL,
+    {
+        tx_tick_counter: u8, // interrupt tick counter for TX
+        tx_bit_counter: u8, //TODO: probably I dont need it, cause can use 'tx_bits_buffer == 0' to
+                            //find the end
 
-    //         ByteSendingState::Stop => {
-    //             self.byte_sending_state = ByteSendingState::Start;
-    //             self.byte_index += 1;
-    //             self.pin.set_high().ok();
-    //             if self.byte_index as usize == request.bytes().len() {
-    //                 self.data_to_write = None;
-    //                 if self.data_to_read.is_some() {
-    //                     self.data_to_read = None;
-    //                     self.reading = true;
-    //                 }
-    //             }
-    //         }
-    //     };
-    // }
+        tx_bits_buffer: u16, // buffer for byte + stop & start bits
+        bytes_to_send: [u8; 8], // buffer for bytes to send
+        tx_bytes_counter: usize,  // counter for sended bytes
+
+        current_state: bool, // should be Sending, Receiving, Nothing
+
+        pin: Pin<pinC, pinN, Dynamic>,
+    }
+
+    impl<const pinC: char, const pinN: u8>
+        TMC2209Communicator<pinC, pinN>
+    where
+        Pin<pinC, pinN, Dynamic>: HL,
+    {
+
+        pub fn new(pin: Pin<pinC, pinN, Dynamic>) -> Self {
+            Self {
+                tx_tick_counter: 0,
+                tx_bit_counter: 0,
+                tx_bits_buffer: 0,
+                bytes_to_send: [0; 8],
+                tx_bytes_counter: 0,
+
+                current_state: false,
+                pin
+            }
+        }
+
+        pub fn working(&self) -> bool {
+            return self.current_state;
+        }
+
+        pub fn write(&mut self, req: tmc2209::WriteRequest) {
+            //TODO: What if we in a process of sending now?
+            
+            // cause 'tx_bytes_counter' starts from 'len' we need to reverse
+            for (index, elem) in req.bytes().iter().rev().enumerate() {
+                self.bytes_to_send[index] = *elem;
+            }
+            self.tx_bit_counter = 0;
+            self.tx_tick_counter = OVERSAMPLE;
+            self.tx_bytes_counter = req.bytes().len();
+            self.tx_bits_buffer = (self.bytes_to_send[self.tx_bytes_counter - 1] as u16) << 1 | 0x200;
+            self.current_state = true;
+        }
+    
+        fn send(&mut self) {
+             // if tx_tick_counter > 0 interrupt is discarded. Only when tx_tick_counter reach 0 we set TX pin.
+            self.tx_tick_counter -= 1;
+            // defmt::debug!("message after decrement tick_counter, curr value: {}", self.tx_tick_counter);
+            if self.tx_tick_counter == 0 {
+                if self.tx_bit_counter < 10 {
+                    // defmt::debug!("writing bit: {}", self.tx_bit_counter);
+                    self.tx_bit_counter += 1;
+                    
+                    if (self.tx_bits_buffer & 1 == 1) {
+                        if self.pin.set_high().is_err() {
+                            defmt::debug!("fail to set pin to high");
+                        }
+                      } else {
+                          if self.pin.set_low().is_err() {
+                            defmt::debug!("fail to set pin to low");
+                          }
+                    }
+                    self.tx_bits_buffer >>= 1;
+                    self.tx_tick_counter = OVERSAMPLE;
+                } else {
+                    // byte has been sended
+                    self.tx_bytes_counter -= 1;
+
+                    if self.tx_bytes_counter == 0 {
+                        // all bytes has been sended
+                        self.current_state = false;
+
+                                // When in half-duplex mode, wait for HALFDUPLEX_SWITCH_DELAY bit-periods after the byte has
+                                // been transmitted before allowing the switch to RX mode
+                              // } else if (tx_bit_cnt > 10 + OVERSAMPLE * HALFDUPLEX_SWITCH_DELAY) {
+                              //   if (_half_duplex && active_listener == this) {
+                              //     setRXTX(true);
+                              //   }
+                              //   active_out = nullptr;
+                              // }
+
+                    } else {
+                        // continue to next byte
+                        // defmt::debug!("going to byte #{}", self.tx_bytes_counter - 1);
+                        self.tx_bits_buffer = (self.bytes_to_send[self.tx_bytes_counter - 1] as u16) << 1 | 0x200;
+                        // defmt::debug!("sending byte: {:b}", self.tx_bits_buffer);
+                        self.tx_tick_counter = OVERSAMPLE;
+                        self.tx_bit_counter = 0;
+                    }
+                    
+                }
+
+            }
+        }
+
+        pub fn handle_interrupt(&mut self) {
+            if self.current_state {
+                self.send();
+            }
+            //TODO:
+        }
+
+    }
 }
