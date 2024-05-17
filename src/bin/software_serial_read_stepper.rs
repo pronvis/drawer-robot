@@ -32,12 +32,12 @@ mod app {
     };
 
     const TIMER_1_CLOCK_FREQ: u32 = 72_00; // tick = 138.89 micros
-    const TIMER_2_CLOCK_FREQ: u32 = 72_00_00; // tick = 13.89 nanos
-                                              // const TIMER_2_CLOCK_FREQ: u32 = 500_000; // tick = 2 micros
+    const TIMER_2_CLOCK_FREQ: u32 = 72_000_000; // tick = 13.89 nanos
+                                                // const TIMER_2_CLOCK_FREQ: u32 = 500_000; // tick = 2 micros
 
     // in 1 second 72_000_000 ticks happens
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
-    const BIT_SEND_NANOS_DUR: u32 = 2800;
+    const BIT_SEND_NANOS_DUR: u32 = 28;
     const WRITE_REQ_BYTE_COUNT: usize = 8;
     const OVERSAMPLE: u8 = 3;
     const SWITCH_DELAY: u8 = 8;
@@ -169,7 +169,8 @@ mod app {
                 *cx.local.direction = cx.local.direction.not();
             }
 
-            defmt::debug!("curr speed: {}", *cx.local.speed);
+            // IF I REMOVE THIS DEBUG PRINT - DATA SENDING WILL NOT WORK
+            // defmt::debug!("curr speed: {}", *cx.local.speed);
             cx.shared.write_req.lock(|write_req| {
                 if write_req.is_some() {
                     return;
@@ -191,6 +192,8 @@ mod app {
                 if read_req.is_some() {
                     return;
                 }
+                // IF I REMOVE THIS DEBUG PRINT - DATA RECEIVED WILL BE ZEROES ONLY
+                // defmt::debug!("send reading");
 
                 *read_req = Some(tmc2209::read_request::<tmc2209::reg::IFCNT>(0));
 
@@ -211,10 +214,6 @@ mod app {
            sending_byte_index: usize = 0
     ], shared = [write_req, read_req, timer_2])]
     fn write_command_task(mut cx: write_command_task::Context) {
-        let opt_response = cx.local.tmc2209.get_response();
-        if opt_response.is_some() {
-            defmt::debug!("Response: {:?}", opt_response.unwrap().data_u32());
-        }
         if !*cx.local.initialized {
             cx.shared.write_req.lock(|write_req| {
                 if write_req.is_none() {
@@ -238,6 +237,10 @@ mod app {
         if cx.local.tmc2209.working() {
             cx.local.tmc2209.handle_interrupt();
         } else {
+            let (_, opt_response) = cx.local.tmc2209.get_response();
+            if opt_response.is_some() {
+                defmt::debug!("Response: {:?}", opt_response.unwrap().data_u32());
+            }
             cx.shared.timer_2.lock(|timer_2| {
                 timer_2.unlisten(Event::Update);
                 *cx.local.initialized = false;
@@ -245,7 +248,8 @@ mod app {
         }
     }
 
-    #[derive(PartialEq)]
+    use defmt::Format;
+    #[derive(PartialEq, Debug, Format)]
     enum CommunicatorState {
         Nothing,
         Writing,
@@ -315,6 +319,13 @@ mod app {
 
         //TODO: replace read/write with one generic function
         pub fn write(&mut self, req: tmc2209::WriteRequest) {
+            if self.current_state != CommunicatorState::Nothing {
+                defmt::debug!(
+                    "Error, Trying to write when in state: {:?}",
+                    self.current_state
+                );
+                return;
+            }
             //TODO: What if we in a process of sending now?
 
             // cause 'tx_bytes_counter' starts from 'len' we need to reverse
@@ -333,6 +344,13 @@ mod app {
 
         //TODO: replace read/write with one generic function
         pub fn read(&mut self, req: tmc2209::ReadRequest) {
+            if self.current_state != CommunicatorState::Nothing {
+                defmt::debug!(
+                    "Error, Trying to read when in state: {:?}",
+                    self.current_state
+                );
+                return;
+            }
             //TODO: What if we in a process of sending now?
 
             // cause 'tx_bytes_counter' starts from 'len' we need to reverse
@@ -355,6 +373,7 @@ mod app {
             if self.tx_tick_counter == 0 {
                 self.tx_bit_counter += 1;
                 if self.tx_bit_counter <= 10 {
+                    // stop, end and 8 bits
                     if self.tx_bits_buffer & 1 == 1 {
                         self.pin.set_high();
                     } else {
@@ -376,7 +395,6 @@ mod app {
                             self.current_state = CommunicatorState::Nothing;
                         } else if self.tx_bit_counter > 10 + OVERSAMPLE * SWITCH_DELAY {
                             self.change_state_to_start_reading(READ_RESPONSE_LENGTH);
-                            // self.change_state_to_start_reading(4);
                         }
                     } else {
                         // continue to next byte
@@ -394,14 +412,12 @@ mod app {
             self.rx_bit_counter = -1; // rx_bit_counter = -1 :  waiting for start bit
             self.rx_tick_counter = 2; // 2 : next interrupt will be discarded. 2 interrupts required to consider RX pin level
             self.rx_buffer = 0;
-            self.receive_buffer = [0; MAX_RX_BUFFER_SIZE];
-            self.receive_buffer_tail = 0;
-            self.receive_buffer_head = 0;
             self.bytes_to_read = bytes_to_read;
             self.pin.make_pull_up_input(&mut self.cr);
         }
 
         pub fn change_state_to_end_reading(&mut self) {
+            defmt::debug!("end reading. current bytes: {:?}", self.receive_buffer);
             self.current_state = CommunicatorState::Nothing;
             self.pin.make_push_pull_output(&mut self.cr);
         }
@@ -414,6 +430,11 @@ mod app {
                 if self.rx_bit_counter == -1 {
                     // rx_bit_counter = -1 :  waiting for start bit
                     if !bit_value {
+                        // defmt::debug!(
+                        //     "got start bit. buffer tail: {}, buffer head: {}",
+                        //     self.receive_buffer_tail,
+                        //     self.receive_buffer_head,
+                        // );
                         // got start bit
                         self.rx_bit_counter = 0; // rx_bit_counter == 0 : start bit received
                         self.rx_tick_counter = OVERSAMPLE + 1; // Wait 1 bit (OVERSAMPLE ticks) + 1 tick in order to sample RX pin in the middle of the edge (and not too close to the edge)
@@ -430,11 +451,6 @@ mod app {
                             // save new data in buffer: tail points to where byte goes
                             self.receive_buffer[self.receive_buffer_tail] = self.rx_buffer; // save new byte
                             self.receive_buffer_tail = next;
-                            self.bytes_to_read -= 1;
-
-                            if self.bytes_to_read == 0 {
-                                self.change_state_to_end_reading();
-                            }
                         } else {
                             // TODO: what to do if overflow?
                             // rx_bit_counter = x  with x = [0..7] correspond to new bit x received
@@ -444,7 +460,12 @@ mod app {
                     // Full frame received. Restart waiting for start bit at next interrupt
                     self.rx_tick_counter = 1;
                     self.rx_bit_counter = -1;
+                    self.bytes_to_read -= 1;
+                    if self.bytes_to_read == 0 {
+                        self.change_state_to_end_reading();
+                    }
                 } else {
+                    // defmt::debug!("got data bit; bit counter: {}", self.rx_bit_counter);
                     // data bits
                     self.rx_buffer >>= 1;
                     if bit_value {
@@ -456,18 +477,23 @@ mod app {
             }
         }
 
-        pub fn get_response(&mut self) -> Option<tmc2209::ReadResponse> {
-            let mut response: [u8; tmc2209::ReadResponse::LEN_BYTES] =
-                [0; tmc2209::ReadResponse::LEN_BYTES];
-            for i in 0..tmc2209::ReadResponse::LEN_BYTES {
-                response[i] = self.receive_buffer[self.receive_buffer_head];
-                self.receive_buffer_head = (self.receive_buffer_head + 1) % MAX_RX_BUFFER_SIZE;
+        //TODO: this is super ugly and for test purpose only!
+        pub fn get_response(&mut self) -> (usize, Option<tmc2209::ReadResponse>) {
+            if self.receive_buffer_tail - self.receive_buffer_head > 7 {
+                let mut response: [u8; tmc2209::ReadResponse::LEN_BYTES] =
+                    [0; tmc2209::ReadResponse::LEN_BYTES];
+                for i in 0..tmc2209::ReadResponse::LEN_BYTES {
+                    response[i] = self.receive_buffer[self.receive_buffer_head];
+                    self.receive_buffer_head = (self.receive_buffer_head + 1) % MAX_RX_BUFFER_SIZE;
+                }
+
+                let mut reader = tmc2209::Reader::default();
+                let (bytes_read, tmc_response) = reader.read_response(&mut response);
+
+                return (bytes_read, tmc_response);
             }
 
-            let mut reader = tmc2209::Reader::default();
-            let (_, tmc_response) = reader.read_response(&mut response);
-
-            return tmc_response;
+            return (0, None);
         }
 
         pub fn handle_interrupt(&mut self) {
