@@ -16,14 +16,10 @@ mod app {
 
     use core::ops::Not;
     use rtic_monotonics::systick::*;
-    use stm32f1xx_hal::gpio::{Cr, Dynamic, Pin, HL};
+    use stm32f1xx_hal::gpio::{Dynamic, Pin, HL};
     use stm32f1xx_hal::{
         gpio::PinState,
-        pac,
         prelude::*,
-        rcc,
-        rcc::*,
-        timer::Timer,
         timer::{Counter, Event},
     };
 
@@ -32,13 +28,13 @@ mod app {
     const READ_RESPONSE_CLOCK_FREQ: u32 = 72_00; // tick = 138.89 micros
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
 
-    const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_00_000; // tick = 13.89 nanos
-                                                           // const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 500_000; // tick = 2 micros
-                                                           // in 1 second 72_000_000 ticks happens
-                                                           // If I set BIT_SEND_NANOS_DUR = 280 && TMC2209COMMUNICATOR_CLOCK_FREQ = 72_00_00
-                                                           // then it doesnt work with COMMENTED debug log, even with 'opt-level=0'...
-                                                           // No idea why!
-    const BIT_SEND_NANOS_DUR: u32 = 280;
+    const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_0_000; // tick = 13.89 nanos
+                                                          // const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 500_000; // tick = 2 micros
+                                                          // in 1 second 72_000_000 ticks happens
+                                                          // If I set BIT_SEND_NANOS_DUR = 280 && TMC2209COMMUNICATOR_CLOCK_FREQ = 72_00_00
+                                                          // then it doesnt work with COMMENTED debug log, even with 'opt-level=0'...
+                                                          // No idea why!
+    const BIT_SEND_NANOS_DUR: u32 = 2800;
 
     #[shared]
     struct Shared {
@@ -224,7 +220,7 @@ mod app {
             *cx.local.overrun -= 1;
             // defmt::debug!("send reading");
             cx.shared.communicator.lock(|communicator| {
-                let read_req = tmc2209::read_request::<tmc2209::reg::IFCNT>(0);
+                let read_req = tmc2209::read_request::<tmc2209::reg::GSTAT>(0);
                 communicator.send(read_req.bytes());
             });
         }
@@ -249,10 +245,15 @@ mod app {
         let (bytes_read, tmc_response) = reader.read_response(&response_data);
         match tmc_response {
             Some(response) => {
-                defmt::debug!("GOT RESPONSE: {:?}", response.bytes());
+                let gstat = tmc2209::reg::GSTAT::from(response.data_u32());
+                defmt::debug!("GOT RESPONSE: gconf: {}", gstat.drv_err());
             }
             None => {
-                defmt::debug!("No response, data from reader was: {:?}", response_data);
+                defmt::debug!(
+                    "No response, bytes_read: {}, data from reader was: {:?}",
+                    bytes_read,
+                    response_data
+                );
             }
         }
         cx.local.read_response_timer.clear_interrupt(Event::Update);

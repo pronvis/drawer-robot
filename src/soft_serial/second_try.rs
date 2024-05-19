@@ -6,7 +6,8 @@ use stm32f1xx_hal::{
 use tmc2209::{ReadRequest, ReadResponse, WriteRequest};
 
 const OVERSAMPLE: u8 = 3;
-const SWITCH_DELAY: u8 = 8;
+//'default=8 bit times', but looks like it is too much and we skip some data if 'SWITCH_DELAY=8'
+const SWITCH_DELAY: u8 = 8 - 1;
 const MAX_RX_BUFFER_SIZE: usize = 64;
 
 use defmt::Format;
@@ -103,7 +104,7 @@ where
     fn prepare_to_send(&mut self, data: &[u8]) {
         self.tx_bit_counter = 0;
         self.tx_tick_counter = 1; //send first bit without OVERSAMPLING
-        self.tx_bytes_counter = WriteRequest::LEN_BYTES;
+        self.tx_bytes_counter = data.len();
         // cause 'tx_bytes_counter' starts from 'len' we need to reverse
         for (index, elem) in data.iter().rev().enumerate() {
             self.bytes_to_send[index] = *elem;
@@ -165,8 +166,8 @@ where
                     if !self.read_after_write {
                         self.current_state = CommunicatorState::Nothing;
                     } else {
-                        //we want to change state of the Pin immediately
-                        //and wait for SWITCH_DELAY after
+                        // we want to change state of the Pin immediately
+                        // and wait for SWITCH_DELAY after
                         if self.tx_bit_counter > 10 + OVERSAMPLE * SWITCH_DELAY {
                             self.current_state = CommunicatorState::Reading;
                         } else {
@@ -222,7 +223,11 @@ where
                         self.receive_buffer_tail = next;
                     } else {
                         // TODO: what to do if overflow?
-                        defmt::debug!("buffer overflow");
+                        defmt::debug!(
+                            "buffer overflow. tail: {}, head: {}",
+                            self.receive_buffer_tail,
+                            self.receive_buffer_head
+                        );
                     }
                 }
                 // if there is no stop bit then skip current byte.
