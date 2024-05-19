@@ -1,3 +1,5 @@
+pub mod second_try;
+
 use crate::CHANNEL_CAPACITY;
 use embedded_hal::digital::v2::{InputPin, OutputPin};
 use fugit::{ExtU32, TimerDurationU32};
