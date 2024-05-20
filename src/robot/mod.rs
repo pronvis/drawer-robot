@@ -38,8 +38,6 @@ pub struct Robot {
     commands_receiver: RobotCommandsReceiver,
     state: RobotState,
     display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
-    software_serial_sender:
-        Sender<'static, crate::soft_serial::TMC2209SoftSerialCommands, CHANNEL_CAPACITY>,
     speed: u32,
 }
 
@@ -51,11 +49,6 @@ impl Robot {
         stepper_3: MyStepperCommandsSender,
         commands_receiver: RobotCommandsReceiver,
         display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
-        software_serial_sender: Sender<
-            'static,
-            crate::soft_serial::TMC2209SoftSerialCommands,
-            CHANNEL_CAPACITY,
-        >,
     ) -> Self {
         Robot {
             stepper_0,
@@ -68,7 +61,6 @@ impl Robot {
                 stepper_index: 0,
             },
             display_sender,
-            software_serial_sender,
             speed: 0,
         }
     }
@@ -113,18 +105,14 @@ impl Robot {
 
             RobotCommand::ReduceSpeed => {
                 self.speed -= 100;
-                let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(self.speed));
-                let _ = self.software_serial_sender.send(crate::soft_serial::TMC2209SoftSerialCommands::Write(write_req)).await;
-                // let command = MyStepperCommands::ReduceSpeed;
-                // self.send_command(command).await;
+                let command = MyStepperCommands::ReduceSpeed;
+                self.send_command(command).await;
             },
 
             RobotCommand::IncreaseSpeed => {
                 self.speed += 100;
-                let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(self.speed));
-                let send_res = self.software_serial_sender.send(crate::soft_serial::TMC2209SoftSerialCommands::Write(write_req)).await;
-                // let command = MyStepperCommands::IncreaseSpeed;
-                // self.send_command(command).await;
+                let command = MyStepperCommands::IncreaseSpeed;
+                self.send_command(command).await;
             },
 
             RobotCommand::SelectStepper(index) => {
@@ -142,10 +130,8 @@ impl Robot {
             },
 
             RobotCommand::StartMove => {
-                // let command = MyStepperCommands::StartMove;
-                let read_req = tmc2209::read_request::<tmc2209::reg::IFCNT>(0);
-                let send_res = self.software_serial_sender.send(crate::soft_serial::TMC2209SoftSerialCommands::Read(read_req)).await;
-                // self.send_command(command).await;
+                let command = MyStepperCommands::StartMove;
+                self.send_command(command).await;
             }
 
             RobotCommand::AllMode => {

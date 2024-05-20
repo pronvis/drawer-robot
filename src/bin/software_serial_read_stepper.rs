@@ -12,7 +12,7 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
     // dispatchers = [PVD, WWDG, RTC, SPI1]
 )]
 mod app {
-    use drawer_robot::soft_serial::second_try::TMC2209SerialCommunicator;
+    use drawer_robot::tmc2209::communicator::TMC2209SerialCommunicator;
 
     use core::ops::Not;
     use rtic_monotonics::systick::*;
@@ -34,6 +34,8 @@ mod app {
                                                           // If I set BIT_SEND_NANOS_DUR = 280 && TMC2209COMMUNICATOR_CLOCK_FREQ = 72_00_00
                                                           // then it doesnt work with COMMENTED debug log, even with 'opt-level=0'...
                                                           // No idea why!
+                                                          //TODO:
+                                                          // НАЙТИ МИНИМУМ ПРИ КОТОРОМ БУДЕТ РАБОТАТЬ ЧТЕНИЕ!!!
     const BIT_SEND_NANOS_DUR: u32 = 2800;
 
     #[shared]
@@ -45,8 +47,6 @@ mod app {
             TMC2209COMMUNICATOR_CLOCK_FREQ,
         >,
     }
-
-    type X_UART_PIN = Pin<'C', 10, Dynamic>;
 
     #[local]
     struct Local {
@@ -84,14 +84,10 @@ mod app {
 
         // Acquire the GPIOC peripheral
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
-        let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
-        let step_pin = gpioc
-            .pc6
-            .into_push_pull_output_with_state(&mut gpioc.crl, PinState::Low);
 
         let mut en = gpioc.pc7.into_push_pull_output(&mut gpioc.crl);
         en.set_low();
-        let mut x_stepper_uart_pin = gpioc.pc10.into_dynamic(&mut gpioc.crh);
+        let x_stepper_uart_pin = gpioc.pc10.into_dynamic(&mut gpioc.crh);
 
         let timer = stm32f1xx_hal::timer::FTimer::<
             stm32f1xx_hal::pac::TIM4,
