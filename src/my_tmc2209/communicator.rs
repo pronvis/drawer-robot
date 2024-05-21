@@ -255,14 +255,18 @@ where
         self.pin.make_push_pull_output(&mut self.cr);
     }
 
-    pub fn get_response(&mut self) -> [u8; ReadResponse::LEN_BYTES] {
-        let mut response: [u8; ReadResponse::LEN_BYTES] = [0; ReadResponse::LEN_BYTES];
-        for i in 0..ReadResponse::LEN_BYTES {
-            response[i] = self.receive_buffer[self.receive_buffer_head];
-            self.receive_buffer_head = (self.receive_buffer_head + 1) % MAX_RX_BUFFER_SIZE;
+    pub fn get_response(&mut self) -> Option<[u8; ReadResponse::LEN_BYTES]> {
+        if self.have_response() {
+            let mut response: [u8; ReadResponse::LEN_BYTES] = [0; ReadResponse::LEN_BYTES];
+            for i in 0..ReadResponse::LEN_BYTES {
+                response[i] = self.receive_buffer[self.receive_buffer_head];
+                self.receive_buffer_head = (self.receive_buffer_head + 1) % MAX_RX_BUFFER_SIZE;
+            }
+
+            return Some(response);
         }
 
-        return response;
+        return None;
     }
 
     pub fn handle_interrupt(&mut self) {
@@ -280,5 +284,18 @@ where
 
     fn add_start_and_stop_bits(byte_to_send: u8) -> u16 {
         return (byte_to_send as u16) << 1 | 0x200;
+    }
+
+    pub fn have_response(&self) -> bool {
+        let tail = self.receive_buffer_tail;
+        let head = self.receive_buffer_head;
+        if head > tail {
+            return (head + ReadResponse::LEN_BYTES) % MAX_RX_BUFFER_SIZE >= tail;
+        } else if tail > head {
+            return tail - head >= ReadResponse::LEN_BYTES;
+        } else {
+            // head == tail
+            return false;
+        }
     }
 }

@@ -10,15 +10,17 @@ use stm32f1xx_hal::{
     gpio::{Alternate, OpenDrain, Output, Pin},
     i2c::BlockingI2c,
     pac::I2C1,
+    rcc::Clocks,
+    timer::{self, Counter},
 };
 
 use heapless::{pool, pool::singleton::Pool};
 
 pub mod display;
 pub mod my_stepper;
+pub mod my_tmc2209;
 pub mod ps3;
 pub mod robot;
-pub mod tmc2209;
 pub const CHANNEL_CAPACITY: usize = 2;
 pub const PS3_CHANNEL_CAPACITY: usize = 32;
 
@@ -96,4 +98,10 @@ pub fn exit() -> ! {
     loop {
         cortex_m::asm::bkpt();
     }
+}
+
+pub fn get_counter<TIM: timer::Instance, const FREQ: u32>(tim: TIM, clocks: &Clocks) -> Counter<TIM, FREQ> {
+    let timer = stm32f1xx_hal::timer::FTimer::<TIM, FREQ>::new(tim, clocks);
+    let counter: stm32f1xx_hal::timer::Counter<TIM, FREQ> = timer.counter();
+    return counter;
 }
