@@ -21,3 +21,8 @@ To connect PS3 controller to HC-05 you need to set master address. To do that:
 - connect PS3 to PC
 - set master address
 
+## Debugging
+
+1. run `openopcd` in one terminal
+2. run `arm-none-eabi-gdb -x openocd.gdb -q {path_to_bin_file}`
+For example: `arm-none-eabi-gdb -x openocd.gdb -q ~/rust/rust_build_artifacts/thumbv7m-none-eabi/release/minimal_x`

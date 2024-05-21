@@ -2,6 +2,7 @@
 # to get probe id: `probe-run --list-probes`
 # runner = "probe-run --probe C296C294070132124647524B4E00 --chip STM32F103C8"
 runner = "probe-run --probe 15003200090000524A51544E --chip STM32F103RE"
+# runner = "arm-none-eabi-gdb -x openocd.gdb" # for debugging
 rustflags = [
   "-C", "linker=flip-link",
   "-C", "link-arg=-Tlink.x",
@@ -21,4 +22,4 @@ rrb = "run --release --bin"
 bbr = "build --release --bin"
 csize = "size --bin software_serial_read_stepper --release -- -A"
 crobj = "readobj --bin software_serial_read_stepper --release -- --file-headers"
-cobjdump = "objdump --bin software_serial_read_stepper --release -- --disassemble --no-show-raw-insn --print-imm-hex"
+cobjdump = "objdump --bin minimal_x --release -- --disassemble --no-show-raw-insn --print-imm-hex"
