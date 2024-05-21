@@ -18,12 +18,8 @@ enum CommunicatorState {
     Reading,
 }
 
-pub struct TMC2209SerialCommunicator<
-    const PIN_C: char,
-    const PIN_N: u8,
-    Tim,
-    const TIMER_CLOCK_FREQ: u32,
-> where
+pub struct TMC2209SerialCommunicator<const PIN_C: char, const PIN_N: u8, TIM: Instance, const TIMER_CLOCK_FREQ: u32>
+where
     Pin<PIN_C, PIN_N, Dynamic>: HL,
 {
     tx_tick_counter: u8, // interrupt tick counter for TX
@@ -48,19 +44,15 @@ pub struct TMC2209SerialCommunicator<
     pin: Pin<PIN_C, PIN_N, Dynamic>,
     cr: <Pin<PIN_C, PIN_N, Dynamic> as HL>::Cr,
 
-    timer: Counter<Tim, TIMER_CLOCK_FREQ>,
+    timer: Counter<TIM, TIMER_CLOCK_FREQ>,
 }
 
-impl<const PIN_C: char, const PIN_N: u8, Tim: Instance, const TIMER_CLOCK_FREQ: u32>
-    TMC2209SerialCommunicator<PIN_C, PIN_N, Tim, TIMER_CLOCK_FREQ>
+impl<const PIN_C: char, const PIN_N: u8, TIM: Instance, const TIMER_CLOCK_FREQ: u32>
+    TMC2209SerialCommunicator<PIN_C, PIN_N, TIM, TIMER_CLOCK_FREQ>
 where
     Pin<PIN_C, PIN_N, Dynamic>: HL,
 {
-    pub fn new(
-        timer: Counter<Tim, TIMER_CLOCK_FREQ>,
-        pin: Pin<PIN_C, PIN_N, Dynamic>,
-        cr: <Pin<PIN_C, PIN_N, Dynamic> as HL>::Cr,
-    ) -> Self {
+    pub fn new(timer: Counter<TIM, TIMER_CLOCK_FREQ>, pin: Pin<PIN_C, PIN_N, Dynamic>, cr: <Pin<PIN_C, PIN_N, Dynamic> as HL>::Cr) -> Self {
         Self {
             tx_tick_counter: 0,
             tx_bit_counter: 0,
@@ -110,8 +102,7 @@ where
             self.bytes_to_send[index] = *elem;
         }
 
-        self.tx_bits_buffer =
-            Self::add_start_and_stop_bits(self.bytes_to_send[self.tx_bytes_counter - 1]);
+        self.tx_bits_buffer = Self::add_start_and_stop_bits(self.bytes_to_send[self.tx_bytes_counter - 1]);
         self.current_state = CommunicatorState::Writing;
         self.pin.make_push_pull_output(&mut self.cr);
         self.pin.set_high().ok().unwrap();
@@ -178,9 +169,7 @@ where
                     }
                 } else {
                     // continue to next byte
-                    self.tx_bits_buffer = Self::add_start_and_stop_bits(
-                        self.bytes_to_send[self.tx_bytes_counter - 1],
-                    );
+                    self.tx_bits_buffer = Self::add_start_and_stop_bits(self.bytes_to_send[self.tx_bytes_counter - 1]);
                     self.tx_tick_counter = OVERSAMPLE;
                     self.tx_bit_counter = 0;
                 }
