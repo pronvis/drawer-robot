@@ -16,9 +16,11 @@ mod app {
 
     use rtic_monotonics::systick::*;
     use stm32f1xx_hal::prelude::*;
+    use stm32f1xx_hal::timer::{Counter, Event};
 
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
 
+    const READ_STEPPER_DRIVER_STATE_CLOCK_FREQ: u32 = 72_000; // tick = 13.889 micros
     const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_0_000; // tick = 13.89 nanos
                                                           // const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 500_000; // tick = 2 micros
                                                           // in 1 second 72_000_000 ticks happens
@@ -35,7 +37,10 @@ mod app {
     }
 
     #[local]
-    struct Local {}
+    struct Local {
+        configurator: drawer_robot::my_tmc2209::configurator::Configurator,
+        read_stepper_driver_state_timer: Counter<stm32f1xx_hal::pac::TIM6, READ_STEPPER_DRIVER_STATE_CLOCK_FREQ>,
+    }
 
     #[init]
     fn init(cx: init::Context) -> (Shared, Local) {
@@ -68,6 +73,7 @@ mod app {
         en.set_low();
         let x_stepper_uart_pin = gpioc.pc10.into_dynamic(&mut gpioc.crh);
 
+        let mut read_stepper_driver_state_timer = drawer_robot::get_counter(cx.device.TIM6, &clocks);
         let mut tmc2209_communicator_timer = drawer_robot::get_counter(cx.device.TIM2, &clocks);
         defmt::debug!(
             "tmc2209_communicator_timer {}",
@@ -78,14 +84,37 @@ mod app {
         Systick::start(cx.core.SYST, MAIN_CLOCK_FREQ, systick_mono_token);
 
         tmc2209_communicator_timer.start(BIT_SEND_NANOS_DUR.nanos()).unwrap();
+        // read_stepper_driver_state_timer.start(1000.micros()).unwrap();
+        // read_stepper_driver_state_timer.listen(Event::Update);
 
         task1::spawn().ok();
 
+        let configurator = drawer_robot::my_tmc2209::configurator::Configurator::new();
         let communicator = TMC2209SerialCommunicator::new(tmc2209_communicator_timer, x_stepper_uart_pin, gpioc.crh);
-        (Shared { communicator }, Local {})
+        (
+            Shared { communicator },
+            Local {
+                configurator,
+                read_stepper_driver_state_timer,
+            },
+        )
     }
 
-    #[task(priority = 1, shared = [communicator])]
+    //TODO: ПРОСТО НАЛИЧИЕ ЭТОЙ ФУНКЦИИ ВЛИЯЕТ НА ТО БУДЕТ ЛИ ПРОЧИТАН ОТВЕТ...
+    //ПОЧЕМУ????
+    //
+    #[task(binds = TIM6, priority = 8, local = [read_stepper_driver_state_timer, configurator], shared = [communicator])]
+    fn read_stepper_driver_state(mut cx: read_stepper_driver_state::Context) {
+        // defmt::debug!("<<<<<<<<<<<<<<<< IN read_stepper_driver_state");
+        // if !cx.local.configurator.finished() {
+        //     cx.shared.communicator.lock(|communicator| {
+        //         cx.local.configurator.setup(communicator);
+        //     });
+        // }
+        // cx.local.read_stepper_driver_state_timer.clear_interrupt(Event::Update);
+    }
+
+    #[task(priority = 10, shared = [communicator])]
     async fn task1(mut cx: task1::Context) {
         let mut configurator = drawer_robot::my_tmc2209::configurator::Configurator::new();
         while !configurator.finished() {

@@ -64,7 +64,13 @@ mod app {
         // Freeze the configuration of all the clocks in the system and store the frozen frequencies in
         // `clocks`
         // with those values one second equals 'delay_cycles: u32 = 72_000_000'
-        let clocks = rcc.cfgr.use_hse(8.MHz()).sysclk(72.MHz()).pclk1(36.MHz()).pclk2(72.MHz()).freeze(&mut flash.acr);
+        let clocks = rcc
+            .cfgr
+            .use_hse(8.MHz())
+            .sysclk(72.MHz())
+            .pclk1(36.MHz())
+            .pclk2(72.MHz())
+            .freeze(&mut flash.acr);
 
         if !clocks.usbclk_valid() {
             panic!("Clock parameter values are wrong!");
@@ -145,11 +151,7 @@ mod app {
                     defmt::debug!("GOT RESPONSE: Interface transmission counter: {}", ifcnt.0);
                 }
                 None => {
-                    defmt::debug!(
-                        "No response, bytes_read: {}, data from reader was: {:?}",
-                        bytes_read,
-                        response_data
-                    );
+                    defmt::debug!("No response, bytes_read: {}, data from reader was: {:?}", bytes_read, response_data);
                 }
             }
         }
@@ -233,11 +235,7 @@ mod app {
                 defmt::debug!("GOT RESPONSE: gconf: {}", gstat.drv_err());
             }
             None => {
-                defmt::debug!(
-                    "No response, bytes_read: {}, data from reader was: {:?}",
-                    bytes_read,
-                    response_data
-                );
+                defmt::debug!("No response, bytes_read: {}, data from reader was: {:?}", bytes_read, response_data);
             }
         }
         cx.local.read_response_timer.clear_interrupt(Event::Update);

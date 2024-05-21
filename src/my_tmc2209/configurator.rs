@@ -9,6 +9,7 @@ pub struct Configurator {
     response_index: u32,
     request_index: u32,
     ifcnt: u8,
+    finished: bool,
 }
 
 impl Configurator {
@@ -17,6 +18,7 @@ impl Configurator {
             response_index: 0,
             request_index: 0,
             ifcnt: 0,
+            finished: false,
         }
     }
 
@@ -39,6 +41,7 @@ impl Configurator {
                     Some(response) => {
                         let ifcnt = tmc2209::reg::IFCNT::from(response.data_u32());
                         self.ifcnt = ifcnt.0 as u8;
+                        self.finished = true;
                         defmt::debug!("Get Resp in Configurator: {}", self.ifcnt);
                     }
                     None => {
@@ -52,7 +55,6 @@ impl Configurator {
     }
 
     pub fn finished(&self) -> bool {
-        //TODO:
-        return self.ifcnt > 0;
+        return self.finished;
     }
 }
