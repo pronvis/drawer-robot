@@ -152,7 +152,8 @@ mod app {
         cx.local.tmc2209_communicator_timer.clear_interrupt(Event::Update);
     }
 
-    #[task(binds = TIM3, priority = 8, local=[read_timer, tmc2209_msg_sender_2, tmc2209_rsp_receiver, first: bool = true])]
+    //TODO: Works only if PRIORITY of 'read_task' is higher then 'communicator_task'
+    #[task(binds = TIM3, priority = 11, local=[read_timer, tmc2209_msg_sender_2, tmc2209_rsp_receiver, first: bool = true])]
     fn read_task(cx: read_task::Context) {
         if *cx.local.first {
             *cx.local.first = false;
@@ -176,8 +177,8 @@ mod app {
                 None => defmt::debug!("fail to send message to Communicator"),
                 Some(_) => defmt::debug!("Successfully send READ message to Communicator"),
             }
-
-            cx.local.read_timer.clear_interrupt(Event::Update);
         }
+
+        cx.local.read_timer.clear_interrupt(Event::Update);
     }
 }
