@@ -16,15 +16,16 @@ mod app {
 
     use core::ops::Not;
     use rtic_monotonics::systick::*;
+    use rtic_sync::{channel::*, make_channel};
     use stm32f1xx_hal::{
         prelude::*,
         timer::{Counter, Event},
     };
 
-    const SEND_WRITE_AND_READ_REQ_CLOCK_FREQ: u32 = 72_00; // tick = 138.89 micros
-    const SEND_WRITE_REQ_CLOCK_FREQ: u32 = 72_00; // tick = 138.89 micros
-    const READ_RESPONSE_CLOCK_FREQ: u32 = 72_00; // tick = 138.89 micros
-    const READ_STEPPER_DRIVER_STATE_CLOCK_FREQ: u32 = 72_000; // tick = 13.889 micros
+    const CHANNEL_CAPACITY: usize = drawer_robot::my_tmc2209::communicator::CHANNEL_CAPACITY;
+
+    const WRITE_CLOCK_FREQ: u32 = 72_00; // tick = 138.89 micros
+    const READ_CLOCK_FREQ: u32 = 72_00; // tick = 138.89 micros
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
 
     const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_0_000; // tick = 13.89 nanos
@@ -38,18 +39,18 @@ mod app {
     const BIT_SEND_NANOS_DUR: u32 = 2800;
 
     #[shared]
-    struct Shared {
-        communicator: TMC2209SerialCommunicator<'C', 10, stm32f1xx_hal::pac::TIM2, TMC2209COMMUNICATOR_CLOCK_FREQ>,
-    }
+    struct Shared {}
 
     #[local]
     struct Local {
-        speed_write_only: u32,
-        speed_write_and_read: u32,
-        send_write_and_read_timer: Counter<stm32f1xx_hal::pac::TIM5, SEND_WRITE_AND_READ_REQ_CLOCK_FREQ>,
-        send_write_req_timer: Counter<stm32f1xx_hal::pac::TIM4, SEND_WRITE_REQ_CLOCK_FREQ>,
-        read_response_timer: Counter<stm32f1xx_hal::pac::TIM3, READ_RESPONSE_CLOCK_FREQ>,
-        read_stepper_driver_state_timer: Counter<stm32f1xx_hal::pac::TIM6, READ_STEPPER_DRIVER_STATE_CLOCK_FREQ>,
+        communicator: TMC2209SerialCommunicator<'C', 10>,
+        tmc2209_communicator_timer: Counter<stm32f1xx_hal::pac::TIM2, TMC2209COMMUNICATOR_CLOCK_FREQ>,
+        tmc2209_msg_sender_1: Sender<'static, drawer_robot::my_tmc2209::Request, CHANNEL_CAPACITY>,
+        tmc2209_msg_sender_2: Sender<'static, drawer_robot::my_tmc2209::Request, CHANNEL_CAPACITY>,
+        tmc2209_rsp_receiver: Receiver<'static, u32, CHANNEL_CAPACITY>,
+
+        read_timer: Counter<stm32f1xx_hal::pac::TIM3, READ_CLOCK_FREQ>,
+        write_timer: Counter<stm32f1xx_hal::pac::TIM4, WRITE_CLOCK_FREQ>,
     }
 
     #[init]
@@ -83,10 +84,8 @@ mod app {
         en.set_low();
         let x_stepper_uart_pin = gpioc.pc10.into_dynamic(&mut gpioc.crh);
 
-        let mut read_response_timer = drawer_robot::get_counter(cx.device.TIM3, &clocks);
-        let mut send_write_req_timer = drawer_robot::get_counter(cx.device.TIM4, &clocks);
-        let mut send_write_and_read_timer = drawer_robot::get_counter(cx.device.TIM5, &clocks);
-        let mut read_stepper_driver_state_timer = drawer_robot::get_counter(cx.device.TIM6, &clocks);
+        let mut read_timer = drawer_robot::get_counter(cx.device.TIM3, &clocks);
+        let mut write_timer = drawer_robot::get_counter(cx.device.TIM4, &clocks);
         let mut tmc2209_communicator_timer = drawer_robot::get_counter(cx.device.TIM2, &clocks);
         defmt::debug!(
             "tmc2209_communicator_timer {}",
@@ -96,71 +95,35 @@ mod app {
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, MAIN_CLOCK_FREQ, systick_mono_token);
 
-        read_response_timer.start(500.millis()).unwrap();
-        send_write_and_read_timer.start(200.millis()).unwrap();
+        read_timer.start(1.secs()).unwrap();
+        write_timer.start(200.millis()).unwrap();
         tmc2209_communicator_timer.start(BIT_SEND_NANOS_DUR.nanos()).unwrap();
-        read_stepper_driver_state_timer.start(100.micros()).unwrap();
-        send_write_req_timer.start(200.millis()).unwrap();
 
-        // read_response_timer.listen(Event::Update);
-        // send_write_and_read_timer.listen(Event::Update);
-        send_write_req_timer.listen(Event::Update);
-        read_stepper_driver_state_timer.listen(Event::Update);
+        read_timer.listen(Event::Update);
+        // write_timer.listen(Event::Update);
+        tmc2209_communicator_timer.listen(Event::Update);
 
-        let communicator = TMC2209SerialCommunicator::new(tmc2209_communicator_timer, x_stepper_uart_pin, gpioc.crh);
+        let (tmc2209_msg_sender, tmc2209_msg_receiver) = make_channel!(drawer_robot::my_tmc2209::Request, CHANNEL_CAPACITY);
+        let (tmc2209_rsp_sender, tmc2209_rsp_receiver) = make_channel!(u32, CHANNEL_CAPACITY);
+
+        let communicator = TMC2209SerialCommunicator::new(tmc2209_msg_receiver, tmc2209_rsp_sender, x_stepper_uart_pin, gpioc.crh);
         (
-            Shared { communicator },
+            Shared {},
             Local {
-                send_write_and_read_timer,
-                send_write_req_timer,
-                read_response_timer,
-                read_stepper_driver_state_timer,
-                speed_write_only: 1000,
-                speed_write_and_read: 1000,
+                communicator,
+                tmc2209_communicator_timer,
+                tmc2209_msg_sender_1: tmc2209_msg_sender.clone(),
+                tmc2209_msg_sender_2: tmc2209_msg_sender,
+                tmc2209_rsp_receiver,
+
+                read_timer,
+                write_timer,
             },
         )
     }
 
-    #[task(binds = TIM6, priority = 3, local = [read_stepper_driver_state_timer, request_index: u8 = 0, response_index: u8 = 0], shared = [communicator])]
-    fn read_stepper_driver_state(mut cx: read_stepper_driver_state::Context) {
-        let resp_index = *cx.local.response_index;
-        let req_index = cx.local.request_index;
-
-        if *req_index == resp_index && *req_index == 0 {
-            let read_req = tmc2209::read_request::<tmc2209::reg::IFCNT>(0);
-            cx.shared.communicator.lock(|communicator| {
-                communicator.send(read_req.bytes());
-            });
-            *req_index += 1;
-        }
-
-        if *req_index > resp_index {
-            let mut reader = tmc2209::Reader::default();
-            let response_data = cx.shared.communicator.lock(|communicator| {
-                return communicator.get_response();
-            });
-
-            if response_data.is_none() {
-                return;
-            }
-
-            let (bytes_read, tmc_response) = reader.read_response(&response_data.unwrap());
-            match tmc_response {
-                Some(response) => {
-                    let ifcnt = tmc2209::reg::IFCNT::from(response.data_u32());
-                    defmt::debug!("GOT RESPONSE: Interface transmission counter: {}", ifcnt.0);
-                }
-                None => {
-                    defmt::debug!("No response, bytes_read: {}, data from reader was: {:?}", bytes_read, response_data);
-                }
-            }
-        }
-
-        cx.local.read_stepper_driver_state_timer.clear_interrupt(Event::Update);
-    }
-
-    #[task(binds = TIM4, priority = 3, local = [send_write_req_timer, speed_write_only, direction: bool = true, overrun: u8 = 0], shared = [communicator])]
-    fn send_command_timer(mut cx: send_command_timer::Context) {
+    #[task(binds = TIM4, priority = 5, local = [write_timer, tmc2209_msg_sender_1, speed: u32 = 1000, direction: bool = true])]
+    fn write_task(cx: write_task::Context) {
         let speed_step: i32 = {
             if *cx.local.direction {
                 300
@@ -169,75 +132,52 @@ mod app {
             }
         };
 
-        *cx.local.speed_write_only = (*cx.local.speed_write_only as i32 + speed_step) as u32;
-        if *cx.local.speed_write_only >= 10000 || *cx.local.speed_write_only <= 100 {
+        *cx.local.speed = (*cx.local.speed as i32 + speed_step) as u32;
+        if *cx.local.speed >= 10000 || *cx.local.speed <= 100 {
             *cx.local.direction = cx.local.direction.not();
         }
 
-        // defmt::debug!("current speed_write_only: {}", cx.local.speed_write_only);
-        cx.shared.communicator.lock(|communicator| {
-            let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(*cx.local.speed_write_only));
-            communicator.send(write_req.bytes());
-        });
+        defmt::debug!("current speed: {}", cx.local.speed);
 
-        cx.local.send_write_req_timer.clear_interrupt(Event::Update);
+        let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(*cx.local.speed));
+        let req = drawer_robot::my_tmc2209::Request::write(write_req);
+        let _ = cx.local.tmc2209_msg_sender_1.try_send(req).ok();
+
+        cx.local.write_timer.clear_interrupt(Event::Update);
     }
 
-    #[task(binds = TIM5, priority = 3, local = [send_write_and_read_timer, speed_write_and_read, direction: bool = true, overrun: u8 = 0], shared = [communicator])]
-    fn send_command_timer_with_read(mut cx: send_command_timer_with_read::Context) {
-        if *cx.local.overrun == 0 {
-            *cx.local.overrun = 1;
-            let speed_step: i32 = {
-                if *cx.local.direction {
-                    300
-                } else {
-                    -300
-                }
-            };
+    #[task(binds = TIM2, priority = 10, local = [communicator, tmc2209_communicator_timer])]
+    fn communicator_task(cx: communicator_task::Context) {
+        cx.local.communicator.handle_interrupt();
+        cx.local.tmc2209_communicator_timer.clear_interrupt(Event::Update);
+    }
 
-            *cx.local.speed_write_and_read = (*cx.local.speed_write_and_read as i32 + speed_step) as u32;
-            if *cx.local.speed_write_and_read >= 10000 || *cx.local.speed_write_and_read <= 100 {
-                *cx.local.direction = cx.local.direction.not();
-            }
+    #[task(binds = TIM3, priority = 8, local=[read_timer, tmc2209_msg_sender_2, tmc2209_rsp_receiver, first: bool = true])]
+    fn read_task(cx: read_task::Context) {
+        if *cx.local.first {
+            *cx.local.first = false;
 
-            // defmt::debug!("current speed_write_and_read: {}", cx.local.speed_write_and_read);
-            cx.shared.communicator.lock(|communicator| {
-                let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(*cx.local.speed_write_and_read));
-                communicator.send(write_req.bytes());
-            });
+            let write_req = tmc2209::write_request(0, tmc2209::reg::SLAVECONF(0));
+            let req = drawer_robot::my_tmc2209::Request::write(write_req);
+            let _ = cx.local.tmc2209_msg_sender_2.try_send(req).ok();
         } else {
-            *cx.local.overrun -= 1;
-            // defmt::debug!("send reading");
-            cx.shared.communicator.lock(|communicator| {
-                let read_req = tmc2209::read_request::<tmc2209::reg::GSTAT>(0);
-                communicator.send(read_req.bytes());
-            });
-        }
-        cx.local.send_write_and_read_timer.clear_interrupt(Event::Update);
-    }
-
-    #[task(binds = TIM2, priority = 5, shared = [communicator])]
-    fn communicator_task(mut cx: communicator_task::Context) {
-        cx.shared.communicator.lock(|communicator| communicator.handle_interrupt());
-    }
-
-    #[task(binds = TIM3, priority = 2, local=[read_response_timer], shared = [communicator])]
-    fn println_task(mut cx: println_task::Context) {
-        let mut reader = tmc2209::Reader::default();
-        let response_data = cx.shared.communicator.lock(|communicator| {
-            //TODO: fix unwrap
-            return communicator.get_response().unwrap();
-        });
-        let (bytes_read, tmc_response) = reader.read_response(&response_data);
-        match tmc_response {
-            Some(response) => {
-                let gstat = tmc2209::reg::GSTAT::from(response.data_u32());
-                defmt::debug!("GOT RESPONSE: gconf: {}", gstat.drv_err());
+            match cx.local.tmc2209_rsp_receiver.try_recv() {
+                Err(_) => {}
+                Ok(response) => {
+                    let ifcnt_resp = tmc2209::reg::IFCNT::from(response);
+                    defmt::info!("Transmission counter: {}", ifcnt_resp.0);
+                } // Err(err) => defmt::warn!("Fail to receive response from communicator"),
             }
-            None => {
-                defmt::debug!("No response, bytes_read: {}, data from reader was: {:?}", bytes_read, response_data);
+
+            let read_req = tmc2209::read_request::<tmc2209::reg::IFCNT>(0);
+            let req = drawer_robot::my_tmc2209::Request::read(read_req);
+            let res = cx.local.tmc2209_msg_sender_2.try_send(req).ok();
+            match res {
+                None => defmt::debug!("fail to send message to Communicator"),
+                Some(_) => defmt::debug!("Successfully send READ message to Communicator"),
             }
+
+            cx.local.read_timer.clear_interrupt(Event::Update);
         }
-        cx.local.read_response_timer.clear_interrupt(Event::Update);
     }
 }

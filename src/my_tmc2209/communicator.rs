@@ -1,14 +1,16 @@
+use crate::my_tmc2209::Request;
 use embedded_hal::digital::v2::{InputPin, OutputPin};
-use stm32f1xx_hal::{
-    gpio::{Dynamic, Pin, HL},
-    timer::{Counter, Event, Instance},
-};
-use tmc2209::{ReadRequest, ReadResponse, WriteRequest};
+use rtic_sync::channel::{Receiver, Sender};
+use stm32f1xx_hal::gpio::{Dynamic, Pin, HL};
+use tmc2209::ReadResponse;
 
 const OVERSAMPLE: u8 = 3;
 //'default=8 bit times', but looks like it is too much and we skip some data if 'SWITCH_DELAY=8'
-const SWITCH_DELAY: u8 = 8 - 1;
+//I choose 5 for the safety
+const SWITCH_DELAY: u8 = 5;
 const MAX_RX_BUFFER_SIZE: usize = 64;
+
+pub const CHANNEL_CAPACITY: usize = 8;
 
 use defmt::Format;
 #[derive(PartialEq, Debug, Format)]
@@ -18,7 +20,7 @@ enum CommunicatorState {
     Reading,
 }
 
-pub struct TMC2209SerialCommunicator<const PIN_C: char, const PIN_N: u8, TIM: Instance, const TIMER_CLOCK_FREQ: u32>
+pub struct TMC2209SerialCommunicator<const PIN_C: char, const PIN_N: u8>
 where
     Pin<PIN_C, PIN_N, Dynamic>: HL,
 {
@@ -44,15 +46,20 @@ where
     pin: Pin<PIN_C, PIN_N, Dynamic>,
     cr: <Pin<PIN_C, PIN_N, Dynamic> as HL>::Cr,
 
-    timer: Counter<TIM, TIMER_CLOCK_FREQ>,
+    commands_channel: Receiver<'static, Request, CHANNEL_CAPACITY>,
+    responses_channel: Sender<'static, u32, CHANNEL_CAPACITY>,
 }
 
-impl<const PIN_C: char, const PIN_N: u8, TIM: Instance, const TIMER_CLOCK_FREQ: u32>
-    TMC2209SerialCommunicator<PIN_C, PIN_N, TIM, TIMER_CLOCK_FREQ>
+impl<const PIN_C: char, const PIN_N: u8> TMC2209SerialCommunicator<PIN_C, PIN_N>
 where
     Pin<PIN_C, PIN_N, Dynamic>: HL,
 {
-    pub fn new(timer: Counter<TIM, TIMER_CLOCK_FREQ>, pin: Pin<PIN_C, PIN_N, Dynamic>, cr: <Pin<PIN_C, PIN_N, Dynamic> as HL>::Cr) -> Self {
+    pub fn new(
+        commands_channel: Receiver<'static, Request, CHANNEL_CAPACITY>,
+        responses_channel: Sender<'static, u32, CHANNEL_CAPACITY>,
+        pin: Pin<PIN_C, PIN_N, Dynamic>,
+        cr: <Pin<PIN_C, PIN_N, Dynamic> as HL>::Cr,
+    ) -> Self {
         Self {
             tx_tick_counter: 0,
             tx_bit_counter: 0,
@@ -75,22 +82,9 @@ where
             pin,
             cr,
 
-            timer,
+            commands_channel,
+            responses_channel,
         }
-    }
-
-    pub fn send(&mut self, data: &[u8]) {
-        match data.len() {
-            WriteRequest::LEN_BYTES => {
-                self.prepare_to_send_write_req(data);
-            }
-            ReadRequest::LEN_BYTES => {
-                self.prepare_to_send_read_req(data);
-            }
-            //TODO: return Error
-            _ => return,
-        }
-        self.timer.listen(Event::Update);
     }
 
     fn prepare_to_send(&mut self, data: &[u8]) {
@@ -196,7 +190,7 @@ where
                 if !bit_value {
                     // got start bit
                     self.rx_bit_counter = 0; // rx_bit_counter == 0 : start bit received
-                    self.rx_tick_counter = OVERSAMPLE + 1; // Wait 1 bit (OVERSAMPLE ticks) + 1 tick in order to sample RX pin in the middle of the edge (and not too close to the edge)
+                    self.rx_tick_counter = OVERSAMPLE + OVERSAMPLE / 2; // Wait 1 bit (OVERSAMPLE ticks) + 1 tick in order to sample RX pin in the middle of the edge (and not too close to the edge)
                     self.rx_buffer = 0;
                 } else {
                     self.rx_tick_counter = 1; // Waiting for start bit, but we don't get right level. Wait for next Interrupt to ckech RX pin level
@@ -239,12 +233,20 @@ where
         }
     }
 
-    fn change_state_to_end_reading(&mut self) {
-        self.current_state = CommunicatorState::Nothing;
-        self.pin.make_push_pull_output(&mut self.cr);
+    fn have_response(&self) -> bool {
+        let tail = self.receive_buffer_tail;
+        let head = self.receive_buffer_head;
+        if head > tail {
+            return (head + ReadResponse::LEN_BYTES) % MAX_RX_BUFFER_SIZE >= tail;
+        } else if tail > head {
+            return tail - head >= ReadResponse::LEN_BYTES;
+        } else {
+            // head == tail
+            return false;
+        }
     }
 
-    pub fn get_response(&mut self) -> Option<[u8; ReadResponse::LEN_BYTES]> {
+    fn get_response(&mut self) -> Option<[u8; ReadResponse::LEN_BYTES]> {
         if self.have_response() {
             let mut response: [u8; ReadResponse::LEN_BYTES] = [0; ReadResponse::LEN_BYTES];
             for i in 0..ReadResponse::LEN_BYTES {
@@ -258,33 +260,41 @@ where
         return None;
     }
 
+    fn change_state_to_end_reading(&mut self) {
+        if let Some(response) = self.get_response() {
+            let mut reader = tmc2209::Reader::default();
+            let (_, tmc_response) = reader.read_response(&response);
+            if let Some(response_data) = tmc_response {
+                let _ = self.responses_channel.try_send(response_data.data_u32());
+            }
+        } else {
+            defmt::debug!(
+                "fail to read response, head: {}, tail: {}",
+                self.receive_buffer_head,
+                self.receive_buffer_tail
+            );
+        }
+
+        self.current_state = CommunicatorState::Nothing;
+        self.pin.make_push_pull_output(&mut self.cr);
+    }
+
     pub fn handle_interrupt(&mut self) {
         match self.current_state {
             CommunicatorState::Reading => self.read_bit(),
             CommunicatorState::Writing => self.write_bit(),
-            CommunicatorState::Nothing => self.stop_listening(),
+            CommunicatorState::Nothing => {
+                if let Some(command) = self.commands_channel.try_recv().ok() {
+                    match command {
+                        Request::Read(read_req) => self.prepare_to_send_read_req(read_req.bytes()),
+                        Request::Write(write_req) => self.prepare_to_send_write_req(write_req.bytes()),
+                    };
+                }
+            }
         }
-        self.timer.clear_interrupt(Event::Update);
-    }
-
-    fn stop_listening(&mut self) {
-        self.timer.unlisten(Event::Update);
     }
 
     fn add_start_and_stop_bits(byte_to_send: u8) -> u16 {
         return (byte_to_send as u16) << 1 | 0x200;
-    }
-
-    pub fn have_response(&self) -> bool {
-        let tail = self.receive_buffer_tail;
-        let head = self.receive_buffer_head;
-        if head > tail {
-            return (head + ReadResponse::LEN_BYTES) % MAX_RX_BUFFER_SIZE >= tail;
-        } else if tail > head {
-            return tail - head >= ReadResponse::LEN_BYTES;
-        } else {
-            // head == tail
-            return false;
-        }
     }
 }
