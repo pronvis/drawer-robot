@@ -61,8 +61,6 @@ mod app {
         stepper_2: MyStepper2,
         stepper_3: MyStepper3,
         stepper_4: MyStepper4,
-        software_serial:
-            soft_serial::SoftSerial<'C', 10, stm32f1xx_hal::pac::TIM6, SOFT_CLOCK_FREQ>,
         display_receiver: Receiver<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
         display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
         display: OledDisplay,
@@ -146,68 +144,43 @@ mod app {
             &clocks,
         );
 
-        let (mut display_sender, display_receiver) =
-            make_channel!(Box<DisplayMemoryPool>, CHANNEL_CAPACITY);
+        let (mut display_sender, display_receiver) = make_channel!(Box<DisplayMemoryPool>, CHANNEL_CAPACITY);
 
-        let (
-            (stepper_1, stepper_1_sender),
-            (stepper_2, stepper_2_sender),
-            (stepper_3, stepper_3_sender),
-            (stepper_4, stepper_4_sender),
-        ) = create_steppers(
-            &clocks,
-            gpioc.pc5,
-            gpioc.pc6,
-            gpioc.pc7,
-            gpiob.pb0,
-            gpiob.pb1,
-            gpiob.pb2,
-            gpiob.pb10,
-            gpiob.pb11,
-            gpiob.pb12,
-            gpiob.pb13,
-            gpiob.pb14,
-            gpiob.pb15,
-            &mut gpioc.crl,
-            &mut gpiob.crl,
-            &mut gpiob.crh,
-            cx.device.TIM2,
-            cx.device.TIM3,
-            cx.device.TIM4,
-            cx.device.TIM5,
-            display_sender.clone(),
-        );
+        let ((stepper_1, stepper_1_sender), (stepper_2, stepper_2_sender), (stepper_3, stepper_3_sender), (stepper_4, stepper_4_sender)) =
+            create_steppers(
+                &clocks,
+                gpioc.pc5,
+                gpioc.pc6,
+                gpioc.pc7,
+                gpiob.pb0,
+                gpiob.pb1,
+                gpiob.pb2,
+                gpiob.pb10,
+                gpiob.pb11,
+                gpiob.pb12,
+                gpiob.pb13,
+                gpiob.pb14,
+                gpiob.pb15,
+                &mut gpioc.crl,
+                &mut gpiob.crl,
+                &mut gpiob.crh,
+                cx.device.TIM2,
+                cx.device.TIM3,
+                cx.device.TIM4,
+                cx.device.TIM5,
+                display_sender.clone(),
+            );
 
-        let tim6 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM6, SOFT_CLOCK_FREQ>::new(
-            cx.device.TIM6,
-            &clocks,
-        );
-        let mut timer_6: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM6, SOFT_CLOCK_FREQ> =
-            tim6.counter();
+        let tim6 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM6, SOFT_CLOCK_FREQ>::new(cx.device.TIM6, &clocks);
+        let mut timer_6: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM6, SOFT_CLOCK_FREQ> = tim6.counter();
         timer_6.start(18.micros()).unwrap(); // some nonimportant timer start time
         timer_6.listen(Event::Update);
 
-        let (mut soft_serial_sender, soft_serial_receiver) =
-            make_channel!(soft_serial::TMC2209SoftSerialCommands, CHANNEL_CAPACITY);
-        let software_serial = soft_serial::SoftSerial::new(
-            1,
-            x_stepper_uart_pin,
-            timer_6,
-            soft_serial_receiver,
-            &mut gpioc.crh,
-        );
-
         let (mut ps3_bytes_sender, ps3_bytes_receiver) = make_channel!(u8, PS3_CHANNEL_CAPACITY);
-        let (mut ps3_events_sender, ps3_events_receiver) =
-            make_channel!(ps3::Ps3Event, PS3_CHANNEL_CAPACITY);
-        let (mut robot_commands_sender, robot_commands_receiver) =
-            make_channel!(robot::RobotCommand, CHANNEL_CAPACITY);
+        let (mut ps3_events_sender, ps3_events_receiver) = make_channel!(ps3::Ps3Event, PS3_CHANNEL_CAPACITY);
+        let (mut robot_commands_sender, robot_commands_receiver) = make_channel!(robot::RobotCommand, CHANNEL_CAPACITY);
         let ps3_reader = ps3::Ps3Reader::new(ps3_bytes_receiver, ps3_events_sender);
-        let ps3_event_parser = ps3::Ps3EventParser::new(
-            ps3_events_receiver,
-            robot_commands_sender,
-            display_sender.clone(),
-        );
+        let ps3_event_parser = ps3::Ps3EventParser::new(ps3_events_receiver, robot_commands_sender, display_sender.clone());
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, MAIN_CLOCK_FREQ, systick_mono_token);
@@ -224,7 +197,6 @@ mod app {
             stepper_4_sender,
             robot_commands_receiver,
             display_sender.clone(),
-            soft_serial_sender,
         );
 
         // display_task_writer::spawn().unwrap();
@@ -243,7 +215,6 @@ mod app {
                 stepper_2,
                 stepper_3,
                 stepper_4,
-                software_serial,
                 display_receiver,
                 display_sender,
                 display,
@@ -294,10 +265,7 @@ mod app {
             match received {
                 Ok(read) => {
                     cx.local.ps3_bytes_sender.try_send(read).err().map(|err| {
-                        defmt::debug!(
-                            "fail to send bytes to ps3_reader: {:?}",
-                            defmt::Debug2Format(&err)
-                        );
+                        defmt::debug!("fail to send bytes to ps3_reader: {:?}", defmt::Debug2Format(&err));
                     });
                 }
 
@@ -317,10 +285,7 @@ mod app {
                 Ok(read) => defmt::debug!("data via bluetooth: {}", read),
 
                 Err(err) => {
-                    defmt::debug!(
-                        "data via bluetooth read err: {:?}",
-                        defmt::Debug2Format(&err)
-                    );
+                    defmt::debug!("data via bluetooth read err: {:?}", defmt::Debug2Format(&err));
                 }
             }
         }
@@ -346,11 +311,6 @@ mod app {
         cx.local.stepper_4.work();
     }
 
-    #[task(binds = TIM6, priority = 10, local = [ software_serial, cr ])]
-    fn delay_task_5(cx: delay_task_5::Context) {
-        cx.local.software_serial.work(cx.local.cr);
-    }
-
     use core::fmt::Write;
     #[task(priority = 2, local = [display_sender])]
     async fn display_task_writer(mut cx: display_task_writer::Context) {
@@ -358,9 +318,7 @@ mod app {
         loop {
             let mut data_str = DisplayString::new();
             write!(data_str, "Hello world: {index}").expect("not written");
-            display::display_str(data_str, &mut cx.local.display_sender)
-                .await
-                .unwrap();
+            display::display_str(data_str, &mut cx.local.display_sender).await.unwrap();
 
             Systick::delay(500.millis()).await;
             index += 1;

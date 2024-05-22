@@ -13,9 +13,12 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 )]
 mod app {
 
+    use drawer_robot::display::OledDisplay;
     use drawer_robot::my_stepper::*;
+    use drawer_robot::DisplayMemoryPool;
     use drawer_robot::*;
     use heapless::pool::singleton::Box;
+    use heapless::{pool, pool::singleton::Pool};
     use rtic_monotonics::systick::*;
     use rtic_sync::{channel::*, make_channel};
     use stm32f1xx_hal::{
@@ -28,6 +31,7 @@ mod app {
         timer::{Counter, Event},
     };
 
+    static mut DISPLAY_MEMORY_POOL_MEMORY: [u8; 96] = [32u8; 96];
     const TIMER_CLOCK_FREQ: u32 = 10_000; // step = 100_000 nanos, 100 micros
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
     const CHANNEL_CAPACITY: usize = 2;
@@ -58,11 +62,16 @@ mod app {
         stepper_2: MyStepper<stm32f1xx_hal::pac::TIM3, Y_StepPin, YDirPin>,
         stepper_3: MyStepper<stm32f1xx_hal::pac::TIM4, Z_StepPin, ZDirPin>,
         stepper_4: MyStepper<stm32f1xx_hal::pac::TIM5, E_StepPin, EDirPin>,
+        display: OledDisplay,
+        display_receiver: Receiver<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
     }
 
     #[init]
     fn init(mut cx: init::Context) -> (Shared, Local) {
         defmt::info!("init");
+        unsafe {
+            DisplayMemoryPool::grow(&mut DISPLAY_MEMORY_POOL_MEMORY);
+        }
 
         // Take ownership over the raw flash and rcc devices and convert them into the corresponding
         // HAL structs
@@ -84,41 +93,46 @@ mod app {
             panic!("Clock parameter values are wrong!");
         }
 
-        let (mut display_sender, display_receiver) =
-            make_channel!(Box<DisplayMemoryPool>, CHANNEL_CAPACITY);
+        let (mut display_sender, display_receiver) = make_channel!(Box<DisplayMemoryPool>, CHANNEL_CAPACITY);
 
         // Acquire the GPIOC peripheral
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
         let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
-        let (
-            (stepper_1, stepper_1_sender),
-            (stepper_2, stepper_2_sender),
-            (stepper_3, stepper_3_sender),
-            (stepper_4, stepper_4_sender),
-        ) = create_steppers(
-            &clocks,
-            gpioc.pc5,
-            gpioc.pc6,
-            gpioc.pc7,
-            gpiob.pb0,
-            gpiob.pb1,
-            gpiob.pb2,
-            gpiob.pb10,
-            gpiob.pb11,
-            gpiob.pb12,
-            gpiob.pb13,
-            gpiob.pb14,
-            gpiob.pb15,
-            &mut gpioc.crl,
-            &mut gpiob.crl,
-            &mut gpiob.crh,
-            cx.device.TIM2,
-            cx.device.TIM3,
-            cx.device.TIM4,
-            cx.device.TIM5,
-            display_sender,
-        );
+        let mut afio = cx.device.AFIO.constrain();
+        let ((stepper_1, stepper_1_sender), (stepper_2, stepper_2_sender), (stepper_3, stepper_3_sender), (stepper_4, stepper_4_sender)) =
+            create_steppers(
+                &clocks,
+                gpioc.pc5,
+                gpioc.pc6,
+                gpioc.pc7,
+                gpiob.pb0,
+                gpiob.pb1,
+                gpiob.pb2,
+                gpiob.pb10,
+                gpiob.pb11,
+                gpiob.pb12,
+                gpiob.pb13,
+                gpiob.pb14,
+                gpiob.pb15,
+                &mut gpioc.crl,
+                &mut gpiob.crl,
+                &mut gpiob.crh,
+                cx.device.TIM2,
+                cx.device.TIM3,
+                cx.device.TIM4,
+                cx.device.TIM5,
+                display_sender,
+            );
+        // SSD1306 display pins
+        let scl: Scl1Pin = gpiob.pb8.into_alternate_open_drain(&mut gpiob.crh);
+        let sda: Sda1Pin = gpiob.pb9.into_alternate_open_drain(&mut gpiob.crh);
+        //init ssd1306 display
+        let mut display = OledDisplay::new(scl, sda, &mut afio, clocks.clone(), cx.device.I2C1);
 
+        let systick_mono_token = rtic_monotonics::create_systick_token!();
+        Systick::start(cx.core.SYST, 72_000_000, systick_mono_token);
+
+        speed_changer::spawn(stepper_1_sender, stepper_2_sender, stepper_3_sender, stepper_4_sender).ok();
         (
             Shared {},
             Local {
@@ -127,17 +141,18 @@ mod app {
                 stepper_2,
                 stepper_3,
                 stepper_4,
+                display,
+                display_receiver,
             },
         )
     }
 
-    // Optional idle, can be removed if not needed.
-    #[idle]
-    fn idle(_: idle::Context) -> ! {
-        defmt::debug!("idle");
-
+    #[idle(local = [display_receiver, display])]
+    fn idle(cx: idle::Context) -> ! {
         loop {
-            cortex_m::asm::nop();
+            if let Ok(message) = cx.local.display_receiver.try_recv() {
+                cx.local.display.print(message);
+            }
         }
     }
 
