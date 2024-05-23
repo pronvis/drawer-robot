@@ -170,10 +170,7 @@ mod app {
                 Ok(read) => defmt::debug!("data via bluetooth: {}", read),
 
                 Err(err) => {
-                    defmt::debug!(
-                        "data via bluetooth read err: {:?}",
-                        defmt::Debug2Format(&err)
-                    );
+                    defmt::debug!("data via bluetooth read err: {:?}", defmt::Debug2Format(&err));
                 }
             }
         }

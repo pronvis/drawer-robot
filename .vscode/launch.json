@@ -9,7 +9,7 @@
             "type": "gdb",
             "request": "launch",
             // "remote": false,
-            "target": "/Users/pronvis/rust/rust_build_artifacts/thumbv7m-none-eabi/release/minimal_x",
+            "target": "/Users/pronvis/rust/rust_build_artifacts/thumbv7m-none-eabi/release/software_serial_read_stepper",
             "cwd": "${workspaceRoot}",
             "valuesFormatting": "parseText",
             "gdbpath" : "arm-none-eabi-gdb",

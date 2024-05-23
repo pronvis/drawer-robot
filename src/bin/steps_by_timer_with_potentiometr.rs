@@ -27,10 +27,7 @@ mod app {
     };
 
     //COPYPASTE (same in src/bin/steps_with_potentiometr.rs)
-    pub async fn read_potent(
-        adc1: &mut Adc<ADC1>,
-        pb0: &mut stm32f1xx_hal::gpio::Pin<'B', 0, stm32f1xx_hal::gpio::Analog>,
-    ) -> u16 {
+    pub async fn read_potent(adc1: &mut Adc<ADC1>, pb0: &mut stm32f1xx_hal::gpio::Pin<'B', 0, stm32f1xx_hal::gpio::Analog>) -> u16 {
         //sum 10 measurments - max value 4.1k, so 41k which can be still stored in u16
         let mut sum: u16 = 0;
         for _ in 0..10 {
@@ -91,9 +88,7 @@ mod app {
 
         // Acquire the GPIOC peripheral
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
-        let step_pin = gpioc
-            .pc6
-            .into_push_pull_output_with_state(&mut gpioc.crl, PinState::Low);
+        let step_pin = gpioc.pc6.into_push_pull_output_with_state(&mut gpioc.crl, PinState::Low);
 
         let mut en = gpioc.pc15.into_push_pull_output(&mut gpioc.crh);
         en.set_low();
@@ -103,12 +98,8 @@ mod app {
         // Configure pb0 as an analog input
         let mut pb0 = gpiob.pb0.into_analog(&mut gpiob.crl);
 
-        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>::new(
-            cx.device.TIM1,
-            &clocks,
-        );
-        let mut timer_1: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ> =
-            timer.counter();
+        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>::new(cx.device.TIM1, &clocks);
+        let mut timer_1: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ> = timer.counter();
         timer_1.start(2000.nanos()).unwrap();
         timer_1.listen(Event::Update);
 
@@ -153,10 +144,7 @@ mod app {
         if *cx.local.is_step {
             cx.local.step_pin.set_low();
             *cx.local.is_step = false;
-            cx.local
-                .timer_1
-                .start(cx.local.current_delay.nanos())
-                .unwrap();
+            cx.local.timer_1.start(cx.local.current_delay.nanos()).unwrap();
         } else {
             cx.local.step_pin.set_high();
             *cx.local.is_step = true;

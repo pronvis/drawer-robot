@@ -25,10 +25,7 @@ mod app {
     };
 
     //COPYPASTE (same in src/bin/steps_by_timer_with_potentiometr.rs)
-    pub async fn read_potent(
-        adc1: &mut Adc<ADC1>,
-        pb0: &mut stm32f1xx_hal::gpio::Pin<'B', 0, stm32f1xx_hal::gpio::Analog>,
-    ) -> u16 {
+    pub async fn read_potent(adc1: &mut Adc<ADC1>, pb0: &mut stm32f1xx_hal::gpio::Pin<'B', 0, stm32f1xx_hal::gpio::Analog>) -> u16 {
         //sum 10 measurments - max value 4.1k, so 41k which can be still stored in u16
         let mut sum: u16 = 0;
         for _ in 0..10 {
@@ -110,14 +107,7 @@ mod app {
         task::spawn(receiver).ok();
         task1::spawn(sender).ok();
 
-        (
-            Shared {},
-            Local {
-                step_pin: step,
-                adc1,
-                pb0,
-            },
-        )
+        (Shared {}, Local { step_pin: step, adc1, pb0 })
     }
 
     // Optional idle, can be removed if not needed.

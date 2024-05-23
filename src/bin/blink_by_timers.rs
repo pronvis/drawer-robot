@@ -62,30 +62,18 @@ mod app {
 
         // Acquire the GPIOC peripheral
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
-        let internal_led = gpioc
-            .pc13
-            .into_push_pull_output_with_state(&mut gpioc.crh, PinState::Low);
+        let internal_led = gpioc.pc13.into_push_pull_output_with_state(&mut gpioc.crh, PinState::Low);
 
         let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
-        let out_led = gpiob
-            .pb12
-            .into_push_pull_output_with_state(&mut gpiob.crh, PinState::Low);
+        let out_led = gpiob.pb12.into_push_pull_output_with_state(&mut gpiob.crh, PinState::Low);
 
-        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>::new(
-            cx.device.TIM1,
-            &clocks,
-        );
-        let mut timer_1: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ> =
-            timer.counter();
+        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>::new(cx.device.TIM1, &clocks);
+        let mut timer_1: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ> = timer.counter();
         timer_1.start(1.millis()).unwrap();
         timer_1.listen(Event::Update);
 
-        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>::new(
-            cx.device.TIM2,
-            &clocks,
-        );
-        let mut timer_2: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ> =
-            timer.counter();
+        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>::new(cx.device.TIM2, &clocks);
+        let mut timer_2: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ> = timer.counter();
         timer_2.start(5.millis()).unwrap();
         timer_2.listen(Event::Update);
 

@@ -86,13 +86,7 @@ mod app {
 
         serial_usart3.listen(stm32f1xx_hal::serial::Event::Rxne);
         let (tx_usart3, mut rx_usart3) = serial_usart3.split();
-        (
-            Shared {},
-            Local {
-                rx_usart3,
-                tx_usart3,
-            },
-        )
+        (Shared {}, Local { rx_usart3, tx_usart3 })
     }
 
     // Optional idle, can be removed if not needed.

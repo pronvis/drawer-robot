@@ -66,19 +66,13 @@ mod app {
         // Acquire the GPIOC peripheral
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
         let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
-        let step_pin = gpioc
-            .pc6
-            .into_push_pull_output_with_state(&mut gpioc.crl, PinState::Low);
+        let step_pin = gpioc.pc6.into_push_pull_output_with_state(&mut gpioc.crl, PinState::Low);
 
         let mut en = gpioc.pc7.into_push_pull_output(&mut gpioc.crl);
         en.set_low();
 
-        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>::new(
-            cx.device.TIM1,
-            &clocks,
-        );
-        let mut timer_1: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ> =
-            timer.counter();
+        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>::new(cx.device.TIM1, &clocks);
+        let mut timer_1: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ> = timer.counter();
         timer_1.start(2000.nanos()).unwrap();
         timer_1.listen(Event::Update);
 
@@ -108,10 +102,7 @@ mod app {
         if *cx.local.is_step {
             cx.local.step_pin.set_low();
             *cx.local.is_step = false;
-            cx.local
-                .timer_1
-                .start(cx.shared.nanos_between_steps.nanos())
-                .unwrap();
+            cx.local.timer_1.start(cx.shared.nanos_between_steps.nanos()).unwrap();
         } else {
             cx.local.step_pin.set_high();
             *cx.local.is_step = true;
