@@ -15,6 +15,7 @@ mod app {
     use drawer_robot::my_tmc2209::communicator::TMC2209SerialCommunicator;
 
     use core::ops::Not;
+    use fugit::Duration;
     use rtic_monotonics::systick::*;
     use rtic_sync::{channel::*, make_channel};
     use stm32f1xx_hal::{
@@ -36,10 +37,27 @@ mod app {
                                                           // No idea why!
                                                           //TODO:
                                                           // НАЙТИ МИНИМУМ ПРИ КОТОРОМ БУДЕТ РАБОТАТЬ ЧТЕНИЕ!!!
+                                                          // const BIT_SEND_TICKS: u32 = 30;
     const BIT_SEND_NANOS_DUR: u32 = 2800;
+    //WITH
+    // const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_000_000; // tick = 13.89 nanos
+    // AND
+    // const BIT_SEND_NANOS_DUR: u32 = 2800;
+    // IT WORKS FINE - WHY???
+
+    // WITH
+    // TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_000_000
+    // AND
+    // BIT_SEND_NANOS_DUR: u32 = 28;
+    // OR
+    // BIT_SEND_NANOS_DUR: u32 = 280;
+    // WE ENTERING infinite loop
+    // WHY?
 
     #[shared]
-    struct Shared {}
+    struct Shared {
+        x: u64,
+    }
 
     #[local]
     struct Local {
@@ -68,9 +86,9 @@ mod app {
         let clocks = rcc
             .cfgr
             .use_hse(8.MHz())
-            .sysclk(72.MHz())
+            .sysclk(MAIN_CLOCK_FREQ.Hz())
             .pclk1(36.MHz())
-            .pclk2(72.MHz())
+            .pclk2(MAIN_CLOCK_FREQ.Hz())
             .freeze(&mut flash.acr);
 
         if !clocks.usbclk_valid() {
@@ -87,17 +105,19 @@ mod app {
         let mut read_timer = drawer_robot::get_counter(cx.device.TIM3, &clocks);
         let mut write_timer = drawer_robot::get_counter(cx.device.TIM4, &clocks);
         let mut tmc2209_communicator_timer = drawer_robot::get_counter(cx.device.TIM2, &clocks);
-        defmt::debug!(
-            "tmc2209_communicator_timer {}",
-            BIT_SEND_NANOS_DUR.nanos::<1, TMC2209COMMUNICATOR_CLOCK_FREQ>().ticks()
-        );
 
+        //TODO: I dont need it. But! If remove, then commenting useless check in 'prepare_to_send_read_req'
+        //will not change behavior anymore...
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, MAIN_CLOCK_FREQ, systick_mono_token);
 
         read_timer.start(1.secs()).unwrap();
-        write_timer.start(200.millis()).unwrap();
-        tmc2209_communicator_timer.start(BIT_SEND_NANOS_DUR.nanos()).unwrap();
+        // write_timer.start(200.millis()).unwrap();
+        let tmc2209_timer_ticks = BIT_SEND_NANOS_DUR.nanos();
+        tmc2209_communicator_timer.start(tmc2209_timer_ticks).unwrap();
+        // let tmc2209_timer_ticks = Duration::<u32, 1, TMC2209COMMUNICATOR_CLOCK_FREQ>::from_ticks(BIT_SEND_TICKS);
+        // tmc2209_communicator_timer.start(tmc2209_timer_ticks).unwrap();
+        defmt::debug!("tmc2209_communicator_timer perior: {} ticks", tmc2209_timer_ticks.ticks());
 
         read_timer.listen(Event::Update);
         // write_timer.listen(Event::Update);
@@ -108,7 +128,7 @@ mod app {
 
         let communicator = TMC2209SerialCommunicator::new(tmc2209_msg_receiver, tmc2209_rsp_sender, x_stepper_uart_pin, gpioc.crh);
         (
-            Shared {},
+            Shared { x: 0 },
             Local {
                 communicator,
                 tmc2209_communicator_timer,
@@ -137,7 +157,7 @@ mod app {
             *cx.local.direction = cx.local.direction.not();
         }
 
-        defmt::debug!("current speed: {}", cx.local.speed);
+        // defmt::debug!("current speed: {}", cx.local.speed);
 
         let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(*cx.local.speed));
         let req = drawer_robot::my_tmc2209::Request::write(write_req);
@@ -146,15 +166,18 @@ mod app {
         cx.local.write_timer.clear_interrupt(Event::Update);
     }
 
-    #[task(binds = TIM2, priority = 10, local = [communicator, tmc2209_communicator_timer])]
-    fn communicator_task(cx: communicator_task::Context) {
+    #[task(binds = TIM2, priority = 10, local = [communicator, tmc2209_communicator_timer], shared = [x])]
+    fn communicator_task(mut cx: communicator_task::Context) {
         cx.local.communicator.handle_interrupt();
+        // cx.shared.x.lock(|x| *x += 1);
         cx.local.tmc2209_communicator_timer.clear_interrupt(Event::Update);
     }
 
     //TODO: Works only if PRIORITY of 'read_task' is higher then 'communicator_task'
-    #[task(binds = TIM3, priority = 11, local=[read_timer, tmc2209_msg_sender_2, tmc2209_rsp_receiver, first: bool = true])]
-    fn read_task(cx: read_task::Context) {
+    #[task(binds = TIM3, priority = 1, local = [read_timer, tmc2209_msg_sender_2, tmc2209_rsp_receiver, first: bool = true], shared = [x])]
+    fn read_task(mut cx: read_task::Context) {
+        // let x = cx.shared.x.lock(|x| *x);
+        // defmt::debug!("x: {}", x);
         if *cx.local.first {
             *cx.local.first = false;
 
@@ -178,7 +201,6 @@ mod app {
                 Some(_) => defmt::debug!("Successfully send READ message to Communicator"),
             }
         }
-
         cx.local.read_timer.clear_interrupt(Event::Update);
     }
 }

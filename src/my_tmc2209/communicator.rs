@@ -104,7 +104,7 @@ where
 
     fn prepare_to_send_write_req(&mut self, data: &[u8]) {
         if self.current_state != CommunicatorState::Nothing {
-            //TODO: return Error
+            //TODO: delete this check, it is always false
             return;
         }
 
@@ -114,7 +114,7 @@ where
 
     fn prepare_to_send_read_req(&mut self, data: &[u8]) {
         if self.current_state != CommunicatorState::Nothing {
-            //TODO: return Error
+            //TODO: delete this check, it is always false
             return;
         }
 
