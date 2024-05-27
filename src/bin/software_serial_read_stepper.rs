@@ -38,21 +38,7 @@ mod app {
                                                           //TODO:
                                                           // НАЙТИ МИНИМУМ ПРИ КОТОРОМ БУДЕТ РАБОТАТЬ ЧТЕНИЕ!!!
                                                           // const BIT_SEND_TICKS: u32 = 30;
-    const BIT_SEND_NANOS_DUR: u32 = 2800;
-    //WITH
-    // const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_000_000; // tick = 13.89 nanos
-    // AND
-    // const BIT_SEND_NANOS_DUR: u32 = 2800;
-    // IT WORKS FINE - WHY???
-
-    // WITH
-    // TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_000_000
-    // AND
-    // BIT_SEND_NANOS_DUR: u32 = 28;
-    // OR
-    // BIT_SEND_NANOS_DUR: u32 = 280;
-    // WE ENTERING infinite loop
-    // WHY?
+    const BIT_SEND_TICKS: u32 = 60;
 
     #[shared]
     struct Shared {
@@ -108,19 +94,17 @@ mod app {
 
         //TODO: I dont need it. But! If remove, then commenting useless check in 'prepare_to_send_read_req'
         //will not change behavior anymore...
-        let systick_mono_token = rtic_monotonics::create_systick_token!();
-        Systick::start(cx.core.SYST, MAIN_CLOCK_FREQ, systick_mono_token);
+        // let systick_mono_token = rtic_monotonics::create_systick_token!();
+        // Systick::start(cx.core.SYST, MAIN_CLOCK_FREQ, systick_mono_token);
 
         read_timer.start(1.secs()).unwrap();
-        // write_timer.start(200.millis()).unwrap();
-        let tmc2209_timer_ticks = BIT_SEND_NANOS_DUR.nanos();
+        write_timer.start(200.millis()).unwrap();
+        let tmc2209_timer_ticks = Duration::<u32, 1, TMC2209COMMUNICATOR_CLOCK_FREQ>::from_ticks(BIT_SEND_TICKS);
         tmc2209_communicator_timer.start(tmc2209_timer_ticks).unwrap();
-        // let tmc2209_timer_ticks = Duration::<u32, 1, TMC2209COMMUNICATOR_CLOCK_FREQ>::from_ticks(BIT_SEND_TICKS);
-        // tmc2209_communicator_timer.start(tmc2209_timer_ticks).unwrap();
-        defmt::debug!("tmc2209_communicator_timer perior: {} ticks", tmc2209_timer_ticks.ticks());
+        defmt::debug!("tmc2209_communicator_timer perior: {} micros", tmc2209_timer_ticks.to_micros());
 
         read_timer.listen(Event::Update);
-        // write_timer.listen(Event::Update);
+        write_timer.listen(Event::Update);
         tmc2209_communicator_timer.listen(Event::Update);
 
         let (tmc2209_msg_sender, tmc2209_msg_receiver) = make_channel!(drawer_robot::my_tmc2209::Request, CHANNEL_CAPACITY);
@@ -168,16 +152,15 @@ mod app {
 
     #[task(binds = TIM2, priority = 10, local = [communicator, tmc2209_communicator_timer], shared = [x])]
     fn communicator_task(mut cx: communicator_task::Context) {
-        cx.local.communicator.handle_interrupt();
-        // cx.shared.x.lock(|x| *x += 1);
         cx.local.tmc2209_communicator_timer.clear_interrupt(Event::Update);
+        cx.local.communicator.handle_interrupt();
     }
 
     //TODO: Works only if PRIORITY of 'read_task' is higher then 'communicator_task'
     #[task(binds = TIM3, priority = 1, local = [read_timer, tmc2209_msg_sender_2, tmc2209_rsp_receiver, first: bool = true], shared = [x])]
     fn read_task(mut cx: read_task::Context) {
-        // let x = cx.shared.x.lock(|x| *x);
-        // defmt::debug!("x: {}", x);
+        cx.local.read_timer.clear_interrupt(Event::Update);
+
         if *cx.local.first {
             *cx.local.first = false;
 
@@ -196,11 +179,10 @@ mod app {
             let read_req = tmc2209::read_request::<tmc2209::reg::IFCNT>(0);
             let req = drawer_robot::my_tmc2209::Request::read(read_req);
             let res = cx.local.tmc2209_msg_sender_2.try_send(req).ok();
-            match res {
-                None => defmt::debug!("fail to send message to Communicator"),
-                Some(_) => defmt::debug!("Successfully send READ message to Communicator"),
-            }
+            // match res {
+            //     None => defmt::debug!("fail to send message to Communicator"),
+            //     Some(_) => defmt::debug!("Successfully send READ message to Communicator"),
+            // }
         }
-        cx.local.read_timer.clear_interrupt(Event::Update);
     }
 }
