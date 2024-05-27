@@ -35,8 +35,10 @@ mod app {
     //
     //MAX WORKING VALUE = 10416 nanos:
     //  75 ticks with FREQ: 72_00_000 (OVERSAMPLE = 3)
-    const BIT_SEND_TICKS: u32 = 75;
-    const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_00_000;
+    //
+    //LETS CHOOSE MIDDLE: 55555 nanos
+    const BIT_SEND_TICKS: u32 = 4;
+    const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_000;
 
     #[shared]
     struct Shared {

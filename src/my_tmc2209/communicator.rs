@@ -103,21 +103,11 @@ where
     }
 
     fn prepare_to_send_write_req(&mut self, data: &[u8]) {
-        if self.current_state != CommunicatorState::Nothing {
-            //TODO: delete this check, it is always false
-            return;
-        }
-
         self.prepare_to_send(data);
         self.read_after_write = false;
     }
 
     fn prepare_to_send_read_req(&mut self, data: &[u8]) {
-        if self.current_state != CommunicatorState::Nothing {
-            //TODO: delete this check, it is always false
-            return;
-        }
-
         self.prepare_to_send(data);
         self.already_prepared_to_read_response = false;
         self.read_after_write = true;
