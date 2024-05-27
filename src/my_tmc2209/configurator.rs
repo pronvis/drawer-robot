@@ -29,37 +29,62 @@ impl Configurator {
 
     pub async fn setup(&mut self, tmc2209_rsp_receiver: &mut Receiver<'static, u32, CHANNEL_CAPACITY>) {
         self.update_ifcnt_val(tmc2209_rsp_receiver).await.ok();
+        // Systick::delay(1.millis()).await;
 
         // SET SENDDELAY time setting to 8 bit times
         let ifcnt_before_req = self.ifcnt;
         while self.ifcnt == ifcnt_before_req {
             defmt::debug!("IN WHILE LOOP. ifcnt_before_req: {}, self.ifcnt: {}", ifcnt_before_req, self.ifcnt);
-            let write_req = tmc2209::write_request(0, tmc2209::reg::SLAVECONF(0));
+            let mut gconf = tmc2209::reg::GCONF(0);
+            gconf.set_i_scale_analog(true);
+            gconf.set_internal_rsense(true);
+            gconf.set_en_spread_cycle(true);
+            gconf.set_pdn_disable(true);
+            gconf.set_mstep_reg_select(true);
+            gconf.set_multistep_filt(true);
+            gconf.set_test_mode(false);
+            let write_req = tmc2209::write_request(0, gconf);
             let req = crate::my_tmc2209::Request::write(write_req);
             let _ = self.sender.send(req).await;
-            // Systick::delay(100.millis()).await;
+
             self.update_ifcnt_val(tmc2209_rsp_receiver).await.ok();
+            // Systick::delay(10.millis()).await;
+        }
+
+        // SET SENDDELAY time setting to 8 bit times
+        let ifcnt_before_req = self.ifcnt;
+        while self.ifcnt == ifcnt_before_req {
+            defmt::debug!("IN WHILE LOOP. ifcnt_before_req: {}, self.ifcnt: {}", ifcnt_before_req, self.ifcnt);
+            let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(100_000));
+            let req = crate::my_tmc2209::Request::write(write_req);
+            let _ = self.sender.send(req).await;
+
+            self.update_ifcnt_val(tmc2209_rsp_receiver).await.ok();
+            // Systick::delay(10.millis()).await;
         }
     }
 
     async fn update_ifcnt_val(&mut self, tmc2209_rsp_receiver: &mut Receiver<'static, u32, CHANNEL_CAPACITY>) -> Result<(), ()> {
-        self.send_ifcnt_req().await;
-        let ifcnt = Self::read_ifcnt_resp(tmc2209_rsp_receiver).await?;
+        // self.send_ifcnt_req().await;
+        // let ifcnt = Self::read_ifcnt_resp(tmc2209_rsp_receiver).await?;
 
-        // let mut resp = Self::read_ifcnt_resp(tmc2209_rsp_receiver).await;
-        // if resp.is_err() {
-        //     return Result::Err(());
-        // }
-        // while resp.is_err() {
-        //     self.send_ifcnt_req().await;
-        //     resp = Self::read_ifcnt_resp(tmc2209_rsp_receiver).await;
-        // }
-        // let ifcnt = resp.ok().unwrap();
+        let mut req_count: u32 = 0;
+        let mut resp = Result::Err(());
+        while resp.is_err() {
+            self.send_ifcnt_req().await;
+            resp = Self::read_ifcnt_resp(tmc2209_rsp_receiver).await;
+            req_count += 1;
+        }
+        let ifcnt = resp.ok().unwrap();
 
-        defmt::debug!("receive ifcnt response: {}; curr ifcnt: {}", ifcnt, self.ifcnt);
+        defmt::debug!(
+            "receive ifcnt response. Req count: {}, ifcnt: {}; curr ifcnt: {}",
+            req_count,
+            ifcnt,
+            self.ifcnt
+        );
 
-        if !self.first_call && self.ifcnt + 1 != ifcnt {
-            defmt::debug!("returning error for some case");
+        if !self.first_call && self.ifcnt == ifcnt {
             return Result::Err(());
         } else {
             if self.first_call {

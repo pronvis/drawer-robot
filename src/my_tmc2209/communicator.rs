@@ -42,6 +42,7 @@ where
     receive_buffer_head: usize,
     bytes_to_read: u8,
     already_prepared_to_read_response: bool,
+    good_bytes_read: u8,
 
     pin: Pin<PIN_C, PIN_N, Dynamic>,
     cr: <Pin<PIN_C, PIN_N, Dynamic> as HL>::Cr,
@@ -78,6 +79,7 @@ where
             receive_buffer_tail: 0,
             receive_buffer_head: 0,
             bytes_to_read: 0,
+            good_bytes_read: 0,
 
             pin,
             cr,
@@ -163,10 +165,11 @@ where
     fn prepare_to_read_response(&mut self) {
         self.already_prepared_to_read_response = true;
         self.rx_bit_counter = -1; // rx_bit_counter = -1 :  waiting for start bit
-        self.rx_tick_counter = 2; // 2 : next interrupt will be discarded. 2 interrupts required to consider RX pin level
+        self.rx_tick_counter = 1; // 2 : next interrupt will be discarded. 2 interrupts required to consider RX pin level
         self.rx_buffer = 0;
         self.bytes_to_read = ReadResponse::LEN_BYTES as u8;
         self.pin.make_pull_up_input(&mut self.cr);
+        self.good_bytes_read = 0;
     }
 
     fn read_bit(&mut self) {
@@ -187,6 +190,7 @@ where
             } else if self.rx_bit_counter >= 8 {
                 // rx_bit_counter >= 8 : waiting for stop bit
                 if bit_value {
+                    self.good_bytes_read += 1;
                     // stop bit read complete, add byte to buffer
                     let next = (self.receive_buffer_tail + 1) % MAX_RX_BUFFER_SIZE;
                     if next != self.receive_buffer_head {
@@ -250,23 +254,30 @@ where
     }
 
     fn change_state_to_end_reading(&mut self) {
-        if let Some(response) = self.get_response() {
-            let mut reader = tmc2209::Reader::default();
-            let (_, tmc_response) = reader.read_response(&response);
-            if let Some(response_data) = tmc_response {
-                let _ = self.responses_channel.try_send(response_data.data_u32());
-            }
-        } else {
+        if self.good_bytes_read != 8 {
+            defmt::debug!("good bytes read: {}", self.good_bytes_read);
             let _ = self.responses_channel.try_send(u32::MAX);
-            // defmt::debug!(
-            //     "fail to read response, head: {}, tail: {}",
-            //     self.receive_buffer_head,
-            //     self.receive_buffer_tail
-            // );
+        } else {
+            if let Some(response) = self.get_response() {
+                let mut reader = tmc2209::Reader::default();
+                let (_, tmc_response) = reader.read_response(&response);
+                if let Some(response_data) = tmc_response {
+                    let _ = self.responses_channel.try_send(response_data.data_u32());
+                }
+            } else {
+                //TODO: is there any collision with u32::MAX?
+                let _ = self.responses_channel.try_send(u32::MAX);
+                defmt::debug!(
+                    "fail to read response, head: {}, tail: {}",
+                    self.receive_buffer_head,
+                    self.receive_buffer_tail
+                );
+            }
         }
 
         self.current_state = CommunicatorState::Nothing;
         self.pin.make_push_pull_output(&mut self.cr);
+        self.pin.set_high().ok().unwrap();
     }
 
     pub fn handle_interrupt(&mut self) {

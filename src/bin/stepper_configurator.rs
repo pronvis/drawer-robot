@@ -14,6 +14,7 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 mod app {
     use drawer_robot::my_tmc2209::communicator::TMC2209SerialCommunicator;
 
+    use embedded_graphics::draw_target;
     use fugit::Duration;
     use rtic_monotonics::systick::*;
     use rtic_sync::{channel::*, make_channel};
@@ -23,8 +24,8 @@ mod app {
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
     const CHANNEL_CAPACITY: usize = drawer_robot::my_tmc2209::communicator::CHANNEL_CAPACITY;
 
-    const BIT_SEND_TICKS: u32 = 4;
-    const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_000;
+    const BIT_SEND_TICKS: u32 = 8;
+    const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_0_000;
 
     #[shared]
     struct Shared {}
@@ -75,8 +76,8 @@ mod app {
         defmt::debug!("tmc2209_communicator_timer perior: {} nanos", tmc2209_timer_ticks.to_nanos());
         tmc2209_communicator_timer.listen(Event::Update);
 
-        // let systick_mono_token = rtic_monotonics::create_systick_token!();
-        // Systick::start(cx.core.SYST, MAIN_CLOCK_FREQ, systick_mono_token);
+        let systick_mono_token = rtic_monotonics::create_systick_token!();
+        Systick::start(cx.core.SYST, MAIN_CLOCK_FREQ, systick_mono_token);
 
         let (mut tmc2209_msg_sender, tmc2209_msg_receiver) = make_channel!(drawer_robot::my_tmc2209::Request, CHANNEL_CAPACITY);
         let (mut tmc2209_rsp_sender, tmc2209_rsp_receiver) = make_channel!(u32, CHANNEL_CAPACITY);
@@ -85,6 +86,7 @@ mod app {
         let configurator = drawer_robot::my_tmc2209::configurator::Configurator::new(tmc2209_msg_sender.clone());
 
         task1::spawn().ok();
+        // task2::spawn().ok();
         (
             Shared {},
             Local {
@@ -101,6 +103,24 @@ mod app {
     async fn task1(mut cx: task1::Context) {
         cx.local.configurator.setup(cx.local.tmc2209_rsp_receiver).await;
         defmt::debug!("Stepper driver configured successfully!");
+    }
+
+    #[task(priority = 1, local = [tmc2209_msg_sender])]
+    async fn task2(mut cx: task2::Context) {
+        let mut speed: i32 = 100;
+        let mut step: i32 = 1000;
+        let max_speed = 600_000;
+        loop {
+            let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(speed as u32));
+            let req = drawer_robot::my_tmc2209::Request::write(write_req);
+            cx.local.tmc2209_msg_sender.send(req).await.ok();
+            speed += step;
+
+            if speed >= max_speed || speed <= 0 {
+                step = -1 * step;
+                defmt::debug!("step: {}", step);
+            }
+        }
     }
 
     #[task(binds = TIM2, priority = 5, local = [communicator, tmc2209_communicator_timer])]
