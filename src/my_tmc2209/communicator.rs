@@ -257,11 +257,12 @@ where
                 let _ = self.responses_channel.try_send(response_data.data_u32());
             }
         } else {
-            defmt::debug!(
-                "fail to read response, head: {}, tail: {}",
-                self.receive_buffer_head,
-                self.receive_buffer_tail
-            );
+            let _ = self.responses_channel.try_send(u32::MAX);
+            // defmt::debug!(
+            //     "fail to read response, head: {}, tail: {}",
+            //     self.receive_buffer_head,
+            //     self.receive_buffer_tail
+            // );
         }
 
         self.current_state = CommunicatorState::Nothing;
