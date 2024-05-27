@@ -127,7 +127,6 @@ where
         // if tx_tick_counter > 0 interrupt is discarded. Only when tx_tick_counter reach 0 we set TX pin.
         self.tx_tick_counter -= 1;
         if self.tx_tick_counter == 0 {
-            //send first bit without OVERSAMPLING
             self.tx_bit_counter += 1;
             // 10 = stop, end + 8 bits
             if self.tx_bit_counter <= 10 {

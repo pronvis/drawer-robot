@@ -29,16 +29,14 @@ mod app {
     const READ_CLOCK_FREQ: u32 = 72_00; // tick = 138.89 micros
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
 
-    const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_0_000; // tick = 13.89 nanos
-                                                          // const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 500_000; // tick = 2 micros
-                                                          // in 1 second 72_000_000 ticks happens
-                                                          // If I set BIT_SEND_NANOS_DUR = 280 && TMC2209COMMUNICATOR_CLOCK_FREQ = 72_00_00
-                                                          // then it doesnt work with COMMENTED debug log, even with 'opt-level=0'...
-                                                          // No idea why!
-                                                          //TODO:
-                                                          // НАЙТИ МИНИМУМ ПРИ КОТОРОМ БУДЕТ РАБОТАТЬ ЧТЕНИЕ!!!
-                                                          // const BIT_SEND_TICKS: u32 = 30;
-    const BIT_SEND_TICKS: u32 = 60;
+    //MIN WORKING VALUE = 111 micros:
+    //  242 ticks with FREQ: 72_0_000 (OVERSAMPLE = 1)
+    //  80 ticks with FREQ: 72_0_000 (OVERSAMPLE = 3)
+    //
+    //MAX WORKING VALUE = 10416 nanos:
+    //  75 ticks with FREQ: 72_00_000 (OVERSAMPLE = 3)
+    const BIT_SEND_TICKS: u32 = 75;
+    const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_00_000;
 
     #[shared]
     struct Shared {
@@ -101,7 +99,7 @@ mod app {
         write_timer.start(200.millis()).unwrap();
         let tmc2209_timer_ticks = Duration::<u32, 1, TMC2209COMMUNICATOR_CLOCK_FREQ>::from_ticks(BIT_SEND_TICKS);
         tmc2209_communicator_timer.start(tmc2209_timer_ticks).unwrap();
-        defmt::debug!("tmc2209_communicator_timer perior: {} micros", tmc2209_timer_ticks.to_micros());
+        defmt::debug!("tmc2209_communicator_timer perior: {} nanos", tmc2209_timer_ticks.to_nanos());
 
         read_timer.listen(Event::Update);
         write_timer.listen(Event::Update);
@@ -128,6 +126,7 @@ mod app {
 
     #[task(binds = TIM4, priority = 5, local = [write_timer, tmc2209_msg_sender_1, speed: u32 = 1000, direction: bool = true])]
     fn write_task(cx: write_task::Context) {
+        cx.local.write_timer.clear_interrupt(Event::Update);
         let speed_step: i32 = {
             if *cx.local.direction {
                 300
@@ -146,8 +145,6 @@ mod app {
         let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(*cx.local.speed));
         let req = drawer_robot::my_tmc2209::Request::write(write_req);
         let _ = cx.local.tmc2209_msg_sender_1.try_send(req).ok();
-
-        cx.local.write_timer.clear_interrupt(Event::Update);
     }
 
     #[task(binds = TIM2, priority = 10, local = [communicator, tmc2209_communicator_timer], shared = [x])]
