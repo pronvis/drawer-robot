@@ -24,7 +24,8 @@ mod app {
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
     const CHANNEL_CAPACITY: usize = drawer_robot::my_tmc2209::communicator::CHANNEL_CAPACITY;
 
-    const BIT_SEND_TICKS: u32 = 8;
+    // > 6 ticks Configurator need Systick::delay for some reason...
+    const BIT_SEND_TICKS: u32 = 6;
     const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_0_000;
 
     #[shared]
@@ -101,8 +102,16 @@ mod app {
 
     #[task(priority = 1, local = [configurator, tmc2209_rsp_receiver])]
     async fn task1(mut cx: task1::Context) {
-        cx.local.configurator.setup(cx.local.tmc2209_rsp_receiver).await;
-        defmt::debug!("Stepper driver configured successfully!");
+        let setup_res = cx.local.configurator.setup(cx.local.tmc2209_rsp_receiver).await;
+        match setup_res {
+            Ok(_) => {
+                defmt::debug!("Stepper driver configured successfully!");
+            }
+            Err(_) => {
+                defmt::debug!("Fail to configure stepper driver");
+                panic!("Fail to configure stepper driver");
+            }
+        }
     }
 
     #[task(priority = 1, local = [tmc2209_msg_sender])]

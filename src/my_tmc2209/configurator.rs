@@ -1,7 +1,4 @@
 use rtic_monotonics::systick::Systick;
-use stm32f1xx_hal::gpio::{Dynamic, Pin, HL};
-
-use fugit::ExtU32;
 use rtic_sync::channel::*;
 
 const CHANNEL_CAPACITY: usize = crate::my_tmc2209::communicator::CHANNEL_CAPACITY;
@@ -16,6 +13,8 @@ pub struct Configurator {
 }
 
 impl Configurator {
+    const MAX_SAME_REQ_COUNT: u8 = 5;
+
     pub fn new(sender: Sender<'static, crate::my_tmc2209::Request, CHANNEL_CAPACITY>) -> Self {
         Self {
             sender,
@@ -27,50 +26,66 @@ impl Configurator {
         }
     }
 
-    pub async fn setup(&mut self, tmc2209_rsp_receiver: &mut Receiver<'static, u32, CHANNEL_CAPACITY>) {
+    pub async fn setup(&mut self, tmc2209_rsp_receiver: &mut Receiver<'static, u32, CHANNEL_CAPACITY>) -> Result<(), ()> {
         self.update_ifcnt_val(tmc2209_rsp_receiver).await.ok();
-        // Systick::delay(1.millis()).await;
 
-        // SET SENDDELAY time setting to 8 bit times
+        let mut gconf = tmc2209::reg::GCONF(0);
+        gconf.set_i_scale_analog(true);
+        gconf.set_internal_rsense(true);
+        gconf.set_en_spread_cycle(true);
+        gconf.set_pdn_disable(true);
+        gconf.set_mstep_reg_select(true);
+        gconf.set_multistep_filt(true);
+        gconf.set_test_mode(false);
+        let write_req = tmc2209::write_request(0, gconf);
+        self.send_req_and_check(write_req, tmc2209_rsp_receiver).await?;
+
+        let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(100_000));
+        self.send_req_and_check(write_req, tmc2209_rsp_receiver).await?;
+
+        return Result::Ok(());
+    }
+
+    async fn send_req_and_check(
+        &mut self,
+        write_req: tmc2209::WriteRequest,
+        tmc2209_rsp_receiver: &mut Receiver<'static, u32, CHANNEL_CAPACITY>,
+    ) -> Result<(), ()> {
+        let mut req_count: u8 = 0;
         let ifcnt_before_req = self.ifcnt;
         while self.ifcnt == ifcnt_before_req {
-            defmt::debug!("IN WHILE LOOP. ifcnt_before_req: {}, self.ifcnt: {}", ifcnt_before_req, self.ifcnt);
-            let mut gconf = tmc2209::reg::GCONF(0);
-            gconf.set_i_scale_analog(true);
-            gconf.set_internal_rsense(true);
-            gconf.set_en_spread_cycle(true);
-            gconf.set_pdn_disable(true);
-            gconf.set_mstep_reg_select(true);
-            gconf.set_multistep_filt(true);
-            gconf.set_test_mode(false);
-            let write_req = tmc2209::write_request(0, gconf);
-            let req = crate::my_tmc2209::Request::write(write_req);
-            let _ = self.sender.send(req).await;
+            if req_count >= Self::MAX_SAME_REQ_COUNT {
+                return Result::Err(());
+            }
+            let _ = self.send_write_req(write_req).await;
 
             self.update_ifcnt_val(tmc2209_rsp_receiver).await.ok();
+            req_count += 1;
             // Systick::delay(10.millis()).await;
         }
 
-        // SET SENDDELAY time setting to 8 bit times
-        let ifcnt_before_req = self.ifcnt;
-        while self.ifcnt == ifcnt_before_req {
-            defmt::debug!("IN WHILE LOOP. ifcnt_before_req: {}, self.ifcnt: {}", ifcnt_before_req, self.ifcnt);
-            let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(100_000));
-            let req = crate::my_tmc2209::Request::write(write_req);
-            let _ = self.sender.send(req).await;
+        return Result::Ok(());
+    }
 
-            self.update_ifcnt_val(tmc2209_rsp_receiver).await.ok();
-            // Systick::delay(10.millis()).await;
-        }
+    async fn send_write_req(
+        &mut self,
+        write_req: tmc2209::WriteRequest,
+    ) -> Result<(), rtic_sync::channel::NoReceiver<crate::my_tmc2209::Request>> {
+        let req = crate::my_tmc2209::Request::write(write_req);
+        self.sender.send(req).await
     }
 
     async fn update_ifcnt_val(&mut self, tmc2209_rsp_receiver: &mut Receiver<'static, u32, CHANNEL_CAPACITY>) -> Result<(), ()> {
         // self.send_ifcnt_req().await;
         // let ifcnt = Self::read_ifcnt_resp(tmc2209_rsp_receiver).await?;
 
-        let mut req_count: u32 = 0;
+        let mut req_count: u8 = 0;
         let mut resp = Result::Err(());
         while resp.is_err() {
+            if req_count >= Self::MAX_SAME_REQ_COUNT {
+                return Result::Err(());
+            }
+
             self.send_ifcnt_req().await;
             resp = Self::read_ifcnt_resp(tmc2209_rsp_receiver).await;
             req_count += 1;
