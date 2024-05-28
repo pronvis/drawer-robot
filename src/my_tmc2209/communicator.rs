@@ -7,8 +7,8 @@ use tmc2209::ReadResponse;
 const OVERSAMPLE: u8 = 3;
 //'default=8 bit times', but looks like it is too much and we skip some data if 'SWITCH_DELAY=8'
 //I choose 5 for the safety
-const SWITCH_DELAY: u8 = 5;
-const MAX_RX_BUFFER_SIZE: usize = 64;
+const SWITCH_TO_READ_DELAY: u8 = 5;
+const MAX_RX_BUFFER_SIZE: usize = ReadResponse::LEN_BYTES;
 
 pub const CHANNEL_CAPACITY: usize = 8;
 
@@ -38,11 +38,14 @@ where
     rx_bit_counter: i8,
     rx_tick_counter: u8,
     rx_buffer: u8,
-    receive_buffer_tail: usize,
-    receive_buffer_head: usize,
     bytes_to_read: u8,
     already_prepared_to_read_response: bool,
-    good_bytes_read: u8,
+    bytes_read: u8,
+
+    idle_counter: u32,
+    already_waited_for_idle: bool,
+    transmission_restart_counter: u32,
+    bits_to_wait_after_get_response: u32,
 
     pin: Pin<PIN_C, PIN_N, Dynamic>,
     cr: <Pin<PIN_C, PIN_N, Dynamic> as HL>::Cr,
@@ -76,10 +79,13 @@ where
             rx_bit_counter: 0,
             rx_tick_counter: 0,
             rx_buffer: 0,
-            receive_buffer_tail: 0,
-            receive_buffer_head: 0,
             bytes_to_read: 0,
-            good_bytes_read: 0,
+            bytes_read: 0,
+
+            idle_counter: 0,
+            already_waited_for_idle: true,
+            transmission_restart_counter: 0,
+            bits_to_wait_after_get_response: 0,
 
             pin,
             cr,
@@ -144,7 +150,7 @@ where
                     } else {
                         // we want to change state of the Pin immediately
                         // and wait for SWITCH_DELAY after
-                        if self.tx_bit_counter > 10 + OVERSAMPLE * SWITCH_DELAY {
+                        if self.tx_bit_counter > 10 + OVERSAMPLE * SWITCH_TO_READ_DELAY {
                             self.current_state = CommunicatorState::Reading;
                         } else {
                             if !self.already_prepared_to_read_response {
@@ -169,7 +175,8 @@ where
         self.rx_buffer = 0;
         self.bytes_to_read = ReadResponse::LEN_BYTES as u8;
         self.pin.make_pull_up_input(&mut self.cr);
-        self.good_bytes_read = 0;
+        self.bytes_read = 0;
+        self.receive_buffer.fill(0);
     }
 
     fn read_bit(&mut self) {
@@ -190,21 +197,10 @@ where
             } else if self.rx_bit_counter >= 8 {
                 // rx_bit_counter >= 8 : waiting for stop bit
                 if bit_value {
-                    self.good_bytes_read += 1;
+                    let byte_index = ReadResponse::LEN_BYTES - self.bytes_to_read as usize;
+                    self.bytes_read += 1;
                     // stop bit read complete, add byte to buffer
-                    let next = (self.receive_buffer_tail + 1) % MAX_RX_BUFFER_SIZE;
-                    if next != self.receive_buffer_head {
-                        // save new data in buffer: tail points to where byte goes
-                        self.receive_buffer[self.receive_buffer_tail] = self.rx_buffer; // save new byte
-                        self.receive_buffer_tail = next;
-                    } else {
-                        // TODO: what to do if overflow?
-                        defmt::debug!(
-                            "buffer overflow. tail: {}, head: {}",
-                            self.receive_buffer_tail,
-                            self.receive_buffer_head
-                        );
-                    }
+                    self.receive_buffer[byte_index] = self.rx_buffer; // save new byte
                 }
                 // if there is no stop bit then skip current byte.
                 // Full frame received. Restart waiting for start bit at next interrupt
@@ -227,54 +223,34 @@ where
     }
 
     fn have_response(&self) -> bool {
-        let tail = self.receive_buffer_tail;
-        let head = self.receive_buffer_head;
-        if head > tail {
-            return (head + ReadResponse::LEN_BYTES) % MAX_RX_BUFFER_SIZE >= tail;
-        } else if tail > head {
-            return tail - head >= ReadResponse::LEN_BYTES;
-        } else {
-            // head == tail
-            return false;
-        }
+        self.bytes_read == ReadResponse::LEN_BYTES as u8
     }
 
-    fn get_response(&mut self) -> Option<[u8; ReadResponse::LEN_BYTES]> {
-        if self.have_response() {
-            let mut response: [u8; ReadResponse::LEN_BYTES] = [0; ReadResponse::LEN_BYTES];
-            for i in 0..ReadResponse::LEN_BYTES {
-                response[i] = self.receive_buffer[self.receive_buffer_head];
-                self.receive_buffer_head = (self.receive_buffer_head + 1) % MAX_RX_BUFFER_SIZE;
-            }
-
-            return Some(response);
-        }
-
-        return None;
+    fn send_fail_response(&mut self) {
+        let _ = self.responses_channel.try_send(u32::MAX);
     }
 
     fn change_state_to_end_reading(&mut self) {
-        if self.good_bytes_read != 8 {
-            defmt::debug!("good bytes read: {}", self.good_bytes_read);
-            let _ = self.responses_channel.try_send(u32::MAX);
-        } else {
-            if let Some(response) = self.get_response() {
-                let mut reader = tmc2209::Reader::default();
-                let (_, tmc_response) = reader.read_response(&response);
-                if let Some(response_data) = tmc_response {
-                    let _ = self.responses_channel.try_send(response_data.data_u32());
+        if self.have_response() {
+            let mut reader = tmc2209::Reader::default();
+            let (_, tmc_response) = reader.read_response(&self.receive_buffer);
+            if let Some(response_data) = tmc_response {
+                if !response_data.crc_is_valid() {
+                    defmt::debug!("CRC IS NOT VALID!");
                 }
+                let _ = self.responses_channel.try_send(response_data.data_u32());
             } else {
-                //TODO: is there any collision with u32::MAX?
-                let _ = self.responses_channel.try_send(u32::MAX);
-                defmt::debug!(
-                    "fail to read response, head: {}, tail: {}",
-                    self.receive_buffer_head,
-                    self.receive_buffer_tail
-                );
+                defmt::warn!("fail to parse response, data: {:?}", self.receive_buffer);
+                self.send_fail_response();
             }
+        } else {
+            // defmt::debug!("response is not fully read, bytes read: {}", self.bytes_read);
+            self.send_fail_response();
         }
 
+        //from tmc2209 datasheed: "In case of a read access, it switches on its output drivers and sends its response using the same baud rate.
+        // The output becomes switched off four bit times after transfer of the last stop bit"
+        self.bits_to_wait_after_get_response = 4 * OVERSAMPLE as u32;
         self.current_state = CommunicatorState::Nothing;
         self.pin.make_push_pull_output(&mut self.cr);
         self.pin.set_high().ok().unwrap();
@@ -285,12 +261,60 @@ where
             CommunicatorState::Reading => self.read_bit(),
             CommunicatorState::Writing => self.write_bit(),
             CommunicatorState::Nothing => {
+                if self.deal_with_output_driver_delay() {
+                    return;
+                }
+
+                if self.deal_with_tmc_communication_reset() {
+                    return;
+                }
+
                 if let Some(command) = self.commands_channel.try_recv().ok() {
+                    self.already_waited_for_idle = false;
+                    self.idle_counter = 0;
                     match command {
                         Request::Read(read_req) => self.prepare_to_send_read_req(read_req.bytes()),
                         Request::Write(write_req) => self.prepare_to_send_write_req(write_req.bytes()),
                     };
                 }
+            }
+        }
+    }
+
+    fn deal_with_output_driver_delay(&mut self) -> bool {
+        if self.bits_to_wait_after_get_response > 0 {
+            self.bits_to_wait_after_get_response -= 1;
+            return true;
+        }
+
+        return false;
+    }
+
+    fn deal_with_tmc_communication_reset(&mut self) -> bool {
+        if self.already_waited_for_idle {
+            return false;
+        }
+
+        if self.transmission_restart_counter > 0 {
+            self.transmission_restart_counter -= 1;
+            if self.transmission_restart_counter == 0 {
+                self.already_waited_for_idle = true;
+            }
+
+            return true;
+        } else {
+            self.idle_counter += 1;
+            let bit_time_idle = self.idle_counter / OVERSAMPLE as u32;
+
+            // from tmc2209 datasheet:
+            // "The communication becomes reset if a pause time of longer than 63 bit times between the start bits of two successive bytes occurs"
+            if bit_time_idle >= 64 {
+                // wait for minimum 12 bit times
+                self.transmission_restart_counter = 12 * OVERSAMPLE as u32;
+                self.idle_counter = 0;
+                return true;
+            } else {
+                return false;
             }
         }
     }

@@ -25,7 +25,7 @@ mod app {
     const CHANNEL_CAPACITY: usize = drawer_robot::my_tmc2209::communicator::CHANNEL_CAPACITY;
 
     // > 6 ticks Configurator need Systick::delay for some reason...
-    const BIT_SEND_TICKS: u32 = 6;
+    const BIT_SEND_TICKS: u32 = 40;
     const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_0_000;
 
     #[shared]
@@ -86,8 +86,8 @@ mod app {
         let communicator = TMC2209SerialCommunicator::new(tmc2209_msg_receiver, tmc2209_rsp_sender, x_stepper_uart_pin, gpioc.crh);
         let configurator = drawer_robot::my_tmc2209::configurator::Configurator::new(tmc2209_msg_sender.clone());
 
-        task1::spawn().ok();
-        // task2::spawn().ok();
+        stepper_conf_task::spawn().ok();
+        // stepper_change_speed_task::spawn().ok();
         (
             Shared {},
             Local {
@@ -101,21 +101,20 @@ mod app {
     }
 
     #[task(priority = 1, local = [configurator, tmc2209_rsp_receiver])]
-    async fn task1(mut cx: task1::Context) {
+    async fn stepper_conf_task(mut cx: stepper_conf_task::Context) {
         let setup_res = cx.local.configurator.setup(cx.local.tmc2209_rsp_receiver).await;
         match setup_res {
             Ok(_) => {
                 defmt::debug!("Stepper driver configured successfully!");
             }
             Err(_) => {
-                defmt::debug!("Fail to configure stepper driver");
                 panic!("Fail to configure stepper driver");
             }
         }
     }
 
     #[task(priority = 1, local = [tmc2209_msg_sender])]
-    async fn task2(mut cx: task2::Context) {
+    async fn stepper_change_speed_task(mut cx: stepper_change_speed_task::Context) {
         let mut speed: i32 = 100;
         let mut step: i32 = 1000;
         let max_speed = 600_000;

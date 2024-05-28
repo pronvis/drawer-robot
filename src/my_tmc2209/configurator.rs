@@ -1,3 +1,4 @@
+use fugit::ExtU32;
 use rtic_monotonics::systick::Systick;
 use rtic_sync::channel::*;
 
@@ -27,7 +28,7 @@ impl Configurator {
     }
 
     pub async fn setup(&mut self, tmc2209_rsp_receiver: &mut Receiver<'static, u32, CHANNEL_CAPACITY>) -> Result<(), ()> {
-        self.update_ifcnt_val(tmc2209_rsp_receiver).await.ok();
+        self.update_ifcnt_val(tmc2209_rsp_receiver).await?;
 
         let mut gconf = tmc2209::reg::GCONF(0);
         gconf.set_i_scale_analog(true);
@@ -61,7 +62,6 @@ impl Configurator {
 
             self.update_ifcnt_val(tmc2209_rsp_receiver).await.ok();
             req_count += 1;
-            // Systick::delay(10.millis()).await;
         }
 
         return Result::Ok(());
@@ -76,9 +76,6 @@ impl Configurator {
     }
 
     async fn update_ifcnt_val(&mut self, tmc2209_rsp_receiver: &mut Receiver<'static, u32, CHANNEL_CAPACITY>) -> Result<(), ()> {
-        // self.send_ifcnt_req().await;
-        // let ifcnt = Self::read_ifcnt_resp(tmc2209_rsp_receiver).await?;
-
         let mut req_count: u8 = 0;
         let mut resp = Result::Err(());
         while resp.is_err() {
@@ -91,13 +88,6 @@ impl Configurator {
             req_count += 1;
         }
         let ifcnt = resp.ok().unwrap();
-
-        defmt::debug!(
-            "receive ifcnt response. Req count: {}, ifcnt: {}; curr ifcnt: {}",
-            req_count,
-            ifcnt,
-            self.ifcnt
-        );
 
         if !self.first_call && self.ifcnt == ifcnt {
             return Result::Err(());
