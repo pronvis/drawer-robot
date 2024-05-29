@@ -23,7 +23,6 @@ mod app {
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
     const CHANNEL_CAPACITY: usize = drawer_robot::my_tmc2209::communicator::CHANNEL_CAPACITY;
 
-    // > 6 ticks Configurator need Systick::delay for some reason...
     const BIT_SEND_TICKS: u32 = 40;
     const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_0_000;
 

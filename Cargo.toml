@@ -23,6 +23,7 @@ embedded-graphics = "0.8.0"
 heapless = "0.7.16"
 tmc2209 = "0.2.2"
 hx711_spi = "0.5.0"
+hx711 = "0.6.0"
 
 # looks like we need that for stepper
 fugit = "0.3.5"
