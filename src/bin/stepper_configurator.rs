@@ -87,7 +87,7 @@ mod app {
         let configurator = drawer_robot::my_tmc2209::configurator::Configurator::new(tmc2209_msg_sender.clone());
 
         stepper_conf_task::spawn().ok();
-        // stepper_change_speed_task::spawn().ok();
+        stepper_change_speed_task::spawn().ok();
         (
             Shared {},
             Local {

@@ -171,7 +171,7 @@ where
     fn prepare_to_read_response(&mut self) {
         self.already_prepared_to_read_response = true;
         self.rx_bit_counter = -1; // rx_bit_counter = -1 :  waiting for start bit
-        self.rx_tick_counter = 1; // 2 : next interrupt will be discarded. 2 interrupts required to consider RX pin level
+        self.rx_tick_counter = 1;
         self.rx_buffer = 0;
         self.bytes_to_read = ReadResponse::LEN_BYTES as u8;
         self.pin.make_pull_up_input(&mut self.cr);

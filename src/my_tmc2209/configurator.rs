@@ -30,9 +30,13 @@ impl Configurator {
     pub async fn setup(&mut self, tmc2209_rsp_receiver: &mut Receiver<'static, u32, CHANNEL_CAPACITY>) -> Result<(), ()> {
         self.update_ifcnt_val(tmc2209_rsp_receiver).await?;
 
+        // set wait time before sending read response to 8 bit times
+        let write_req = tmc2209::write_request(0, tmc2209::reg::SLAVECONF(0));
+        self.send_req_and_check(write_req, tmc2209_rsp_receiver).await?;
+
         let mut gconf = tmc2209::reg::GCONF(0);
         gconf.set_i_scale_analog(true);
-        gconf.set_internal_rsense(true);
+        gconf.set_internal_rsense(false);
         gconf.set_en_spread_cycle(true);
         gconf.set_pdn_disable(true);
         gconf.set_mstep_reg_select(true);
@@ -41,7 +45,11 @@ impl Configurator {
         let write_req = tmc2209::write_request(0, gconf);
         self.send_req_and_check(write_req, tmc2209_rsp_receiver).await?;
 
-        let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(100_000));
+        let mut i_hold_irun = tmc2209::reg::IHOLD_IRUN(0);
+        i_hold_irun.set_ihold(31); // maximum current when holding
+        i_hold_irun.set_irun(31); // maximum current when moving
+        i_hold_irun.set_ihold_delay(0);
+        let write_req = tmc2209::write_request(0, i_hold_irun);
         self.send_req_and_check(write_req, tmc2209_rsp_receiver).await?;
 
         return Result::Ok(());
