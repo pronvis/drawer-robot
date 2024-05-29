@@ -44,6 +44,10 @@ impl Configurator {
         let write_req = tmc2209::write_request(0, i_hold_irun);
         self.send_req_and_check(write_req, tmc2209_rsp_receiver).await?;
 
+        //set speed to 0
+        let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(0));
+        self.send_req_and_check(write_req, tmc2209_rsp_receiver).await?;
+
         return Result::Ok(());
     }
 

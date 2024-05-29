@@ -79,8 +79,8 @@ mod app {
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, MAIN_CLOCK_FREQ, systick_mono_token);
 
-        let (mut tmc2209_msg_sender, tmc2209_msg_receiver) = make_channel!(drawer_robot::my_tmc2209::Request, CHANNEL_CAPACITY);
-        let (mut tmc2209_rsp_sender, tmc2209_rsp_receiver) = make_channel!(u32, CHANNEL_CAPACITY);
+        let (tmc2209_msg_sender, tmc2209_msg_receiver) = make_channel!(drawer_robot::my_tmc2209::Request, CHANNEL_CAPACITY);
+        let (tmc2209_rsp_sender, tmc2209_rsp_receiver) = make_channel!(u32, CHANNEL_CAPACITY);
 
         let communicator = TMC2209SerialCommunicator::new(tmc2209_msg_receiver, tmc2209_rsp_sender, x_stepper_uart_pin, gpioc.crh);
         let configurator = drawer_robot::my_tmc2209::configurator::Configurator::new(tmc2209_msg_sender.clone());
@@ -100,7 +100,7 @@ mod app {
     }
 
     #[task(priority = 1, local = [configurator, tmc2209_rsp_receiver])]
-    async fn stepper_conf_task(mut cx: stepper_conf_task::Context) {
+    async fn stepper_conf_task(cx: stepper_conf_task::Context) {
         let setup_res = cx.local.configurator.setup(cx.local.tmc2209_rsp_receiver).await;
         match setup_res {
             Ok(_) => {
@@ -113,17 +113,21 @@ mod app {
     }
 
     #[task(priority = 1, local = [tmc2209_msg_sender])]
-    async fn stepper_change_speed_task(mut cx: stepper_change_speed_task::Context) {
-        let mut speed: i32 = 100;
-        let mut step: i32 = 1000;
-        let max_speed = 600_000;
+    async fn stepper_change_speed_task(cx: stepper_change_speed_task::Context) {
+        //wait for Conf task
+        Systick::delay(1.secs()).await;
+
+        let min_speed = 200_000;
+        let max_speed = 790_000; // empirical value
+        let mut speed: i32 = min_speed;
+        let mut step: i32 = 10_000;
         loop {
             let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(speed as u32));
             let req = drawer_robot::my_tmc2209::Request::write(write_req);
             cx.local.tmc2209_msg_sender.send(req).await.ok();
-            speed += step;
 
-            if speed >= max_speed || speed <= 0 {
+            speed += step;
+            if speed >= max_speed || speed <= min_speed {
                 step = -1 * step;
                 defmt::debug!("step: {}", step);
             }
@@ -131,7 +135,7 @@ mod app {
     }
 
     #[task(binds = TIM2, priority = 5, local = [communicator, tmc2209_communicator_timer])]
-    fn communicator_task(mut cx: communicator_task::Context) {
+    fn communicator_task(cx: communicator_task::Context) {
         cx.local.tmc2209_communicator_timer.clear_interrupt(Event::Update);
         cx.local.communicator.handle_interrupt();
     }
