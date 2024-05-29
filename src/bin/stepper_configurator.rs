@@ -14,7 +14,6 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 mod app {
     use drawer_robot::my_tmc2209::communicator::TMC2209SerialCommunicator;
 
-    use embedded_graphics::draw_target;
     use fugit::Duration;
     use rtic_monotonics::systick::*;
     use rtic_sync::{channel::*, make_channel};

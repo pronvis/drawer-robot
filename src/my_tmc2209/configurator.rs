@@ -1,14 +1,9 @@
-use fugit::ExtU32;
-use rtic_monotonics::systick::Systick;
 use rtic_sync::channel::*;
 
 const CHANNEL_CAPACITY: usize = crate::my_tmc2209::communicator::CHANNEL_CAPACITY;
 
 pub struct Configurator {
-    response_index: u32,
-    request_index: u32,
     ifcnt: u8,
-    finished: bool,
     first_call: bool,
     sender: Sender<'static, crate::my_tmc2209::Request, CHANNEL_CAPACITY>,
 }
@@ -19,10 +14,7 @@ impl Configurator {
     pub fn new(sender: Sender<'static, crate::my_tmc2209::Request, CHANNEL_CAPACITY>) -> Self {
         Self {
             sender,
-            response_index: 0,
-            request_index: 0,
             ifcnt: 0,
-            finished: false,
             first_call: true,
         }
     }
