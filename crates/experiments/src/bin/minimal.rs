@@ -13,7 +13,7 @@ mod app {
 
     use robot_core::*;
     use rtic_monotonics::systick::*;
-    use stm32f1xx_hal::{prelude::*, rcc};
+    use stm32f1xx_hal::prelude::*;
 
     // Shared resources go here
     #[shared]

@@ -4,6 +4,8 @@
 pub mod display;
 pub mod my_stepper;
 pub mod my_tmc2209;
+pub mod ps3;
+pub mod robot;
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 use defmt_brtt as _; // global logger
