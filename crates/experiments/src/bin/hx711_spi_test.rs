@@ -2,8 +2,6 @@
 #![no_std]
 #![feature(type_alias_impl_trait)]
 
-use drawer_robot as _; // global logger + panicking-behavior + memory layout
-
 #[rtic::app(
     device = stm32f1xx_hal::pac,
     peripherals = true,
@@ -12,12 +10,13 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
     // dispatchers = [PVD, WWDG, RTC, SPI1]
 )]
 mod app {
-    use cortex_m::delay::Delay;
-    //This is 4 years old library
-    use hx711::Hx711;
+    use hx711_spi::Hx711;
+    use rtic_monotonics::systick::*;
     use stm32f1xx_hal::{
-        gpio::{Output, Pin},
+        device::SPI2,
+        gpio::{Alternate, Pin},
         prelude::*,
+        spi::{self, Spi, Spi2NoRemap},
     };
 
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
@@ -27,7 +26,7 @@ mod app {
 
     #[local]
     struct Local {
-        hx711: Hx711<Delay, Pin<'A', 6>, Pin<'A', 7, Output>>,
+        hx711_sensor: Hx711<Spi<SPI2, Spi2NoRemap, (Pin<'B', 13, Alternate>, Pin<'B', 14>, Pin<'B', 15, Alternate>), u8>>,
     }
 
     #[init]
@@ -54,50 +53,36 @@ mod app {
             panic!("Clock parameter values are wrong!");
         }
 
-        let mut gpioa = cx.device.GPIOA.split();
+        let systick_mono_token = rtic_monotonics::create_systick_token!();
+        Systick::start(cx.core.SYST, MAIN_CLOCK_FREQ, systick_mono_token);
 
-        // Configure the hx711 load cell driver:
-        //
-        // | HX  | dout   -> PA6 | STM |
-        // | 711 | pd_sck <- PA7 | 32  |
-        //
-        let dout = gpioa.pa6.into_floating_input(&mut gpioa.crl);
-        let pd_sck = gpioa.pa7.into_push_pull_output(&mut gpioa.crl);
-        let hx711 = Hx711::new(Delay::new(cx.core.SYST, 1_000_000), dout, pd_sck).unwrap();
+        let mut gpiob = cx.device.GPIOB.split();
+
+        let hx711_spi_pins = (
+            gpiob.pb13.into_alternate_push_pull(&mut gpiob.crh),
+            gpiob.pb14.into_floating_input(&mut gpiob.crh),
+            gpiob.pb15.into_alternate_push_pull(&mut gpiob.crh),
+        );
+
+        let hx711_spi = spi::Spi::spi2(cx.device.SPI2, hx711_spi_pins, embedded_hal::spi::MODE_1, 1.MHz(), clocks);
+        let mut hx711_sensor = Hx711::new(hx711_spi);
+        hx711_sensor.reset().unwrap();
+        hx711_sensor.set_mode(hx711_spi::Mode::ChAGain128).unwrap(); // x128 works up to +-20mV
 
         hx711_read_task::spawn().ok();
 
-        (Shared {}, Local { hx711 })
+        (Shared {}, Local { hx711_sensor })
     }
 
-    #[task(priority = 1, local = [hx711])]
+    #[task(priority = 1, local = [hx711_sensor])]
     async fn hx711_read_task(cx: hx711_read_task::Context) {
-        let n: i32 = 8;
-        let mut val: i32 = 0;
-
-        // Obtain the tara value
-        defmt::debug!("Obtaining tara ...");
-        for _ in 0..n {
-            match cx.local.hx711.retrieve() {
-                Ok(curr_val) => val += curr_val,
-                Err(_) => defmt::error!("fail to get data from hx711"),
-            }
-        }
-
-        let tara = val / n;
-        defmt::debug!("Tara: {}", tara);
-
         loop {
-            // Measurement loop
-            val = 0;
-            for _ in 0..n {
-                match cx.local.hx711.retrieve() {
-                    Ok(curr_val) => val += curr_val,
-                    Err(_) => defmt::error!("fail to get data from hx711"),
-                }
+            match cx.local.hx711_sensor.read() {
+                Ok(resp) => defmt::debug!("Read from HX711, value: {}", resp),
+                Err(_) => defmt::error!("Fail to read from HX711"),
             }
-            let weight = val / n - tara;
-            defmt::debug!("weight: {}", weight);
+
+            Systick::delay(200.millis()).await;
         }
     }
 }

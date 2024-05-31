@@ -1,0 +1,32 @@
+[package]
+authors = ["Aleksandrov Vladimir <invis87@gmail.com>"]
+name = "experiments"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+robot-core = { path = "../robot-core" }
+cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
+critical-section = "1.1.1"
+defmt = { version = "0.3", features = ["encoding-rzcobs"] }
+defmt-brtt = { version = "0.1", default-features = false, features = ["rtt"] }
+panic-probe = { version = "0.3", features = ["print-defmt"] }
+rtic = { version = "2.1.1", features = [ "thumbv7-backend" ] }
+rtic-sync = "1.3.0"
+# stm32f1xx-hal = { version = "0.10.0", features = ["rt", "stm32f103", "medium", "stm32-usbd"] }
+stm32f1xx-hal = { version = "0.10.0", features = ["rt", "stm32f103", "high", "stm32-usbd"] }
+rtic-monotonics = { version = "= 1.5.0", features = [ "cortex-m-systick" ]}
+ramp-maker = "0.2.0"
+embedded-hal = "0.2.7"
+ssd1306 = "0.8.0"
+embedded-graphics = "0.8.0"
+heapless = "0.7.16"
+tmc2209 = "0.2.2"
+hx711_spi = "0.5.0"
+hx711 = "0.6.0"
+
+# looks like we need that for stepper
+fugit = "0.3.5"
+fugit-timer = "0.1.3"
+fixed = "1.23.1"
+typenum = "1.16.0"

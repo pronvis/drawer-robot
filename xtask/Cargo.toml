@@ -1,0 +1,11 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cargo_toml = "0.20.2"
+clap = { version = "4.0.32", features = ["derive"] }
+colored = "2.1"
+eyre = "0.6.8"
+

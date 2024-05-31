@@ -2,8 +2,6 @@
 #![no_std]
 #![feature(type_alias_impl_trait)]
 
-use drawer_robot as _; // global logger + panicking-behavior + memory layout
-
 #[rtic::app(
     device = stm32f1xx_hal::pac,
     peripherals = true,
@@ -12,7 +10,7 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
     // dispatchers = [PVD, WWDG, RTC, SPI1]
 )]
 mod app {
-    use drawer_robot::my_tmc2209::communicator::TMC2209SerialCommunicator;
+    use robot_core::my_tmc2209::communicator::TMC2209SerialCommunicator;
 
     use core::ops::Not;
     use fugit::Duration;
@@ -23,7 +21,7 @@ mod app {
         timer::{Counter, Event},
     };
 
-    const CHANNEL_CAPACITY: usize = drawer_robot::my_tmc2209::communicator::CHANNEL_CAPACITY;
+    const CHANNEL_CAPACITY: usize = robot_core::my_tmc2209::communicator::CHANNEL_CAPACITY;
 
     const WRITE_CLOCK_FREQ: u32 = 72_00; // tick = 138.89 micros
     const READ_CLOCK_FREQ: u32 = 72_00; // tick = 138.89 micros
@@ -49,8 +47,8 @@ mod app {
     struct Local {
         communicator: TMC2209SerialCommunicator<'C', 10>,
         tmc2209_communicator_timer: Counter<stm32f1xx_hal::pac::TIM2, TMC2209COMMUNICATOR_CLOCK_FREQ>,
-        tmc2209_msg_sender_1: Sender<'static, drawer_robot::my_tmc2209::Request, CHANNEL_CAPACITY>,
-        tmc2209_msg_sender_2: Sender<'static, drawer_robot::my_tmc2209::Request, CHANNEL_CAPACITY>,
+        tmc2209_msg_sender_1: Sender<'static, robot_core::my_tmc2209::Request, CHANNEL_CAPACITY>,
+        tmc2209_msg_sender_2: Sender<'static, robot_core::my_tmc2209::Request, CHANNEL_CAPACITY>,
         tmc2209_rsp_receiver: Receiver<'static, u32, CHANNEL_CAPACITY>,
 
         read_timer: Counter<stm32f1xx_hal::pac::TIM3, READ_CLOCK_FREQ>,
@@ -88,9 +86,9 @@ mod app {
         en.set_low();
         let x_stepper_uart_pin = gpioc.pc10.into_dynamic(&mut gpioc.crh);
 
-        let mut read_timer = drawer_robot::get_counter(cx.device.TIM3, &clocks);
-        let mut write_timer = drawer_robot::get_counter(cx.device.TIM4, &clocks);
-        let mut tmc2209_communicator_timer = drawer_robot::get_counter(cx.device.TIM2, &clocks);
+        let mut read_timer = robot_core::get_counter(cx.device.TIM3, &clocks);
+        let mut write_timer = robot_core::get_counter(cx.device.TIM4, &clocks);
+        let mut tmc2209_communicator_timer = robot_core::get_counter(cx.device.TIM2, &clocks);
 
         //TODO: I dont need it. But! If remove, then commenting useless check in 'prepare_to_send_read_req'
         //will not change behavior anymore...
@@ -107,7 +105,7 @@ mod app {
         write_timer.listen(Event::Update);
         tmc2209_communicator_timer.listen(Event::Update);
 
-        let (tmc2209_msg_sender, tmc2209_msg_receiver) = make_channel!(drawer_robot::my_tmc2209::Request, CHANNEL_CAPACITY);
+        let (tmc2209_msg_sender, tmc2209_msg_receiver) = make_channel!(robot_core::my_tmc2209::Request, CHANNEL_CAPACITY);
         let (tmc2209_rsp_sender, tmc2209_rsp_receiver) = make_channel!(u32, CHANNEL_CAPACITY);
 
         let communicator = TMC2209SerialCommunicator::new(tmc2209_msg_receiver, tmc2209_rsp_sender, x_stepper_uart_pin, gpioc.crh);
@@ -145,7 +143,7 @@ mod app {
         // defmt::debug!("current speed: {}", cx.local.speed);
 
         let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(*cx.local.speed));
-        let req = drawer_robot::my_tmc2209::Request::write(write_req);
+        let req = robot_core::my_tmc2209::Request::write(write_req);
         let _ = cx.local.tmc2209_msg_sender_1.try_send(req).ok();
     }
 
@@ -164,7 +162,7 @@ mod app {
             *cx.local.first = false;
 
             let write_req = tmc2209::write_request(0, tmc2209::reg::SLAVECONF(0));
-            let req = drawer_robot::my_tmc2209::Request::write(write_req);
+            let req = robot_core::my_tmc2209::Request::write(write_req);
             let _ = cx.local.tmc2209_msg_sender_2.try_send(req).ok();
         } else {
             match cx.local.tmc2209_rsp_receiver.try_recv() {
@@ -176,7 +174,7 @@ mod app {
             }
 
             let read_req = tmc2209::read_request::<tmc2209::reg::IFCNT>(0);
-            let req = drawer_robot::my_tmc2209::Request::read(read_req);
+            let req = robot_core::my_tmc2209::Request::read(read_req);
             let res = cx.local.tmc2209_msg_sender_2.try_send(req).ok();
             // match res {
             //     None => defmt::debug!("fail to send message to Communicator"),

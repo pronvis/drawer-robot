@@ -2,8 +2,6 @@
 #![no_std]
 #![feature(type_alias_impl_trait)]
 
-use drawer_robot as _; // global logger + panicking-behavior + memory layout
-
 #[rtic::app(
     device = stm32f1xx_hal::pac,
     peripherals = true,
@@ -13,10 +11,10 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 )]
 mod app {
 
-    use drawer_robot::display::OledDisplay;
-    use drawer_robot::my_stepper::*;
-    use drawer_robot::DisplayMemoryPool;
-    use drawer_robot::*;
+    use robot_core::display::OledDisplay;
+    use robot_core::my_stepper::*;
+    use robot_core::DisplayMemoryPool;
+    use robot_core::*;
     use heapless::pool::singleton::Box;
     use heapless::{pool, pool::singleton::Pool};
     use rtic_monotonics::systick::*;

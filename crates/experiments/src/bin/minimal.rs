@@ -2,8 +2,6 @@
 #![no_std]
 #![feature(type_alias_impl_trait)]
 
-use drawer_robot as _; // global logger + panicking-behavior + memory layout
-
 #[rtic::app(
     device = stm32f1xx_hal::pac,
     peripherals = true,
@@ -13,26 +11,19 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 )]
 mod app {
 
+    use robot_core::*;
     use rtic_monotonics::systick::*;
-    use stm32f1xx_hal::{
-        adc::{self, Adc},
-        device::ADC1,
-        pac,
-        prelude::*,
-    };
+    use stm32f1xx_hal::{prelude::*, rcc};
 
     // Shared resources go here
     #[shared]
-    struct Shared {}
+    struct Shared {
+        led: OutLed,
+    }
 
     // Local resources go here
     #[local]
-    struct Local {
-        adc1: Adc<ADC1>,
-        pb0: stm32f1xx_hal::gpio::Pin<'B', 0, stm32f1xx_hal::gpio::Analog>,
-    }
-
-    const TIMER_CLOCK_FREQ: u32 = 2_000_000;
+    struct Local {}
 
     #[init]
     fn init(cx: init::Context) -> (Shared, Local) {
@@ -41,14 +32,13 @@ mod app {
         // Take ownership over the raw flash and rcc devices and convert them into the corresponding
         // HAL structs
         let mut flash: stm32f1xx_hal::flash::Parts = cx.device.FLASH.constrain();
-        let mut rcc: stm32f1xx_hal::rcc::Rcc = cx.device.RCC.constrain();
+        let rcc: stm32f1xx_hal::rcc::Rcc = cx.device.RCC.constrain();
 
         // Freeze the configuration of all the clocks in the system and store the frozen frequencies in
         // `clocks`
         // with those values one second equals 'delay_cycles: u32 = 72_000_000'
         let clocks = rcc
             .cfgr
-            .adcclk(2.MHz())
             .use_hse(8.MHz())
             .sysclk(72.MHz())
             .pclk1(36.MHz())
@@ -59,26 +49,17 @@ mod app {
             panic!("Clock parameter values are wrong!");
         }
 
-        let adc1 = adc::Adc::adc1(cx.device.ADC1, clocks);
-        let mut gpiob = cx.device.GPIOB.split();
-        // Configure pb0 as an analog input
-        let pb0 = gpiob.pb0.into_analog(&mut gpiob.crl);
-
-        task1::spawn().ok();
+        // Acquire the GPIOC peripheral
+        let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
+        let led = gpiob.pb12.into_push_pull_output(&mut gpiob.crh);
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, 72_000_000, systick_mono_token);
 
-        (Shared {}, Local { adc1, pb0 })
-    }
+        task1::spawn().ok();
+        task2::spawn().ok();
 
-    #[task(priority = 1, local = [adc1, pb0])]
-    async fn task1(mut cx: task1::Context) {
-        loop {
-            let data: u16 = cx.local.adc1.read(cx.local.pb0).unwrap();
-            defmt::debug!("data read: {}", data);
-            Systick::delay(100.millis()).await;
-        }
+        (Shared { led }, Local {})
     }
 
     // Optional idle, can be removed if not needed.
@@ -88,6 +69,28 @@ mod app {
 
         loop {
             cortex_m::asm::nop();
+        }
+    }
+
+    #[task(priority = 1, shared = [led])]
+    async fn task1(mut cx: task1::Context) {
+        loop {
+            defmt::debug!("Hello from blink task-1!");
+            cx.shared.led.lock(|x| {
+                x.toggle();
+            });
+            Systick::delay(1000.millis()).await;
+        }
+    }
+
+    #[task(priority = 2, shared = [led])]
+    async fn task2(mut cx: task2::Context) {
+        loop {
+            defmt::debug!("Hello from blink task-2!");
+            cx.shared.led.lock(|x| {
+                x.toggle();
+            });
+            Systick::delay(300.millis()).await;
         }
     }
 }

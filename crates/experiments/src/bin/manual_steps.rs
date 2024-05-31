@@ -2,8 +2,6 @@
 #![no_std]
 #![feature(type_alias_impl_trait)]
 
-use drawer_robot as _; // global logger + panicking-behavior + memory layout
-
 #[rtic::app(
     device = stm32f1xx_hal::pac,
     peripherals = true,
@@ -13,7 +11,7 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 )]
 mod app {
 
-    use drawer_robot::*;
+    use robot_core::*;
     use rtic_monotonics::systick::*;
     use stm32f1xx_hal::{pac, prelude::*};
 

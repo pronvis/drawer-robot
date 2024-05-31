@@ -2,8 +2,6 @@
 #![no_std]
 #![feature(type_alias_impl_trait)]
 
-use drawer_robot as _; // global logger + panicking-behavior + memory layout
-
 #[rtic::app(
     device = stm32f1xx_hal::pac,
     peripherals = true,
@@ -13,27 +11,30 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 )]
 mod app {
 
-    use drawer_robot::*;
+    use robot_core::*;
     use rtic_monotonics::systick::*;
     use stm32f1xx_hal::{
         gpio::PinState,
         pac,
         prelude::*,
+        rcc,
+        rcc::*,
+        timer::Timer,
         timer::{Counter, Event},
     };
 
-    const TIMER_CLOCK_FREQ: u32 = 72_000;
+    const TIMER_CLOCK_FREQ: u32 = 72_000_000; // step = 1000 nanos
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
 
     #[shared]
-    struct Shared {}
+    struct Shared {
+        nanos_between_steps: u32,
+    }
 
     #[local]
     struct Local {
-        internal_led: InternalLed,
-        out_led: OutLed,
+        step_pin: StepPin,
         timer_1: Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>,
-        timer_2: Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>,
     }
 
     #[init]
@@ -43,7 +44,7 @@ mod app {
         // Take ownership over the raw flash and rcc devices and convert them into the corresponding
         // HAL structs
         let mut flash: stm32f1xx_hal::flash::Parts = cx.device.FLASH.constrain();
-        let mut rcc: stm32f1xx_hal::rcc::Rcc = cx.device.RCC.constrain();
+        let rcc: stm32f1xx_hal::rcc::Rcc = cx.device.RCC.constrain();
 
         // Freeze the configuration of all the clocks in the system and store the frozen frequencies in
         // `clocks`
@@ -62,32 +63,25 @@ mod app {
 
         // Acquire the GPIOC peripheral
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
-        let internal_led = gpioc.pc13.into_push_pull_output_with_state(&mut gpioc.crh, PinState::Low);
-
         let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
-        let out_led = gpiob.pb12.into_push_pull_output_with_state(&mut gpiob.crh, PinState::Low);
+        let step_pin = gpioc.pc6.into_push_pull_output_with_state(&mut gpioc.crl, PinState::Low);
+
+        let mut en = gpioc.pc7.into_push_pull_output(&mut gpioc.crl);
+        en.set_low();
 
         let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>::new(cx.device.TIM1, &clocks);
         let mut timer_1: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ> = timer.counter();
-        timer_1.start(1.millis()).unwrap();
+        timer_1.start(2000.nanos()).unwrap();
         timer_1.listen(Event::Update);
-
-        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>::new(cx.device.TIM2, &clocks);
-        let mut timer_2: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ> = timer.counter();
-        timer_2.start(5.millis()).unwrap();
-        timer_2.listen(Event::Update);
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
 
         (
-            Shared {},
-            Local {
-                internal_led,
-                out_led,
-                timer_1,
-                timer_2,
+            Shared {
+                nanos_between_steps: 710_000,
             },
+            Local { step_pin, timer_1 },
         )
     }
 
@@ -101,35 +95,18 @@ mod app {
         }
     }
 
-    #[task(binds = TIM1_UP, priority = 3, local = [  timer_1, internal_led, led_state: bool = true])]
-    fn delay_task_1(mut cx: delay_task_1::Context) {
-        defmt::debug!("delay1: timer task");
-        if *cx.local.led_state {
-            cx.local.internal_led.set_high();
-            *cx.local.led_state = false;
+    #[task(binds = TIM1_UP, priority = 3, local = [  timer_1, step_pin, is_step: bool = true], shared = [&nanos_between_steps])]
+    fn delay_task_1(cx: delay_task_1::Context) {
+        if *cx.local.is_step {
+            cx.local.step_pin.set_low();
+            *cx.local.is_step = false;
+            cx.local.timer_1.start(cx.shared.nanos_between_steps.nanos()).unwrap();
         } else {
-            cx.local.internal_led.set_low();
-            *cx.local.led_state = true;
+            cx.local.step_pin.set_high();
+            *cx.local.is_step = true;
+            cx.local.timer_1.start(1900.nanos()).unwrap();
         }
 
-        cx.local.timer_1.start(300.millis()).unwrap();
         cx.local.timer_1.clear_interrupt(Event::Update);
-        defmt::debug!("delay1: after 1 secs");
-    }
-
-    #[task(binds = TIM2, priority = 4, local = [  timer_2, out_led, led_state: bool = true ])]
-    fn delay_task_2(mut cx: delay_task_2::Context) {
-        defmt::debug!("delay2: timer task");
-
-        if *cx.local.led_state {
-            cx.local.out_led.set_high();
-            *cx.local.led_state = false;
-        } else {
-            cx.local.out_led.set_low();
-            *cx.local.led_state = true;
-        }
-        cx.local.timer_2.start(700.millis()).unwrap();
-        cx.local.timer_2.clear_interrupt(Event::Update);
-        defmt::debug!("delay2: after 1 secs");
     }
 }

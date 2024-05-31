@@ -1,6 +1,10 @@
 #![no_main]
 #![no_std]
 
+pub mod display;
+pub mod my_stepper;
+pub mod my_tmc2209;
+
 use core::sync::atomic::{AtomicUsize, Ordering};
 use defmt_brtt as _; // global logger
 use ssd1306::{mode::BufferedGraphicsMode, prelude::*, Ssd1306};
@@ -16,11 +20,6 @@ use stm32f1xx_hal::{
 
 use heapless::{pool, pool::singleton::Pool};
 
-pub mod display;
-pub mod my_stepper;
-pub mod my_tmc2209;
-pub mod ps3;
-pub mod robot;
 pub const CHANNEL_CAPACITY: usize = 2;
 pub const PS3_CHANNEL_CAPACITY: usize = 32;
 
@@ -49,11 +48,8 @@ pool!(DisplayMemoryPool: DisplayString);
 
 pub type Scl1Pin = PB8<Alternate<OpenDrain>>;
 pub type Sda1Pin = PB9<Alternate<OpenDrain>>;
-pub type Ssd1306Display = Ssd1306<
-    I2CInterface<BlockingI2c<I2C1, (Scl1Pin, Sda1Pin)>>,
-    DisplaySize128x64,
-    BufferedGraphicsMode<DisplaySize128x64>,
->;
+pub type Ssd1306Display =
+    Ssd1306<I2CInterface<BlockingI2c<I2C1, (Scl1Pin, Sda1Pin)>>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>;
 
 pub type XEnPin = PC7<Output>;
 pub type XStepPin = PC6<Output>;

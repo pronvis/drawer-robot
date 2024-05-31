@@ -1,25 +1,8 @@
-[target.'cfg(all(target_arch = "arm", target_os = "none"))']
-# to get probe id: `probe-run --list-probes`
-# runner = "probe-run --probe C296C294070132124647524B4E00 --chip STM32F103C8"
-runner = "probe-run --probe 15003200090000524A51544E --chip STM32F103RE"
-# runner = "arm-none-eabi-gdb -x openocd.gdb" # for debugging
-rustflags = [
-  "-C", "linker=flip-link",
-  "-C", "link-arg=-Tlink.x",
-  "-C", "link-arg=-Tdefmt.x",
-  # This is needed if your flash or ram addresses are not aligned to 0x10000 in memory.x
-  # See https://github.com/rust-embedded/cortex-m-quickstart/pull/95
-  "-C", "link-arg=--nmagic",
-]
-
-[build]
-target = "thumbv7m-none-eabi"    # Cortex-M3
-
 [alias]
-rmain = "run --bin drawer-robot"
-rb = "run --bin"
-rrb = "run --release --bin"
-bbr = "build --release --bin"
-csize = "size --bin software_serial_read_stepper --release -- -A"
-crobj = "readobj --bin software_serial_read_stepper --release -- --file-headers"
-cobjdump = "objdump --bin software_serial_read_stepper --release -- --disassemble --no-show-raw-insn --print-imm-hex"
+xtask = "run --package xtask --release --"
+
+[env]
+CARGO_WORKSPACE_DIR = { value = "", relative = true }
+XTASK_RUN_DEFAULT = "motherboard"
+XTASK_TEST_EXCLUDE = "motherboard"
+DEFMT_LOG = "trace"

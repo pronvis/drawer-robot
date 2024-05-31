@@ -2,8 +2,6 @@
 #![no_std]
 #![feature(type_alias_impl_trait)]
 
-use drawer_robot as _; // global logger + panicking-behavior + memory layout
-
 #[rtic::app(
     device = stm32f1xx_hal::pac,
     peripherals = true,
@@ -14,17 +12,19 @@ use drawer_robot as _; // global logger + panicking-behavior + memory layout
 mod app {
     use fugit::ExtU32;
 
-    use drawer_robot::*;
+    use robot_core::*;
     use rtic_monotonics::systick::*;
     use rtic_sync::{channel::*, make_channel};
     use stm32f1xx_hal::{
         adc::{self, Adc},
         device::ADC1,
+        gpio::PinState,
         pac,
         prelude::*,
+        timer::{Counter, Event},
     };
 
-    //COPYPASTE (same in src/bin/steps_by_timer_with_potentiometr.rs)
+    //COPYPASTE (same in src/bin/steps_with_potentiometr.rs)
     pub async fn read_potent(adc1: &mut Adc<ADC1>, pb0: &mut stm32f1xx_hal::gpio::Pin<'B', 0, stm32f1xx_hal::gpio::Analog>) -> u16 {
         //sum 10 measurments - max value 4.1k, so 41k which can be still stored in u16
         let mut sum: u16 = 0;
@@ -44,6 +44,7 @@ mod app {
     }
     /////////////////////////////////////////////////////////////////
 
+    const TIMER_CLOCK_FREQ: u32 = 1_000_000;
     const STEPPER_CLOCK_FREQ: u32 = 72_000_000;
     const CHANNEL_CAPACITY: usize = 1;
 
@@ -53,8 +54,10 @@ mod app {
     #[local]
     struct Local {
         step_pin: StepPin,
+        timer_1: Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>,
         adc1: Adc<ADC1>,
         pb0: stm32f1xx_hal::gpio::Pin<'B', 0, stm32f1xx_hal::gpio::Analog>,
+        receiver: Receiver<'static, u32, CHANNEL_CAPACITY>,
     }
 
     #[init]
@@ -83,31 +86,37 @@ mod app {
 
         // Acquire the GPIOC peripheral
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
-
-        ////////////////////////////
-        ////////////////////////////
-        // Motor Driver Configuration
-
-        let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
+        let step_pin = gpioc.pc6.into_push_pull_output_with_state(&mut gpioc.crl, PinState::Low);
 
         let mut en = gpioc.pc15.into_push_pull_output(&mut gpioc.crh);
         en.set_low();
-        let step = gpioc.pc6.into_push_pull_output(&mut gpioc.crl);
-        let mut dir = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
-        dir.set_low();
 
         let mut adc1 = adc::Adc::adc1(cx.device.ADC1, clocks);
+        let mut gpiob = cx.device.GPIOB.split();
         // Configure pb0 as an analog input
         let mut pb0 = gpiob.pb0.into_analog(&mut gpiob.crl);
+
+        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>::new(cx.device.TIM1, &clocks);
+        let mut timer_1: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ> = timer.counter();
+        timer_1.start(2000.nanos()).unwrap();
+        timer_1.listen(Event::Update);
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
 
+        let critical_section: rtic::export::CriticalSection = cx.cs;
         let (sender, receiver) = make_channel!(u32, CHANNEL_CAPACITY);
-        task::spawn(receiver).ok();
         task1::spawn(sender).ok();
-
-        (Shared {}, Local { step_pin: step, adc1, pb0 })
+        (
+            Shared {},
+            Local {
+                step_pin,
+                timer_1,
+                adc1,
+                pb0,
+                receiver,
+            },
+        )
     }
 
     // Optional idle, can be removed if not needed.
@@ -120,25 +129,27 @@ mod app {
         }
     }
 
-    #[task(priority = 2, local = [ step_pin, current_delay: u32 = 1_000_000])]
-    async fn task(cx: task::Context, mut receiver: Receiver<'static, u32, CHANNEL_CAPACITY>) {
-        defmt::debug!("Move motor!");
-
-        loop {
-            cx.local.step_pin.set_high();
-            Systick::delay(2000.nanos()).await;
-            cx.local.step_pin.set_low();
-            Systick::delay(2000.nanos()).await;
-
-            if !receiver.is_empty() {
-                let new_delay = receiver.try_recv().unwrap();
-                if new_delay != *cx.local.current_delay {
-                    *cx.local.current_delay = new_delay;
-                    defmt::debug!("new delay: {}", new_delay);
-                }
+    #[task(binds = TIM1_UP, priority = 3, local = [  timer_1, step_pin,receiver, is_step: bool = true, current_delay: u32 = 1_000_000])]
+    fn delay_task_1(mut cx: delay_task_1::Context) {
+        if cx.local.receiver.is_full() {
+            let new_delay = cx.local.receiver.try_recv().unwrap();
+            if new_delay != *cx.local.current_delay {
+                *cx.local.current_delay = new_delay;
+                defmt::debug!("new delay: {}", new_delay);
             }
-            Systick::delay(cx.local.current_delay.nanos()).await;
         }
+
+        if *cx.local.is_step {
+            cx.local.step_pin.set_low();
+            *cx.local.is_step = false;
+            cx.local.timer_1.start(cx.local.current_delay.nanos()).unwrap();
+        } else {
+            cx.local.step_pin.set_high();
+            *cx.local.is_step = true;
+            cx.local.timer_1.start(2000.nanos()).unwrap();
+        }
+
+        cx.local.timer_1.clear_interrupt(Event::Update);
     }
 
     #[task(priority = 1, local = [adc1, pb0])]
@@ -151,7 +162,6 @@ mod app {
             if sender.is_empty() {
                 sender.send(new_steps_delay).await.unwrap();
             }
-
             Systick::delay(500.millis()).await;
         }
     }
