@@ -36,7 +36,7 @@ enum Cmd {
         args: Vec<String>,
     },
     /// `cd` into specified or default package and run `cargo size`
-    #[clap(visible_alias = "r")]
+    #[clap(visible_alias = "s")]
     Size {
         /// Name of the package
         ///
@@ -50,7 +50,7 @@ enum Cmd {
         args: Vec<String>,
     },
     /// `cd` into specified or default package and run `cargo readobj`
-    #[clap(visible_alias = "r")]
+    #[clap(visible_alias = "ro")]
     Readobj {
         /// Name of the package
         ///
@@ -64,7 +64,7 @@ enum Cmd {
         args: Vec<String>,
     },
     /// `cd` into specified or default package and run `cargo objdump`
-    #[clap(visible_alias = "r")]
+    #[clap(visible_alias = "od")]
     Objdump {
         /// Name of the package
         ///
