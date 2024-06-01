@@ -12,6 +12,7 @@
 mod app {
     use fugit::ExtU32;
 
+    use defmt_brtt as _; // global logger
     use robot_core::*;
     use rtic_monotonics::systick::*;
     use rtic_sync::{channel::*, make_channel};

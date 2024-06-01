@@ -11,6 +11,7 @@
 )]
 mod app {
 
+    use defmt_brtt as _; // global logger
     use robot_core::display::OledDisplay;
     use robot_core::my_stepper::*;
     use robot_core::DisplayMemoryPool;

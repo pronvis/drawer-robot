@@ -1,4 +1,3 @@
-#![no_main]
 #![no_std]
 
 pub mod display;
@@ -8,7 +7,6 @@ pub mod ps3;
 pub mod robot;
 
 use core::sync::atomic::{AtomicUsize, Ordering};
-use defmt_brtt as _; // global logger
 use ssd1306::{mode::BufferedGraphicsMode, prelude::*, Ssd1306};
 use stm32f1xx_hal::{
     gpio::gpiob::{PB0, PB1, PB10, PB11, PB12, PB13, PB15, PB2, PB8, PB9},

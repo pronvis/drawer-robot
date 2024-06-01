@@ -12,6 +12,7 @@
 mod app {
     use robot_core::my_tmc2209::communicator::TMC2209SerialCommunicator;
 
+    use defmt_brtt as _; // global logger
     use fugit::Duration;
     use rtic_monotonics::systick::*;
     use rtic_sync::{channel::*, make_channel};

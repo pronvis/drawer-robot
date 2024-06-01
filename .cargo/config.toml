@@ -3,6 +3,6 @@ xtask = "run --package xtask --release --"
 
 [env]
 CARGO_WORKSPACE_DIR = { value = "", relative = true }
-XTASK_RUN_DEFAULT = "motherboard"
+XTASK_RUN_DEFAULT = "experiments"
 XTASK_TEST_EXCLUDE = "motherboard"
 DEFMT_LOG = "trace"

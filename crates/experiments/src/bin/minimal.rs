@@ -11,6 +11,7 @@
 )]
 mod app {
 
+    use defmt_brtt as _; // global logger
     use robot_core::*;
     use rtic_monotonics::systick::*;
     use stm32f1xx_hal::prelude::*;

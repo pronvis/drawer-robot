@@ -10,7 +10,9 @@
     // dispatchers = [PVD, WWDG, RTC, SPI1]
 )]
 mod app {
+    use defmt_brtt as _; // global logger
     use cortex_m::delay::Delay;
+    use robot_core::*;
     //This is 4 years old library
     use hx711::Hx711;
     use stm32f1xx_hal::{

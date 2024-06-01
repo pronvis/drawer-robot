@@ -1,11 +1,12 @@
 [package]
 authors = ["Aleksandrov Vladimir <invis87@gmail.com>"]
 readme = "README.md"
-name = "drawer-robot"
+name = "motherboard"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+robot-core = { path = "../robot-core" }
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
 critical-section = "1.1.1"
 defmt = { version = "0.3", features = ["encoding-rzcobs"] }

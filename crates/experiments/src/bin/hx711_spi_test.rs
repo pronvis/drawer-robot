@@ -10,7 +10,9 @@
     // dispatchers = [PVD, WWDG, RTC, SPI1]
 )]
 mod app {
+    use defmt_brtt as _; // global logger
     use hx711_spi::Hx711;
+    use robot_core::*;
     use rtic_monotonics::systick::*;
     use stm32f1xx_hal::{
         device::SPI2,

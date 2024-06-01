@@ -8,12 +8,12 @@ edition = "2021"
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
 critical-section = "1.1.1"
 defmt = { version = "0.3", features = ["encoding-rzcobs"] }
-defmt-brtt = { version = "0.1", default-features = false, features = ["rtt"] }
 panic-probe = { version = "0.3", features = ["print-defmt"] }
 rtic = { version = "2.1.1", features = [ "thumbv7-backend" ] }
 rtic-sync = "1.3.0"
 # stm32f1xx-hal = { version = "0.10.0", features = ["rt", "stm32f103", "medium", "stm32-usbd"] }
-stm32f1xx-hal = { version = "0.10.0", features = ["rt", "stm32f103", "high", "stm32-usbd"] }
+# stm32f1xx-hal = { version = "0.10.0", features = ["rt", "stm32f103", "high", "stm32-usbd"] }
+stm32f1xx-hal = { version = "0.10.0" }
 rtic-monotonics = { version = "= 1.5.0", features = [ "cortex-m-systick" ]}
 ramp-maker = "0.2.0"
 embedded-hal = "0.2.7"
