@@ -3,6 +3,7 @@ members = [
     "crates/robot-core",
     "crates/experiments",
     "crates/motherboard",
+    "crates/companion",
     "xtask"
 ]
 resolver = "2"

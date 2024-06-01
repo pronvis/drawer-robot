@@ -127,6 +127,10 @@ fn run(package: Option<OsString>, bin: Option<OsString>, mut args: Vec<String>) 
             or define XTASK_RUN_DEFAULT=<package> env variable."
     ))?;
 
+    let mut release_args = vec!["--release".to_string()];
+    release_args.append(&mut args);
+    args = release_args;
+
     if let Some(bin) = bin {
         let mut bin = vec!["--bin".to_string(), bin.into_string().unwrap()];
         bin.append(&mut args);
@@ -156,6 +160,10 @@ fn size(package: Option<OsString>, bin: Option<OsString>, mut args: Vec<String>)
             Either pass the name to the crate with `-p <package>` option, \
             or define XTASK_RUN_DEFAULT=<package> env variable."
     ))?;
+
+    let mut release_args = vec!["--release".to_string()];
+    release_args.append(&mut args);
+    args = release_args;
 
     if let Some(bin) = bin {
         let mut bin = vec!["--bin".to_string(), bin.into_string().unwrap()];
@@ -192,6 +200,10 @@ fn read_obj(package: Option<OsString>, bin: Option<OsString>, mut args: Vec<Stri
             or define XTASK_RUN_DEFAULT=<package> env variable."
     ))?;
 
+    let mut release_args = vec!["--release".to_string()];
+    release_args.append(&mut args);
+    args = release_args;
+
     if let Some(bin) = bin {
         let mut bin = vec!["--bin".to_string(), bin.into_string().unwrap()];
         bin.append(&mut args);
@@ -221,6 +233,10 @@ fn obj_dump(package: Option<OsString>, bin: Option<OsString>, mut args: Vec<Stri
         Err(e) => bail!(e),
     };
 
+    let mut release_args = vec!["--release".to_string()];
+    release_args.append(&mut args);
+    args = release_args;
+
     let package = package.or(default).ok_or(eyre!(
         "No package to size.\
             Either pass the name to the crate with `-p <package>` option, \
@@ -249,12 +265,17 @@ fn obj_dump(package: Option<OsString>, bin: Option<OsString>, mut args: Vec<Stri
     Ok(())
 }
 
-fn build(package: Option<OsString>, args: Vec<String>) -> eyre::Result<()> {
+fn build(package: Option<OsString>, mut args: Vec<String>) -> eyre::Result<()> {
     let members = workspace_members()?;
+
+    let mut release_args = vec!["--release".to_string()];
+    release_args.append(&mut args);
+    args = release_args;
 
     let build = |member: &PathBuf| {
         let msg = format!("   xtask: Running `{}` in `{}`", format_cmd("cargo build", &args), member.display());
         println!("{}", msg.blue().bold());
+
         let status = Command::new("cargo").arg("build").args(&args).current_dir(member).status()?;
         if !status.success() {
             bail!("`cargo build` failed for {}", member.display());

@@ -2,7 +2,7 @@ use embedded_hal::digital::v2::OutputPin;
 use fugit::ExtU32;
 use rtic_sync::{channel::*, make_channel};
 use stm32f1xx_hal::{
-    device::{TIM2, TIM3, TIM4, TIM5},
+    device::{TIM1, TIM2, TIM3, TIM4},
     gpio,
     gpio::PinState,
     rcc::Clocks,
@@ -22,13 +22,12 @@ pub const MIN_DELAY_BETWEEN_STEPS: u32 = 200;
 // with delay = 1500 speed of a thread on a coil with diameter 40mm = 1.84 mm/s
 pub const MAX_DELAY_BETWEEN_STEPS: u32 = 1500;
 pub const DELAY_BETWEEN_STEPS_STEP: u32 = 100;
-pub const MAX_SPEED_VAL: u8 =
-    ((MAX_DELAY_BETWEEN_STEPS - MIN_DELAY_BETWEEN_STEPS) / DELAY_BETWEEN_STEPS_STEP) as u8;
+pub const MAX_SPEED_VAL: u8 = ((MAX_DELAY_BETWEEN_STEPS - MIN_DELAY_BETWEEN_STEPS) / DELAY_BETWEEN_STEPS_STEP) as u8;
 
-pub type MyStepper1 = MyStepper<stm32f1xx_hal::pac::TIM2, XStepPin, XDirPin>;
-pub type MyStepper2 = MyStepper<stm32f1xx_hal::pac::TIM3, YStepPin, YDirPin>;
-pub type MyStepper3 = MyStepper<stm32f1xx_hal::pac::TIM4, ZStepPin, ZDirPin>;
-pub type MyStepper4 = MyStepper<stm32f1xx_hal::pac::TIM5, EStepPin, EDirPin>;
+pub type MyStepper1 = MyStepper<stm32f1xx_hal::pac::TIM1, XStepPin, XDirPin>;
+pub type MyStepper2 = MyStepper<stm32f1xx_hal::pac::TIM2, YStepPin, YDirPin>;
+pub type MyStepper3 = MyStepper<stm32f1xx_hal::pac::TIM3, ZStepPin, ZDirPin>;
+pub type MyStepper4 = MyStepper<stm32f1xx_hal::pac::TIM4, EStepPin, EDirPin>;
 pub type MyStepperCommandsSender = Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>;
 
 #[derive(Clone)]
@@ -146,16 +145,14 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
         if self.state.step_phase {
             self.step_pin.set_low().ok();
             self.state.step_phase = false;
-            self.timer
-                .start(self.state.micros_between_steps.micros())
-                .unwrap(); //TODO: unwrap
+            self.timer.start(self.state.micros_between_steps.micros()).unwrap();
+        //TODO: unwrap
         } else {
             self.step_pin.set_high().ok();
             self.state.step_phase = true;
             //TODO: with TMC2209 you might want to remove delay here
-            self.timer
-                .start(self.state.micros_pulse_duration.micros())
-                .unwrap(); //TODO: unwrap
+            self.timer.start(self.state.micros_pulse_duration.micros()).unwrap();
+            //TODO: unwrap
         }
     }
 
@@ -209,11 +206,7 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
             MyStepperCommands::AddSteps(steps) => {
                 self.state.steps_mode = true;
                 self.state.steps_amount += steps;
-                defmt::debug!(
-                    "stepper #{}: update steps_amount = {}",
-                    self.index,
-                    self.state.steps_amount
-                );
+                defmt::debug!("stepper #{}: update steps_amount = {}", self.index, self.state.steps_amount);
                 let mut data_str = DisplayString::new();
                 let index = self.index;
                 let steps = self.state.steps_amount;
@@ -257,8 +250,7 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
 
 fn speed_to_delays(speed: u8) -> u32 {
     let new_speed = core::cmp::min(speed, MAX_SPEED_VAL);
-    let new_delays: u32 =
-        MIN_DELAY_BETWEEN_STEPS + DELAY_BETWEEN_STEPS_STEP * u32::from(MAX_SPEED_VAL - new_speed);
+    let new_delays: u32 = MIN_DELAY_BETWEEN_STEPS + DELAY_BETWEEN_STEPS_STEP * u32::from(MAX_SPEED_VAL - new_speed);
     new_delays
 }
 
@@ -279,10 +271,10 @@ pub fn create_steppers(
     gpioc_crl: &mut gpio::Cr<'C', false>,
     gpiob_crl: &mut gpio::Cr<'B', false>,
     gpiob_crh: &mut gpio::Cr<'B', true>,
+    tim1: TIM1,
     tim2: TIM2,
     tim3: TIM3,
     tim4: TIM4,
-    tim5: TIM5,
     display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
 ) -> (
     (MyStepper1, MyStepperCommandsSender),
@@ -313,59 +305,35 @@ pub fn create_steppers(
     let mut e_en = pb1.into_push_pull_output(gpiob_crl);
     e_en.set_low();
 
-    let tim2 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>::new(
-        tim2, clocks,
-    );
-    let mut timer_2: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ> =
-        tim2.counter();
-    timer_2
-        .start(stepper_state.micros_pulse_duration().micros())
-        .unwrap();
+    let tim2 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>::new(tim2, clocks);
+    let mut timer_2: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ> = tim2.counter();
+    timer_2.start(stepper_state.micros_pulse_duration().micros()).unwrap();
     timer_2.listen(Event::Update);
 
-    let tim3 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM3, TIMER_CLOCK_FREQ>::new(
-        tim3, clocks,
-    );
-    let mut timer_3: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM3, TIMER_CLOCK_FREQ> =
-        tim3.counter();
-    timer_3
-        .start(stepper_state.micros_pulse_duration().micros())
-        .unwrap();
+    let tim3 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM3, TIMER_CLOCK_FREQ>::new(tim3, clocks);
+    let mut timer_3: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM3, TIMER_CLOCK_FREQ> = tim3.counter();
+    timer_3.start(stepper_state.micros_pulse_duration().micros()).unwrap();
     timer_3.listen(Event::Update);
 
-    let tim4 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM4, TIMER_CLOCK_FREQ>::new(
-        tim4, clocks,
-    );
-    let mut timer_4: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM4, TIMER_CLOCK_FREQ> =
-        tim4.counter();
-    timer_4
-        .start(stepper_state.micros_pulse_duration().micros())
-        .unwrap();
+    let tim4 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM4, TIMER_CLOCK_FREQ>::new(tim4, clocks);
+    let mut timer_4: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM4, TIMER_CLOCK_FREQ> = tim4.counter();
+    timer_4.start(stepper_state.micros_pulse_duration().micros()).unwrap();
     timer_4.listen(Event::Update);
 
-    let tim5 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM5, TIMER_CLOCK_FREQ>::new(
-        tim5, clocks,
-    );
-    let mut timer_5: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM5, TIMER_CLOCK_FREQ> =
-        tim5.counter();
-    timer_5
-        .start(stepper_state.micros_pulse_duration().micros())
-        .unwrap();
-    timer_5.listen(Event::Update);
+    let tim1 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>::new(tim1, clocks);
+    let mut timer_1: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ> = tim1.counter();
+    timer_1.start(stepper_state.micros_pulse_duration().micros()).unwrap();
+    timer_1.listen(Event::Update);
 
-    let (sender_0, stepper_0_commands_receiver) =
-        make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
-    let (sender_1, stepper_1_commands_receiver) =
-        make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
-    let (sender_2, stepper_2_commands_receiver) =
-        make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
-    let (sender_3, stepper_3_commands_receiver) =
-        make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
+    let (sender_0, stepper_0_commands_receiver) = make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
+    let (sender_1, stepper_1_commands_receiver) = make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
+    let (sender_2, stepper_2_commands_receiver) = make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
+    let (sender_3, stepper_3_commands_receiver) = make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
 
     let stepper_0 = MyStepper::new(
         0,
         stepper_state.clone(),
-        timer_2,
+        timer_1,
         x_step_pin,
         x_dir_pin,
         stepper_0_commands_receiver,
@@ -374,7 +342,7 @@ pub fn create_steppers(
     let stepper_1 = MyStepper::new(
         1,
         stepper_state.clone(),
-        timer_3,
+        timer_2,
         y_step_pin,
         y_dir_pin,
         stepper_1_commands_receiver,
@@ -383,7 +351,7 @@ pub fn create_steppers(
     let stepper_2 = MyStepper::new(
         2,
         stepper_state.clone(),
-        timer_4,
+        timer_3,
         z_step_pin,
         z_dir_pin,
         stepper_2_commands_receiver,
@@ -392,7 +360,7 @@ pub fn create_steppers(
     let stepper_3 = MyStepper::new(
         3,
         stepper_state,
-        timer_5,
+        timer_4,
         e_step_pin,
         e_dir_pin,
         stepper_3_commands_receiver,

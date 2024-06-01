@@ -12,12 +12,12 @@
 mod app {
 
     use defmt_brtt as _; // global logger
+    use heapless::pool::singleton::Box;
+    use heapless::{pool, pool::singleton::Pool};
     use robot_core::display::OledDisplay;
     use robot_core::my_stepper::*;
     use robot_core::DisplayMemoryPool;
     use robot_core::*;
-    use heapless::pool::singleton::Box;
-    use heapless::{pool, pool::singleton::Pool};
     use rtic_monotonics::systick::*;
     use rtic_sync::{channel::*, make_channel};
     use stm32f1xx_hal::{
@@ -57,10 +57,10 @@ mod app {
     #[local]
     struct Local {
         speed: u8,
-        stepper_1: MyStepper<stm32f1xx_hal::pac::TIM2, X_StepPin, XDirPin>,
-        stepper_2: MyStepper<stm32f1xx_hal::pac::TIM3, Y_StepPin, YDirPin>,
-        stepper_3: MyStepper<stm32f1xx_hal::pac::TIM4, Z_StepPin, ZDirPin>,
-        stepper_4: MyStepper<stm32f1xx_hal::pac::TIM5, E_StepPin, EDirPin>,
+        stepper_1: MyStepper<stm32f1xx_hal::pac::TIM1, X_StepPin, XDirPin>,
+        stepper_2: MyStepper<stm32f1xx_hal::pac::TIM2, Y_StepPin, YDirPin>,
+        stepper_3: MyStepper<stm32f1xx_hal::pac::TIM3, Z_StepPin, ZDirPin>,
+        stepper_4: MyStepper<stm32f1xx_hal::pac::TIM4, E_StepPin, EDirPin>,
         display: OledDisplay,
         display_receiver: Receiver<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
     }
@@ -116,10 +116,10 @@ mod app {
                 &mut gpioc.crl,
                 &mut gpiob.crl,
                 &mut gpiob.crh,
+                cx.device.TIM1,
                 cx.device.TIM2,
                 cx.device.TIM3,
                 cx.device.TIM4,
-                cx.device.TIM5,
                 display_sender,
             );
         // SSD1306 display pins
@@ -219,7 +219,7 @@ mod app {
         cx.local.stepper_3.work();
     }
 
-    #[task(binds = TIM5, priority = 3, local = [ stepper_4 ])]
+    #[task(binds = TIM1_UP, priority = 3, local = [ stepper_4 ])]
     fn delay_task_4(cx: delay_task_4::Context) {
         cx.local.stepper_4.work();
     }

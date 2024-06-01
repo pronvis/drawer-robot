@@ -7,7 +7,6 @@
     peripherals = true,
     // You can usually find the names of the interrupt vectors in the some_hal::pac::interrupt enum.
     dispatchers = [EXTI0, EXTI1, EXTI2, EXTI3, EXTI4]
-    // dispatchers = [PVD, WWDG, RTC, SPI1]
 )]
 mod app {
 

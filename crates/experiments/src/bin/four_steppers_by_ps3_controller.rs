@@ -19,6 +19,7 @@ mod app {
 
     use rtic_monotonics::systick::*;
     use rtic_sync::{channel::*, make_channel};
+    use stm32f1xx_hal::pac::interrupt;
     use stm32f1xx_hal::{
         afio,
         gpio::PinState,
@@ -159,17 +160,12 @@ mod app {
                 &mut gpioc.crl,
                 &mut gpiob.crl,
                 &mut gpiob.crh,
+                cx.device.TIM1,
                 cx.device.TIM2,
                 cx.device.TIM3,
                 cx.device.TIM4,
-                cx.device.TIM5,
                 display_sender.clone(),
             );
-
-        let tim6 = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM6, SOFT_CLOCK_FREQ>::new(cx.device.TIM6, &clocks);
-        let mut timer_6: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM6, SOFT_CLOCK_FREQ> = tim6.counter();
-        timer_6.start(18.micros()).unwrap(); // some nonimportant timer start time
-        timer_6.listen(Event::Update);
 
         let (mut ps3_bytes_sender, ps3_bytes_receiver) = make_channel!(u8, PS3_CHANNEL_CAPACITY);
         let (mut ps3_events_sender, ps3_events_receiver) = make_channel!(ps3::Ps3Event, PS3_CHANNEL_CAPACITY);
@@ -301,7 +297,7 @@ mod app {
         cx.local.stepper_3.work();
     }
 
-    #[task(binds = TIM5, priority = 10, local = [ stepper_4 ])]
+    #[task(binds = TIM1_UP, priority = 10, local = [ stepper_4 ])]
     fn delay_task_4(cx: delay_task_4::Context) {
         cx.local.stepper_4.work();
     }
