@@ -24,7 +24,7 @@ mod app {
     struct Local {}
 
     #[init]
-    fn init(mut cx: init::Context) -> (Shared, Local) {
+    fn init(cx: init::Context) -> (Shared, Local) {
         defmt::info!("init");
 
         // Take ownership over the raw flash and rcc devices and convert them into the corresponding

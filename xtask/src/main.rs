@@ -35,6 +35,48 @@ enum Cmd {
         /// Arguments for `cargo embed`
         args: Vec<String>,
     },
+    /// `cd` into specified or default package and run `cargo size`
+    #[clap(visible_alias = "r")]
+    Size {
+        /// Name of the package
+        ///
+        /// If not provided a default specified in XTASK_RUN_DEFAULT env variable will be used.
+        #[arg(short, long)]
+        package: Option<OsString>,
+        /// Name of the bin
+        #[arg(short, long)]
+        bin: Option<OsString>,
+        /// Arguments for `cargo embed`
+        args: Vec<String>,
+    },
+    /// `cd` into specified or default package and run `cargo readobj`
+    #[clap(visible_alias = "r")]
+    Readobj {
+        /// Name of the package
+        ///
+        /// If not provided a default specified in XTASK_RUN_DEFAULT env variable will be used.
+        #[arg(short, long)]
+        package: Option<OsString>,
+        /// Name of the bin
+        #[arg(short, long)]
+        bin: Option<OsString>,
+        /// Arguments for `cargo embed`
+        args: Vec<String>,
+    },
+    /// `cd` into specified or default package and run `cargo objdump`
+    #[clap(visible_alias = "r")]
+    Objdump {
+        /// Name of the package
+        ///
+        /// If not provided a default specified in XTASK_RUN_DEFAULT env variable will be used.
+        #[arg(short, long)]
+        package: Option<OsString>,
+        /// Name of the bin
+        #[arg(short, long)]
+        bin: Option<OsString>,
+        /// Arguments for `cargo embed`
+        args: Vec<String>,
+    },
     /// `cd` into each package and run `cargo build`
     #[clap(visible_alias = "b")]
     Build {
@@ -61,6 +103,9 @@ fn start() -> eyre::Result<()> {
     let cli = Cli::parse();
     match cli.cmd {
         Cmd::Run { package, bin, args } => run(package, bin, args)?,
+        Cmd::Size { package, bin, args } => size(package, bin, args)?,
+        Cmd::Readobj { package, bin, args } => read_obj(package, bin, args)?,
+        Cmd::Objdump { package, bin, args } => obj_dump(package, bin, args)?,
         Cmd::Build { package, args } => build(package, args)?,
         Cmd::Test { package, args } => test(package, args)?,
     };
@@ -78,13 +123,14 @@ fn run(package: Option<OsString>, bin: Option<OsString>, mut args: Vec<String>) 
 
     let package = package.or(default).ok_or(eyre!(
         "No package to run.\
-            Either pass the name to the crate with `-p <package>` oprion, \
+            Either pass the name to the crate with `-p <package>` option, \
             or define XTASK_RUN_DEFAULT=<package> env variable."
     ))?;
 
     if let Some(bin) = bin {
         let mut bin = vec!["--bin".to_string(), bin.into_string().unwrap()];
-        args.append(&mut bin);
+        bin.append(&mut args);
+        args = bin;
     }
 
     let path = members
@@ -93,6 +139,113 @@ fn run(package: Option<OsString>, bin: Option<OsString>, mut args: Vec<String>) 
         .wrap_err("Thre is no such package")?;
 
     Command::new("cargo").arg("run").args(&args).current_dir(path).status()?;
+    Ok(())
+}
+
+fn size(package: Option<OsString>, bin: Option<OsString>, mut args: Vec<String>) -> eyre::Result<()> {
+    let members = workspace_members()?;
+
+    let default = match env::var("XTASK_RUN_DEFAULT") {
+        Ok(v) => Some(v.into()),
+        Err(env::VarError::NotPresent) => None,
+        Err(e) => bail!(e),
+    };
+
+    let package = package.or(default).ok_or(eyre!(
+        "No package to size.\
+            Either pass the name to the crate with `-p <package>` option, \
+            or define XTASK_RUN_DEFAULT=<package> env variable."
+    ))?;
+
+    if let Some(bin) = bin {
+        let mut bin = vec!["--bin".to_string(), bin.into_string().unwrap()];
+        bin.append(&mut args);
+        args = bin;
+    }
+
+    if !args.contains(&"--".to_string()) {
+        args.push("--".to_string());
+    }
+    args.push("-A".to_string());
+
+    let path = members
+        .iter()
+        .find(|path| path.file_name().unwrap() == package)
+        .wrap_err("Thre is no such package")?;
+
+    Command::new("cargo").arg("size").args(&args).current_dir(path).status()?;
+    Ok(())
+}
+
+fn read_obj(package: Option<OsString>, bin: Option<OsString>, mut args: Vec<String>) -> eyre::Result<()> {
+    let members = workspace_members()?;
+
+    let default = match env::var("XTASK_RUN_DEFAULT") {
+        Ok(v) => Some(v.into()),
+        Err(env::VarError::NotPresent) => None,
+        Err(e) => bail!(e),
+    };
+
+    let package = package.or(default).ok_or(eyre!(
+        "No package to size.\
+            Either pass the name to the crate with `-p <package>` option, \
+            or define XTASK_RUN_DEFAULT=<package> env variable."
+    ))?;
+
+    if let Some(bin) = bin {
+        let mut bin = vec!["--bin".to_string(), bin.into_string().unwrap()];
+        bin.append(&mut args);
+        args = bin;
+    }
+
+    if !args.contains(&"--".to_string()) {
+        args.push("--".to_string());
+    }
+    args.push("--file-headers".to_string());
+
+    let path = members
+        .iter()
+        .find(|path| path.file_name().unwrap() == package)
+        .wrap_err("Thre is no such package")?;
+
+    Command::new("cargo").arg("readobj").args(&args).current_dir(path).status()?;
+    Ok(())
+}
+
+fn obj_dump(package: Option<OsString>, bin: Option<OsString>, mut args: Vec<String>) -> eyre::Result<()> {
+    let members = workspace_members()?;
+
+    let default = match env::var("XTASK_RUN_DEFAULT") {
+        Ok(v) => Some(v.into()),
+        Err(env::VarError::NotPresent) => None,
+        Err(e) => bail!(e),
+    };
+
+    let package = package.or(default).ok_or(eyre!(
+        "No package to size.\
+            Either pass the name to the crate with `-p <package>` option, \
+            or define XTASK_RUN_DEFAULT=<package> env variable."
+    ))?;
+
+    if let Some(bin) = bin {
+        let mut bin = vec!["--bin".to_string(), bin.into_string().unwrap()];
+        bin.append(&mut args);
+        args = bin;
+    }
+
+    if !args.contains(&"--".to_string()) {
+        args.push("--".to_string());
+    }
+    args.push("--disassemble".to_string());
+    args.push("--no-show-raw-insn".to_string());
+    args.push("--print-imm-hex".to_string());
+
+    let path = members
+        .iter()
+        .find(|path| path.file_name().unwrap() == package)
+        .wrap_err("Thre is no such package")?;
+
+    Command::new("cargo").arg("objdump").args(&args).current_dir(path).status()?;
     Ok(())
 }
 

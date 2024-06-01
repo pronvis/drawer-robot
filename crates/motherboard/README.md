@@ -9,6 +9,12 @@ To set logging level change env vat `DEFMT_LOG` at `.cargo/config.toml`
 ### To stop microcontoller
 Erase program: `probe-rs erase --chip STM32F103RE`
 
+## Size
+To get info about sections size on microcontoller: `cargo xtask size -p {project_name} -b {bin_file_name}`, for example: `cargo xtask size -p experiments -b stepper_configurator`.
+
+## ReadObj
+To get info about binary object: `cargo xtask readobj -p {project_name} -b {bin_file_name}`, for example: `cargo xtask readobj -p experiments -b stepper_configurator`.
+
 ## TMC2209
 
 Good Vref calculator: https://wiki.fysetc.com/TMC2208/#motor-current-setting
