@@ -1,7 +1,7 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
 ### motherboard ###
-runner = "probe-rs run --chip STM32F103RE"
-# runner = "probe-run --probe 15003200090000524A51544E --chip STM32F103RE"
+# runner = "probe-rs run --probe 0483:3748:15 --chip STM32F103RE"
+runner = "probe-run --probe 15003200090000524A51544E --chip STM32F103RE"
 ###################
 
 ### bluepill ###
