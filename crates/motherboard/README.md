@@ -33,3 +33,9 @@ To connect PS3 controller to HC-05 you need to set master address. To do that:
 1. run `openopcd` in one terminal
 2. run `arm-none-eabi-gdb -x openocd.gdb -q {path_to_bin_file}` or change `runner` at `crate/{project}/.cargo/config.toml`
 For example: `arm-none-eabi-gdb -x openocd.gdb -q ~/rust/rust_build_artifacts/thumbv7m-none-eabi/release/minimal_x`
+
+## Manual Flashing
+
+1. Build ELF file (`cargo build`)
+2. `arm-none-eabi-objcopy -O binary $CARGO_TARGET_DIR/thumbv7m-none-eabi/release/{binary_name} {path_to_output}.bin`
+3. `st-flash write {path_to_output}.bin 0x08000000`

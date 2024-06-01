@@ -9,7 +9,10 @@ runner = "probe-rs run --chip STM32F103C8"
 # runner = "probe-run --probe C296C294070132124647524B4E00 --chip STM32F103C8"
 ###################
 rustflags = [
-  "-C", "linker=flip-link",
+  ##########################################
+  # FOR SOME REASON 'flip-link' does not work with BluePill. Dont know why...
+  # "-C", "linker=flip-link",
+  ##########################################
   "-C", "link-arg=-Tlink.x",
   "-C", "link-arg=-Tdefmt.x",
   # This is needed if your flash or ram addresses are not aligned to 0x10000 in memory.x

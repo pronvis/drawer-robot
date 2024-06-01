@@ -15,7 +15,6 @@ mod app {
     use rtic_monotonics::systick::*;
     use stm32f1xx_hal::{
         gpio::PinState,
-        pac,
         prelude::*,
         timer::{Counter, Event},
     };
@@ -34,13 +33,13 @@ mod app {
     }
 
     #[init]
-    fn init(mut cx: init::Context) -> (Shared, Local) {
+    fn init(cx: init::Context) -> (Shared, Local) {
         defmt::info!("init");
 
         // Take ownership over the raw flash and rcc devices and convert them into the corresponding
         // HAL structs
         let mut flash: stm32f1xx_hal::flash::Parts = cx.device.FLASH.constrain();
-        let mut rcc: stm32f1xx_hal::rcc::Rcc = cx.device.RCC.constrain();
+        let rcc: stm32f1xx_hal::rcc::Rcc = cx.device.RCC.constrain();
 
         // Freeze the configuration of all the clocks in the system and store the frozen frequencies in
         // `clocks`
@@ -96,7 +95,7 @@ mod app {
     }
 
     #[task(binds = TIM1_UP, priority = 3, local = [  timer_1, internal_led, led_state: bool = true])]
-    fn delay_task_1(mut cx: delay_task_1::Context) {
+    fn delay_task_1(cx: delay_task_1::Context) {
         defmt::debug!("delay1: timer task");
         if *cx.local.led_state {
             cx.local.internal_led.set_high();
@@ -112,7 +111,7 @@ mod app {
     }
 
     #[task(binds = TIM2, priority = 4, local = [  timer_2, out_led, led_state: bool = true ])]
-    fn delay_task_2(mut cx: delay_task_2::Context) {
+    fn delay_task_2(cx: delay_task_2::Context) {
         defmt::debug!("delay2: timer task");
 
         if *cx.local.led_state {
