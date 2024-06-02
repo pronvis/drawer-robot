@@ -10,17 +10,19 @@
     // dispatchers = [PVD, WWDG, RTC, SPI1]
 )]
 mod app {
-    use defmt_brtt as _; // global logger
     use cortex_m::delay::Delay;
+    use defmt_brtt as _; // global logger
     use robot_core::*;
     //This is 4 years old library
     use hx711::Hx711;
     use stm32f1xx_hal::{
         gpio::{Output, Pin},
         prelude::*,
+        timer::{counter, Counter, Event},
     };
 
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
+    const TIMER_CLOCK_FREQ: u32 = 72_000;
 
     #[shared]
     struct Shared {}
@@ -28,6 +30,7 @@ mod app {
     #[local]
     struct Local {
         hx711: Hx711<Delay, Pin<'A', 6>, Pin<'A', 7, Output>>,
+        read_timer: Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>,
     }
 
     #[init]
@@ -65,39 +68,23 @@ mod app {
         let pd_sck = gpioa.pa7.into_push_pull_output(&mut gpioa.crl);
         let hx711 = Hx711::new(Delay::new(cx.core.SYST, 1_000_000), dout, pd_sck).unwrap();
 
-        hx711_read_task::spawn().ok();
+        let mut read_timer = robot_core::get_counter(cx.device.TIM2, &clocks);
+        read_timer.start(100.millis()).unwrap();
+        read_timer.listen(Event::Update);
 
-        (Shared {}, Local { hx711 })
+        (Shared {}, Local { hx711, read_timer })
     }
 
-    #[task(priority = 1, local = [hx711])]
-    async fn hx711_read_task(cx: hx711_read_task::Context) {
-        let n: i32 = 8;
-        let mut val: i32 = 0;
-
-        // Obtain the tara value
-        defmt::debug!("Obtaining tara ...");
-        for _ in 0..n {
-            match cx.local.hx711.retrieve() {
-                Ok(curr_val) => val += curr_val,
-                Err(_) => defmt::error!("fail to get data from hx711"),
-            }
+    #[task(binds = TIM2, priority = 5, local = [ read_timer, hx711, counter: u8 = 0 ])]
+    fn hx711_read(cx: hx711_read::Context) {
+        let conversion_rate: f32 = 0.035274;
+        cx.local.read_timer.clear_interrupt(Event::Update);
+        let hx711_data = cx.local.hx711.retrieve();
+        if let Ok(data) = hx711_data {
+            let gramms = data as f32 * conversion_rate;
+            let kilogramms = gramms / 1000f32;
+            defmt::debug!("#{}: DYMH-06 data: {}", *cx.local.counter, kilogramms)
         }
-
-        let tara = val / n;
-        defmt::debug!("Tara: {}", tara);
-
-        loop {
-            // Measurement loop
-            val = 0;
-            for _ in 0..n {
-                match cx.local.hx711.retrieve() {
-                    Ok(curr_val) => val += curr_val,
-                    Err(_) => defmt::error!("fail to get data from hx711"),
-                }
-            }
-            let weight = val / n - tara;
-            defmt::debug!("weight: {}", weight);
-        }
+        *cx.local.counter += 1;
     }
 }
