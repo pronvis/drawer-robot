@@ -10,7 +10,6 @@
     // dispatchers = [PVD, WWDG, RTC, SPI1]
 )]
 mod app {
-    use cortex_m::delay::Delay;
     use defmt_brtt as _; // global logger
     use robot_core::*;
     //This is 4 years old library
@@ -23,13 +22,17 @@ mod app {
 
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
     const TIMER_CLOCK_FREQ: u32 = 72_000;
+    const HX711_TIMER_CLOCK_FREQ: u32 = 2_000_000;
 
     #[shared]
     struct Shared {}
 
     #[local]
     struct Local {
-        hx711: Hx711<Delay, Pin<'A', 6>, Pin<'A', 7, Output>>,
+        // with SYST timer:
+        // hx711: Hx711<cortex_m::delay::Delay, Pin<'A', 6>, Pin<'A', 7, Output>>,
+        // with TIM timer:
+        hx711: Hx711<stm32f1xx_hal::timer::Delay<stm32f1xx_hal::pac::TIM3, HX711_TIMER_CLOCK_FREQ>, Pin<'A', 6>, Pin<'A', 7, Output>>,
         read_timer: Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>,
     }
 
@@ -66,7 +69,11 @@ mod app {
         //
         let dout = gpioa.pa6.into_floating_input(&mut gpioa.crl);
         let pd_sck = gpioa.pa7.into_push_pull_output(&mut gpioa.crl);
-        let hx711 = Hx711::new(Delay::new(cx.core.SYST, 1_000_000), dout, pd_sck).unwrap();
+        // with SYST timer:
+        // let hx711 = Hx711::new(Delay::new(cx.core.SYST, 1_000_000), dout, pd_sck).unwrap();
+        // with TIM timer:
+        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM3, HX711_TIMER_CLOCK_FREQ>::new(cx.device.TIM3, &clocks);
+        let hx711 = Hx711::new(timer.delay(), dout, pd_sck).unwrap();
 
         let mut read_timer = robot_core::get_counter(cx.device.TIM2, &clocks);
         read_timer.start(100.millis()).unwrap();
