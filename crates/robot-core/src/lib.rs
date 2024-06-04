@@ -101,3 +101,12 @@ pub fn get_counter<TIM: timer::Instance, const FREQ: u32>(tim: TIM, clocks: &Clo
     let counter: stm32f1xx_hal::timer::Counter<TIM, FREQ> = timer.counter();
     return counter;
 }
+
+pub const COMPANION_SYNC: u8 = 0b01000101;
+#[derive(Default, Copy, Clone)]
+pub struct CompanionMessage {
+    pub load_sensor_0: i32,
+    pub load_sensor_1: i32,
+    pub load_sensor_2: i32,
+    pub load_sensor_3: i32,
+}

@@ -9,27 +9,32 @@
     dispatchers = [EXTI0, EXTI1, EXTI2, EXTI3, EXTI4]
 )]
 mod app {
-
     use defmt_brtt as _; // global logger
+    use hx711::Hx711;
+    use robot_core::CompanionMessage;
     use robot_core::*;
-    use rtic_monotonics::systick::*;
     use stm32f1xx_hal::{
-        gpio::PinState,
+        gpio::{Output, Pin},
         prelude::*,
-        timer::{Counter, Event},
+        serial::{Config, Serial},
+        timer::{counter, Counter, Event},
     };
 
+    const MAIN_CLOCK_FREQ: u32 = 72_000_000;
     const TIMER_CLOCK_FREQ: u32 = 72_000;
+    const HX711_TIMER_CLOCK_FREQ: u32 = 2_000_000;
 
     #[shared]
-    struct Shared {}
+    struct Shared {
+        companion_message: CompanionMessage,
+    }
 
     #[local]
     struct Local {
-        internal_led: InternalLed,
-        out_led: OutLed,
-        timer_1: Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>,
-        timer_2: Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>,
+        tx_usart1: stm32f1xx_hal::serial::Tx1,
+        send_timer: Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>,
+        hx711: Hx711<stm32f1xx_hal::timer::Delay<stm32f1xx_hal::pac::TIM3, HX711_TIMER_CLOCK_FREQ>, Pin<'A', 6>, Pin<'A', 7, Output>>,
+        read_timer: Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>,
     }
 
     #[init]
@@ -47,82 +52,123 @@ mod app {
         let clocks = rcc
             .cfgr
             .use_hse(8.MHz())
-            .sysclk(72.MHz())
+            .sysclk(MAIN_CLOCK_FREQ.Hz())
             .pclk1(36.MHz())
-            .pclk2(72.MHz())
+            .pclk2(MAIN_CLOCK_FREQ.Hz())
             .freeze(&mut flash.acr);
 
         if !clocks.usbclk_valid() {
             panic!("Clock parameter values are wrong!");
         }
 
-        // Acquire the GPIOC peripheral
-        let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
-        let internal_led = gpioc.pc13.into_push_pull_output_with_state(&mut gpioc.crh, PinState::Low);
+        let mut gpioa = cx.device.GPIOA.split();
+        let mut afio = cx.device.AFIO.constrain();
 
-        let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
-        let out_led = gpiob.pb12.into_push_pull_output_with_state(&mut gpiob.crh, PinState::Low);
+        // Configure the hx711 load cell driver:
+        //
+        // | HX  | dout   -> PA6 | STM |
+        // | 711 | pd_sck <- PA7 | 32  |
+        //
+        let dout = gpioa.pa6.into_floating_input(&mut gpioa.crl);
+        let pd_sck = gpioa.pa7.into_push_pull_output(&mut gpioa.crl);
+        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM3, HX711_TIMER_CLOCK_FREQ>::new(cx.device.TIM3, &clocks);
+        let hx711 = Hx711::new(timer.delay(), dout, pd_sck).unwrap();
 
-        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>::new(cx.device.TIM1, &clocks);
-        let mut timer_1: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ> = timer.counter();
-        timer_1.start(1.millis()).unwrap();
-        timer_1.listen(Event::Update);
+        // Configure the USART1:
+        //
+        let tx_usart1 = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
+        let rx_usart1 = gpioa.pa10.into_pull_up_input(&mut gpioa.crh);
+        let mut serial_usart1 = Serial::new(
+            cx.device.USART1,
+            (tx_usart1, rx_usart1),
+            &mut afio.mapr,
+            Config::default()
+                .baudrate(9600.bps())
+                .wordlength_8bits()
+                .stopbits(stm32f1xx_hal::serial::StopBits::STOP1)
+                .parity_none(),
+            &clocks,
+        );
+        let (tx_usart1, _) = serial_usart1.split();
 
-        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>::new(cx.device.TIM2, &clocks);
-        let mut timer_2: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ> = timer.counter();
-        timer_2.start(5.millis()).unwrap();
-        timer_2.listen(Event::Update);
+        let mut read_timer = robot_core::get_counter(cx.device.TIM2, &clocks);
+        read_timer.start(100.millis()).unwrap();
+        read_timer.listen(Event::Update);
+
+        let mut send_timer = robot_core::get_counter(cx.device.TIM1, &clocks);
+        send_timer.start(500.millis()).unwrap();
+        send_timer.listen(Event::Update);
 
         (
-            Shared {},
+            Shared {
+                companion_message: Default::default(),
+            },
             Local {
-                internal_led,
-                out_led,
-                timer_1,
-                timer_2,
+                hx711,
+                read_timer,
+                tx_usart1,
+                send_timer,
             },
         )
     }
 
-    // Optional idle, can be removed if not needed.
-    #[idle]
-    fn idle(_: idle::Context) -> ! {
-        defmt::debug!("idle");
-
-        loop {
-            cortex_m::asm::nop();
+    #[task(binds = TIM2, priority = 10, local = [ read_timer, hx711, counter: u8 = 0 ], shared = [companion_message])]
+    fn hx711_read(mut cx: hx711_read::Context) {
+        cx.local.read_timer.clear_interrupt(Event::Update);
+        // This conversion works fine.
+        // But for protocol simplicity I will send raw data.
+        // let conversion_rate: f32 = 0.035274;
+        // let gramms = data as f32 * conversion_rate;
+        // let kilogramms = gramms / 1000f32;
+        let mut buffer: [i32; 4] = [0, i32::MIN, i32::MIN, i32::MIN];
+        //TODO: I have only one connected sensor for now
+        for i in 0..1 {
+            if let Ok(data) = cx.local.hx711.retrieve() {
+                buffer[i] = data;
+            } else {
+                buffer[i] = i32::MIN;
+                defmt::debug!("fail to read data from hx711 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ");
+            }
         }
+
+        cx.shared.companion_message.lock(|cm| {
+            cm.load_sensor_0 = buffer[0];
+            cm.load_sensor_1 = buffer[1];
+            cm.load_sensor_2 = buffer[2];
+            cm.load_sensor_3 = buffer[3];
+        });
     }
 
-    #[task(binds = TIM1_UP, priority = 3, local = [  timer_1, internal_led, led_state: bool = true])]
-    fn delay_task_1(cx: delay_task_1::Context) {
-        defmt::debug!("delay1: timer task");
-        if *cx.local.led_state {
-            cx.local.internal_led.set_high();
-            *cx.local.led_state = false;
-        } else {
-            cx.local.internal_led.set_low();
-            *cx.local.led_state = true;
+    #[task(binds = TIM1_UP, priority = 5, local = [ tx_usart1, send_timer ], shared = [companion_message])]
+    fn hc05_send(mut cx: hc05_send::Context) {
+        cx.local.send_timer.clear_interrupt(Event::Update);
+
+        let companion_message = cx.shared.companion_message.lock(|cm| {
+            let res = cm.clone();
+            *cm = Default::default();
+            res
+        });
+
+        let mut data_to_send: [u8; 17] = [0; 17];
+        data_to_send[0] = robot_core::COMPANION_SYNC;
+        let sensor_0 = companion_message.load_sensor_0.to_be_bytes();
+        for i in 0..4 {
+            data_to_send[i + 1] = sensor_0[i];
         }
 
-        cx.local.timer_1.start(300.millis()).unwrap();
-        cx.local.timer_1.clear_interrupt(Event::Update);
-        defmt::debug!("delay1: after 1 secs");
-    }
-
-    #[task(binds = TIM2, priority = 4, local = [  timer_2, out_led, led_state: bool = true ])]
-    fn delay_task_2(cx: delay_task_2::Context) {
-        defmt::debug!("delay2: timer task");
-
-        if *cx.local.led_state {
-            cx.local.out_led.set_high();
-            *cx.local.led_state = false;
-        } else {
-            cx.local.out_led.set_low();
-            *cx.local.led_state = true;
+        let mut counter: u32 = 0;
+        let mut tx = cx.local.tx_usart1;
+        for elem in data_to_send.iter() {
+            let mut write_res = tx.write(*elem);
+            while write_res.is_err() {
+                //TODO: Make it async
+                for _ in 0..72 {
+                    cortex_m::asm::nop();
+                }
+                counter += 1;
+                write_res = tx.write(*elem);
+            }
         }
-        cx.local.timer_2.start(700.millis()).unwrap();
-        cx.local.timer_2.clear_interrupt(Event::Update);
-        defmt::debug!("delay2: after 1 secs");
+        defmt::debug!("counter: {}", counter);
     }
 }

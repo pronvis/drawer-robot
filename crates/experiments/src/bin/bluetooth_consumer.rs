@@ -1,6 +1,7 @@
 #![no_main]
 #![no_std]
 #![feature(type_alias_impl_trait)]
+#![feature(slice_as_chunks)]
 
 #[rtic::app(
     device = stm32f1xx_hal::pac,
@@ -34,8 +35,8 @@ mod app {
 
     #[local]
     struct Local {
-        tx_usart3: stm32f1xx_hal::serial::Tx3,
-        rx_usart3: stm32f1xx_hal::serial::Rx3,
+        tx_usart1: stm32f1xx_hal::serial::Tx1,
+        rx_usart1: stm32f1xx_hal::serial::Rx1,
     }
 
     #[init]
@@ -62,15 +63,15 @@ mod app {
             panic!("Clock parameter values are wrong!");
         }
 
-        let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
-        // USART3
-        let tx_usart3 = gpiob.pb10.into_alternate_push_pull(&mut gpiob.crh);
-        let rx_usart3 = gpiob.pb11;
+        let mut gpioa: stm32f1xx_hal::gpio::gpioa::Parts = cx.device.GPIOA.split();
+        // USART1
+        let tx_usart1 = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
+        let rx_usart1 = gpioa.pa10.into_pull_up_input(&mut gpioa.crh);
 
         let mut afio = cx.device.AFIO.constrain();
-        let mut serial_usart3 = Serial::new(
-            cx.device.USART3,
-            (tx_usart3, rx_usart3),
+        let mut serial_usart1 = Serial::new(
+            cx.device.USART1,
+            (tx_usart1, rx_usart1),
             &mut afio.mapr,
             Config::default()
                 .baudrate(9600.bps())
@@ -83,9 +84,9 @@ mod app {
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, STEPPER_CLOCK_FREQ, systick_mono_token);
 
-        serial_usart3.listen(stm32f1xx_hal::serial::Event::Rxne);
-        let (tx_usart3, mut rx_usart3) = serial_usart3.split();
-        (Shared {}, Local { rx_usart3, tx_usart3 })
+        serial_usart1.listen(stm32f1xx_hal::serial::Event::Rxne);
+        let (tx_usart1, mut rx_usart1) = serial_usart1.split();
+        (Shared {}, Local { rx_usart1, tx_usart1 })
     }
 
     // Optional idle, can be removed if not needed.
@@ -98,14 +99,36 @@ mod app {
         }
     }
 
-    #[task(binds = USART3, priority = 1, local = [  rx_usart3, tx_usart3  ])]
+    #[task(binds = USART1, priority = 1, local = [ rx_usart1, tx_usart1, data_to_receive: [u8; 16] = [0; 16], counter: usize = 0 ])]
     fn bluetooth_reader(cx: bluetooth_reader::Context) {
-        let rx = cx.local.rx_usart3;
+        let rx = cx.local.rx_usart1;
+        let mut counter = cx.local.counter;
         if rx.is_rx_not_empty() {
-            defmt::debug!("is empty: false");
             let received = rx.read();
             match received {
-                Ok(read) => defmt::debug!("receive: {}", read),
+                Ok(read) => {
+                    if read == robot_core::COMPANION_SYNC {
+                        if *counter != 0 {
+                            defmt::debug!("receive SYNC byte when counter = {}", *counter);
+                        }
+                        *counter = 0;
+                    } else {
+                        cx.local.data_to_receive[*counter] = read;
+                        *counter += 1;
+                    }
+
+                    if *counter == 16 {
+                        *counter = 0;
+                        let splitted = cx.local.data_to_receive[0..4].as_chunks::<4>().0;
+                        let bytes: [u8; 4] = splitted[0];
+                        let sensor_0_data = i32::from_be_bytes(bytes);
+
+                        let conversion_rate: f32 = 0.035274;
+                        let gramms = sensor_0_data as f32 * conversion_rate;
+                        let kilogramms = gramms / 1000f32;
+                        defmt::debug!("sensor 0 data: {}", kilogramms);
+                    }
+                }
 
                 Err(err) => {
                     defmt::debug!("read err: {:?}", defmt::Debug2Format(&err));
