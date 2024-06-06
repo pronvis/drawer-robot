@@ -110,3 +110,22 @@ pub struct CompanionMessage {
     pub load_sensor_2: i32,
     pub load_sensor_3: i32,
 }
+
+const TENSOR_CONVERSION_RATE: f32 = 0.035274;
+pub fn tensor_to_kg(data: i32) -> f32 {
+    if data == i32::MIN {
+        return f32::MIN;
+    }
+
+    let gramms = data as f32 * TENSOR_CONVERSION_RATE;
+    let kilogramms = gramms / 1000f32;
+    return kilogramms;
+}
+
+pub fn f32_diff(f1: f32, f2: f32) -> f32 {
+    if f2 > f1 {
+        f2 - f1
+    } else {
+        f1 - f2
+    }
+}

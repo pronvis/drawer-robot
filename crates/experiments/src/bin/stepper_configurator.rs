@@ -71,7 +71,7 @@ mod app {
         let mut tmc2209_communicator_timer = robot_core::get_counter(cx.device.TIM2, &clocks);
         let tmc2209_timer_ticks = Duration::<u32, 1, TMC2209COMMUNICATOR_CLOCK_FREQ>::from_ticks(BIT_SEND_TICKS);
         tmc2209_communicator_timer.start(tmc2209_timer_ticks).unwrap();
-        defmt::debug!("tmc2209_communicator_timer perior: {} nanos", tmc2209_timer_ticks.to_nanos());
+        defmt::debug!("tmc2209_communicator_timer period: {} nanos", tmc2209_timer_ticks.to_nanos());
         tmc2209_communicator_timer.listen(Event::Update);
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();

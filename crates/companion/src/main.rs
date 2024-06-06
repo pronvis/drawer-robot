@@ -96,7 +96,7 @@ mod app {
         read_timer.listen(Event::Update);
 
         let mut send_timer = robot_core::get_counter(cx.device.TIM1, &clocks);
-        send_timer.start(500.millis()).unwrap();
+        send_timer.start(110.millis()).unwrap();
         send_timer.listen(Event::Update);
 
         (
@@ -139,7 +139,7 @@ mod app {
         });
     }
 
-    #[task(binds = TIM1_UP, priority = 5, local = [ tx_usart1, send_timer ], shared = [companion_message])]
+    #[task(binds = TIM1_UP, priority = 5, local = [ tx_usart1, send_timer, curr_tensor_0_val: i32 = 0 ], shared = [companion_message])]
     fn hc05_send(mut cx: hc05_send::Context) {
         cx.local.send_timer.clear_interrupt(Event::Update);
 
@@ -149,26 +149,37 @@ mod app {
             res
         });
 
-        let mut data_to_send: [u8; 17] = [0; 17];
-        data_to_send[0] = robot_core::COMPANION_SYNC;
-        let sensor_0 = companion_message.load_sensor_0.to_be_bytes();
-        for i in 0..4 {
-            data_to_send[i + 1] = sensor_0[i];
-        }
+        //lets try to send data only if sensor update data at least for 100gr
+        let prev_tensor_0_val: &mut i32 = cx.local.curr_tensor_0_val;
+        let curr_tensor_0_val = companion_message.load_sensor_0;
+        let tensor_diff = robot_core::f32_diff(
+            robot_core::tensor_to_kg(curr_tensor_0_val),
+            robot_core::tensor_to_kg(*prev_tensor_0_val),
+        );
 
-        let mut counter: u32 = 0;
-        let mut tx = cx.local.tx_usart1;
-        for elem in data_to_send.iter() {
-            let mut write_res = tx.write(*elem);
-            while write_res.is_err() {
-                //TODO: Make it async
-                for _ in 0..72 {
-                    cortex_m::asm::nop();
+        if tensor_diff >= 0.1 {
+            defmt::debug!("sending data, diff: {}", tensor_diff);
+            *prev_tensor_0_val = curr_tensor_0_val;
+
+            let mut data_to_send: [u8; 17] = [0; 17];
+            data_to_send[0] = robot_core::COMPANION_SYNC;
+            //here I send only 0 sensor data, cause it is only one attached
+            let sensor_0 = companion_message.load_sensor_0.to_be_bytes();
+            for i in 0..4 {
+                data_to_send[i + 1] = sensor_0[i];
+            }
+
+            let mut tx = cx.local.tx_usart1;
+            for elem in data_to_send.iter() {
+                let mut write_res = tx.write(*elem);
+                while write_res.is_err() {
+                    //TODO: Make it async
+                    for _ in 0..72 {
+                        cortex_m::asm::nop();
+                    }
+                    write_res = tx.write(*elem);
                 }
-                counter += 1;
-                write_res = tx.write(*elem);
             }
         }
-        defmt::debug!("counter: {}", counter);
     }
 }
