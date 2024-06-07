@@ -9,7 +9,8 @@
     dispatchers = [EXTI0, EXTI1, EXTI2, EXTI3, EXTI4]
 )]
 mod app {
-    use defmt_brtt as _; // global logger
+    use defmt_brtt as _;
+    // global logger
     use hx711::Hx711;
     use robot_core::CompanionMessage;
     use robot_core::*;
@@ -83,7 +84,7 @@ mod app {
             (tx_usart1, rx_usart1),
             &mut afio.mapr,
             Config::default()
-                .baudrate(9600.bps())
+                .baudrate(115200.bps())
                 .wordlength_8bits()
                 .stopbits(stm32f1xx_hal::serial::StopBits::STOP1)
                 .parity_none(),
@@ -92,11 +93,12 @@ mod app {
         let (tx_usart1, _) = serial_usart1.split();
 
         let mut read_timer = robot_core::get_counter(cx.device.TIM2, &clocks);
-        read_timer.start(100.millis()).unwrap();
+        read_timer.start(80.Hz::<1, 1>().into_duration()).unwrap();
+        // read_timer.start(100.millis()).unwrap();
         read_timer.listen(Event::Update);
 
         let mut send_timer = robot_core::get_counter(cx.device.TIM1, &clocks);
-        send_timer.start(110.millis()).unwrap();
+        send_timer.start(30.millis()).unwrap();
         send_timer.listen(Event::Update);
 
         (
@@ -143,11 +145,7 @@ mod app {
     fn hc05_send(mut cx: hc05_send::Context) {
         cx.local.send_timer.clear_interrupt(Event::Update);
 
-        let companion_message = cx.shared.companion_message.lock(|cm| {
-            let res = cm.clone();
-            *cm = Default::default();
-            res
-        });
+        let companion_message = cx.shared.companion_message.lock(|cm| *cm);
 
         //lets try to send data only if sensor update data at least for 100gr
         let prev_tensor_0_val: &mut i32 = cx.local.curr_tensor_0_val;
@@ -157,8 +155,8 @@ mod app {
             robot_core::tensor_to_kg(*prev_tensor_0_val),
         );
 
-        if tensor_diff >= 0.1 {
-            defmt::debug!("sending data, diff: {}", tensor_diff);
+        if tensor_diff >= 1.0 {
+            defmt::debug!("sending data, diff: {}, curr: {}", tensor_diff, curr_tensor_0_val);
             *prev_tensor_0_val = curr_tensor_0_val;
 
             let mut data_to_send: [u8; 17] = [0; 17];

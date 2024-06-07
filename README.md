@@ -39,3 +39,28 @@ For example: `arm-none-eabi-gdb -x openocd.gdb -q ~/rust/rust_build_artifacts/th
 1. Build ELF file (`cargo build`)
 2. `arm-none-eabi-objcopy -O binary $CARGO_TARGET_DIR/thumbv7m-none-eabi/release/{binary_name} {path_to_output}.bin`
 3. `st-flash write {path_to_output}.bin 0x08000000`
+
+## HC-05
+
+Use arduino device to configure HC-05. Scetch and connection image is in folder `./hc05_arduino_configurator/`.
+With pressed button `reset` connect HC-05 to arduino - diod whould blink once per 2 seconds.
+
+Commands can be found in `./documentation/HC-05_AT_Command_Set.pdf`
+
+One device should be Master. Another one slave.
+
+I set speed at 115200: `AT+UART=115200,0,0`
+
+For slave: 
+- `AT+NAME=slave`
+- `AT+UART=115200,0,0`
+- `AT+CMODE=1`
+- `AT+ROLE=0`
+- get addr, we will need it for master: `AT+ADDR?`
+
+For master: 
+- `AT+NAME=master`
+- `AT+UART=115200,0,0`
+- `AT+CMODE=0`
+- `AT+BIND={slave_addr}` // replace `:` with `,` in addr string
+- `AT+ROLE=1`

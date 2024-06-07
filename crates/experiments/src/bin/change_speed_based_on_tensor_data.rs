@@ -92,7 +92,7 @@ mod app {
             (tx_usart1, rx_usart1),
             &mut afio.mapr,
             Config::default()
-                .baudrate(9600.bps())
+                .baudrate(115200.bps())
                 .wordlength_8bits()
                 .stopbits(stm32f1xx_hal::serial::StopBits::STOP1)
                 .parity_none(),
@@ -161,8 +161,8 @@ mod app {
                         let sensor_0_data = i32::from_be_bytes(bytes);
 
                         let kilogramms = robot_core::tensor_to_kg(sensor_0_data);
-                        defmt::debug!("sensor 0 data: {}", kilogramms);
                         if kilogramms != f32::MIN {
+                            defmt::debug!("sensor 0 data: {}", kilogramms);
                             cx.shared.tensor_0_val.lock(|tval| *tval = kilogramms);
                         }
                     }
