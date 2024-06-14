@@ -161,7 +161,7 @@ mod app {
                         let sensor_0_data = i32::from_be_bytes(bytes);
 
                         // let kilogramms = robot_core::tensor_to_kg(sensor_0_data);
-                        let kilogramms = sensor_0_data as f32 * 0.05f32;
+                        let kilogramms = sensor_0_data as f32 * 0.025f32;
                         if kilogramms != f32::MIN {
                             defmt::debug!("sensor 0 data: {}", kilogramms);
                             cx.shared.tensor_0_val.lock(|tval| *tval = kilogramms);

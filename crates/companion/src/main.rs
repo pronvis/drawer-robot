@@ -117,7 +117,7 @@ mod app {
         let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM3, ADS1256_TIMER_CLOCK_FREQ>::new(cx.device.TIM3, &clocks);
         let mut ads1256 = ADS1256::new(ads1256_spi, cs_pin, reset_pin, data_ready_pin, timer.delay()).unwrap();
 
-        let config = Ads1256Config::new(SamplingRate::Sps7500, PGA::Gain1);
+        let config = Ads1256Config::new(SamplingRate::Sps30000, PGA::Gain1);
         ads1256.set_config(&config).unwrap();
 
         // Configure the USART1:
@@ -171,8 +171,8 @@ mod app {
         let mut buffer: [i32; 4] = [0, i32::MIN, i32::MIN, i32::MIN];
         if let Ok(result) = code_res {
             let in_volt = ads1256.convert_to_volt(result);
-            buffer[0] = (in_volt * 1_0_000f64) as i32; // multiply to be able to see difference in motor speed
-                                                       // cause it set speed = data_from_bluetooth * 50_000
+            buffer[0] = (in_volt * 1_000_000f64) as i32; // multiply to be able to see difference in motor speed
+                                                         // cause it set speed = data_from_bluetooth * 50_000
         } else {
             defmt::error!("fail to read from ads1256");
         }
@@ -196,7 +196,7 @@ mod app {
         let curr_tensor_0_val = companion_message.load_sensor_0;
         let tensor_diff = robot_core::i32_diff(curr_tensor_0_val, *prev_tensor_0_val);
 
-        if tensor_diff >= 10 {
+        if tensor_diff >= 30 {
             defmt::debug!("sending data, diff: {}, curr: {}", tensor_diff, curr_tensor_0_val);
             *prev_tensor_0_val = curr_tensor_0_val;
 
