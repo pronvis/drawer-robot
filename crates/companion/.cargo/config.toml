@@ -5,7 +5,7 @@
 ###################
 
 ### bluepill ###
-runner = "probe-rs run --probe 0483:3748:C296C294070132124647524B4E --chip STM32F103C8"
+runner = ["probe-rs", "run", "--probe", "0483:3748:C296C294070132124647524B4E", "--chip", "STM32F103C8", "--log-format", "{L} {s}"]
 # runner = "probe-run --probe C296C294070132124647524B4E00 --chip STM32F103C8"
 ###################
 rustflags = [
