@@ -34,11 +34,11 @@ mod app {
     const CHANNEL_CAPACITY: usize = robot_core::my_tmc2209::communicator::CHANNEL_CAPACITY;
     const BIT_SEND_TICKS: u32 = 40;
     const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_0_000;
-    const HX711_DEFAULT_VALUE: f32 = -1.80;
+    const ADS1256_DEFAULT_VALUE: i32 = 0;
 
     #[shared]
     struct Shared {
-        tensor_0_val: f32,
+        tensor_0_val: i32,
     }
 
     #[local]
@@ -123,7 +123,7 @@ mod app {
 
         (
             Shared {
-                tensor_0_val: HX711_DEFAULT_VALUE,
+                tensor_0_val: ADS1256_DEFAULT_VALUE,
             },
             Local {
                 configurator,
@@ -161,8 +161,9 @@ mod app {
                         let sensor_0_data = i32::from_be_bytes(bytes);
 
                         // let kilogramms = robot_core::tensor_to_kg(sensor_0_data);
-                        let kilogramms = sensor_0_data as f32 * 0.025f32;
-                        if kilogramms != f32::MIN {
+                        // let kilogramms = sensor_0_data as f32 * 0.025f32;
+                        let kilogramms = sensor_0_data;
+                        if kilogramms != i32::MIN {
                             defmt::debug!("sensor 0 data: {}", kilogramms);
                             cx.shared.tensor_0_val.lock(|tval| *tval = kilogramms);
                         }
@@ -176,19 +177,20 @@ mod app {
         }
     }
 
-    #[task(priority = 1, shared = [ tensor_0_val ], local = [tmc2209_msg_sender, curr_tensor_0_val: f32 = HX711_DEFAULT_VALUE ])]
+    #[task(priority = 1, shared = [ tensor_0_val ], local = [tmc2209_msg_sender, curr_tensor_0_val: i32 = ADS1256_DEFAULT_VALUE ])]
     async fn stepper_change_speed_task(mut cx: stepper_change_speed_task::Context) {
         //wait for Conf task
         Systick::delay(1.secs()).await;
 
         loop {
-            let tensor_0_val: f32 = cx.shared.tensor_0_val.lock(|tval| *tval);
+            let tensor_0_val: i32 = cx.shared.tensor_0_val.lock(|tval| *tval);
+            // defmt::debug!("change speed: {}", tensor_0_val);
             let curr_tensor_0_val = *cx.local.curr_tensor_0_val;
-            let tensor_diff = robot_core::f32_diff(curr_tensor_0_val, tensor_0_val);
+            let tensor_diff = robot_core::i32_diff(curr_tensor_0_val, tensor_0_val);
 
-            let speed: u32 = (tensor_diff * 50_000.0) as u32;
+            let speed: u32 = tensor_0_val as u32 * 1_0;
 
-            let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(speed as u32));
+            let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(speed));
             let req = robot_core::my_tmc2209::Request::write(write_req);
             cx.local.tmc2209_msg_sender.send(req).await.ok();
         }

@@ -27,8 +27,10 @@ mod app {
     };
 
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
-    const TIMER_CLOCK_FREQ: u32 = 100_000;
+    const READ_TIMER_CLOCK_FREQ: u32 = 10_000;
+    const SEND_TIMER_CLOCK_FREQ: u32 = 10_000;
     const ADS1256_TIMER_CLOCK_FREQ: u32 = 2_000_000;
+    const DYMH_106_RESP_FREQ: u32 = 1_000;
 
     #[shared]
     struct Shared {
@@ -38,8 +40,8 @@ mod app {
     #[local]
     struct Local {
         tx_usart1: stm32f1xx_hal::serial::Tx1,
-        send_timer: Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>,
-        read_timer: Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>,
+        send_timer: Counter<stm32f1xx_hal::pac::TIM1, SEND_TIMER_CLOCK_FREQ>,
+        read_timer: Counter<stm32f1xx_hal::pac::TIM2, READ_TIMER_CLOCK_FREQ>,
         ads1256: ADS1256<
             Spi<
                 stm32f1xx_hal::pac::SPI1,
@@ -117,7 +119,8 @@ mod app {
         let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM3, ADS1256_TIMER_CLOCK_FREQ>::new(cx.device.TIM3, &clocks);
         let mut ads1256 = ADS1256::new(ads1256_spi, cs_pin, reset_pin, data_ready_pin, timer.delay()).unwrap();
 
-        let config = Ads1256Config::new(SamplingRate::Sps30000, PGA::Gain1);
+        //DYMH_106_RESP_FREQ is 1_000
+        let config = Ads1256Config::new(SamplingRate::Sps2000, PGA::Gain64);
         ads1256.set_config(&config).unwrap();
 
         // Configure the USART1:
@@ -139,7 +142,7 @@ mod app {
 
         // Timer to read from ADS1256
         let mut read_timer = robot_core::get_counter(cx.device.TIM2, &clocks);
-        read_timer.start(10_000.Hz::<1, 1>().into_duration()).unwrap();
+        read_timer.start(DYMH_106_RESP_FREQ.Hz::<1, 1>().into_duration()).unwrap();
         read_timer.listen(Event::Update);
 
         // Timer to send data via bluetooth
@@ -160,21 +163,83 @@ mod app {
         )
     }
 
-    #[task(binds = TIM2, priority = 10, local = [ read_timer, ads1256 ], shared = [companion_message])]
+    //for PGA::Gain64
+    trait DymhVal {
+        //global max & min possible values from sensor
+        const max_val: i32 = 50_000;
+        const min_val: i32 = -100_000;
+        fn normalized_val(self) -> i32;
+    }
+
+    const dymh_default_min: i32 = -18000;
+    const dymh_default_max: i32 = -12000;
+    impl DymhVal for i32 {
+        fn normalized_val(self) -> i32 {
+            if self <= dymh_default_max && self >= dymh_default_min {
+                return 0;
+            }
+
+            if self < dymh_default_min {
+                return self + (dymh_default_min * -1);
+            }
+
+            return self + (dymh_default_max * -1);
+        }
+    }
+
+    #[task(binds = TIM2, priority = 10, local = [ read_timer, ads1256, counter: u32 = 0, max: i32 = i32::MIN, min: i32 = i32::MAX, first_start: bool = true, last_elems: i32 = 0, last_elems_counter: u32 = 0 ], shared = [companion_message])]
     fn ads1256_read(mut cx: ads1256_read::Context) {
         cx.local.read_timer.clear_interrupt(Event::Update);
+        if *cx.local.first_start {
+            for _ in 0..READ_TIMER_CLOCK_FREQ {
+                cortex_m::asm::nop();
+            }
+            *cx.local.first_start = false;
+        }
+
+        let last_elems_counter: u32 = *cx.local.last_elems_counter;
+        let mut last_elems: i32 = *cx.local.last_elems;
+
+        let slice_size = 100;
+        if last_elems_counter == 5000 {
+            defmt::debug!("mean: {}", last_elems as f32 / slice_size as f32);
+            *cx.local.last_elems_counter = 0;
+        } else {
+            *cx.local.last_elems_counter += 1;
+        }
+
+        if last_elems_counter % slice_size == 0 {
+            *cx.local.last_elems = 0;
+        }
 
         let mut ads1256 = cx.local.ads1256;
 
         //TODO: I have only one connected sensor for now
         let code_res = ads1256.read_channel(Channel::AIN0, Channel::AIN1);
         let mut buffer: [i32; 4] = [0, i32::MIN, i32::MIN, i32::MIN];
+        let mut current: i32 = 0;
         if let Ok(result) = code_res {
+            *cx.local.max = (*cx.local.max).max(result);
+            *cx.local.min = (*cx.local.min).min(result);
+            current = result;
+            *cx.local.last_elems += current;
             let in_volt = ads1256.convert_to_volt(result);
-            buffer[0] = (in_volt * 1_000_000f64) as i32; // multiply to be able to see difference in motor speed
-                                                         // cause it set speed = data_from_bluetooth * 50_000
+            buffer[0] = result.normalized_val();
         } else {
             defmt::error!("fail to read from ads1256");
+        }
+
+        if *cx.local.counter == DYMH_106_RESP_FREQ {
+            *cx.local.counter = 0;
+            defmt::debug!(
+                "max: {}\tmin: {}\tcurrent: {}\tcurrent normalized: {}",
+                cx.local.max,
+                cx.local.min,
+                current,
+                current.normalized_val()
+            );
+        } else {
+            *cx.local.counter += 1;
         }
 
         cx.shared.companion_message.lock(|cm| {
@@ -196,14 +261,14 @@ mod app {
         let curr_tensor_0_val = companion_message.load_sensor_0;
         let tensor_diff = robot_core::i32_diff(curr_tensor_0_val, *prev_tensor_0_val);
 
-        if tensor_diff >= 30 {
-            defmt::debug!("sending data, diff: {}, curr: {}", tensor_diff, curr_tensor_0_val);
+        if tensor_diff >= 100 {
+            // defmt::debug!("sending data, diff: {}, curr: {}", tensor_diff, curr_tensor_0_val);
             *prev_tensor_0_val = curr_tensor_0_val;
 
             let mut data_to_send: [u8; 17] = [0; 17];
             data_to_send[0] = robot_core::COMPANION_SYNC;
             //here I send only 0 sensor data, cause it is only one attached
-            let sensor_0 = companion_message.load_sensor_0.to_be_bytes();
+            let sensor_0 = curr_tensor_0_val.to_be_bytes();
             for i in 0..4 {
                 data_to_send[i + 1] = sensor_0[i];
             }
