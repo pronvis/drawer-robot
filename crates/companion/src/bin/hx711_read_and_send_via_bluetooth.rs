@@ -2,33 +2,28 @@
 #![no_std]
 #![feature(type_alias_impl_trait)]
 
-use core::fmt::Pointer;
-
 #[rtic::app(
     device = stm32f1xx_hal::pac,
     peripherals = true,
     // You can usually find the names of the interrupt vectors in the some_hal::pac::interrupt enum.
     dispatchers = [EXTI0, EXTI1, EXTI2, EXTI3, EXTI4]
-    // dispatchers = [PVD, WWDG, RTC, SPI1]
 )]
 mod app {
-    use ads1256::{Channel, Config as Ads1256Config, SamplingRate, ADS1256, PGA};
-    use defmt_brtt as _; // global logger
-    use embedded_hal::digital::OutputPin;
+    use defmt_brtt as _;
+    // global logger
+    use hx711::Hx711;
     use robot_core::CompanionMessage;
     use robot_core::*;
     use stm32f1xx_hal::{
-        gpio::{gpioa, Alternate, Output, Pin, PullUp},
-        pac::SPI1,
+        gpio::{Output, Pin},
         prelude::*,
         serial::{Config, Serial},
-        spi::{self, Mode, Phase, Polarity, Slave, Spi, Spi1NoRemap},
-        timer::{counter, Counter, Delay, Event},
+        timer::{counter, Counter, Event},
     };
 
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
-    const TIMER_CLOCK_FREQ: u32 = 100_000;
-    const ADS1256_TIMER_CLOCK_FREQ: u32 = 2_000_000;
+    const TIMER_CLOCK_FREQ: u32 = 72_000;
+    const HX711_TIMER_CLOCK_FREQ: u32 = 2_000_000;
 
     #[shared]
     struct Shared {
@@ -39,23 +34,8 @@ mod app {
     struct Local {
         tx_usart1: stm32f1xx_hal::serial::Tx1,
         send_timer: Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>,
+        hx711: Hx711<stm32f1xx_hal::timer::Delay<stm32f1xx_hal::pac::TIM3, HX711_TIMER_CLOCK_FREQ>, Pin<'A', 6>, Pin<'A', 7, Output>>,
         read_timer: Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>,
-        ads1256: ADS1256<
-            Spi<
-                stm32f1xx_hal::pac::SPI1,
-                Spi1NoRemap,
-                (
-                    stm32f1xx_hal::gpio::Pin<'A', 5, stm32f1xx_hal::gpio::Alternate>,
-                    stm32f1xx_hal::gpio::Pin<'A', 6>,
-                    stm32f1xx_hal::gpio::Pin<'A', 7, stm32f1xx_hal::gpio::Alternate>,
-                ),
-                u8,
-            >,
-            stm32f1xx_hal::gpio::Pin<'A', 4, stm32f1xx_hal::gpio::Output>,
-            stm32f1xx_hal::gpio::Pin<'A', 3, stm32f1xx_hal::gpio::Output>,
-            stm32f1xx_hal::gpio::Pin<'A', 2, stm32f1xx_hal::gpio::Input<PullUp>>,
-            Delay<stm32f1xx_hal::pac::TIM3, 2000000>,
-        >,
     }
 
     #[init]
@@ -85,40 +65,15 @@ mod app {
         let mut gpioa = cx.device.GPIOA.split();
         let mut afio = cx.device.AFIO.constrain();
 
-        // Configure the ads1256  driver:
+        // Configure the hx711 load cell driver:
         //
-        // SPI pins:
-        // MOSI  - PA7 // DIN
-        // MISO  - PA6 // DOUT
-        // SCK	 - PA5 // SCLK
-        // SS	 - PA4 // CS
-        // --------------------
-        // --------------------
-        // Other pins:
-        // DRDY  - PA2
-        // PDWN  - +3.3 V
-        let spi_pins = (
-            gpioa.pa5.into_alternate_push_pull(&mut gpioa.crl),
-            gpioa.pa6,
-            gpioa.pa7.into_alternate_push_pull(&mut gpioa.crl),
-        );
-        let ads1256_spi = spi::Spi::spi1(
-            cx.device.SPI1,
-            spi_pins,
-            &mut afio.mapr,
-            embedded_hal::spi::MODE_1,
-            1920000.Hz(),
-            clocks,
-        );
-        let cs_pin = gpioa.pa4.into_push_pull_output(&mut gpioa.crl);
-        // reset_pin does not used anywhere in ADS1256 codebase
-        let reset_pin = gpioa.pa3.into_push_pull_output(&mut gpioa.crl);
-        let data_ready_pin = gpioa.pa2.into_pull_up_input(&mut gpioa.crl);
-        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM3, ADS1256_TIMER_CLOCK_FREQ>::new(cx.device.TIM3, &clocks);
-        let mut ads1256 = ADS1256::new(ads1256_spi, cs_pin, reset_pin, data_ready_pin, timer.delay()).unwrap();
-
-        let config = Ads1256Config::new(SamplingRate::Sps7500, PGA::Gain1);
-        ads1256.set_config(&config).unwrap();
+        // | HX  | dout   -> PA6 | STM |
+        // | 711 | pd_sck <- PA7 | 32  |
+        //
+        let dout = gpioa.pa6.into_floating_input(&mut gpioa.crl);
+        let pd_sck = gpioa.pa7.into_push_pull_output(&mut gpioa.crl);
+        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM3, HX711_TIMER_CLOCK_FREQ>::new(cx.device.TIM3, &clocks);
+        let hx711 = Hx711::new(timer.delay(), dout, pd_sck).unwrap();
 
         // Configure the USART1:
         //
@@ -137,12 +92,11 @@ mod app {
         );
         let (tx_usart1, _) = serial_usart1.split();
 
-        // Timer to read from ADS1256
         let mut read_timer = robot_core::get_counter(cx.device.TIM2, &clocks);
-        read_timer.start(10_000.Hz::<1, 1>().into_duration()).unwrap();
+        read_timer.start(80.Hz::<1, 1>().into_duration()).unwrap();
+        // read_timer.start(100.millis()).unwrap();
         read_timer.listen(Event::Update);
 
-        // Timer to send data via bluetooth
         let mut send_timer = robot_core::get_counter(cx.device.TIM1, &clocks);
         send_timer.start(30.millis()).unwrap();
         send_timer.listen(Event::Update);
@@ -152,7 +106,7 @@ mod app {
                 companion_message: Default::default(),
             },
             Local {
-                ads1256,
+                hx711,
                 read_timer,
                 tx_usart1,
                 send_timer,
@@ -160,21 +114,23 @@ mod app {
         )
     }
 
-    #[task(binds = TIM2, priority = 10, local = [ read_timer, ads1256 ], shared = [companion_message])]
-    fn ads1256_read(mut cx: ads1256_read::Context) {
+    #[task(binds = TIM2, priority = 10, local = [ read_timer, hx711, counter: u8 = 0 ], shared = [companion_message])]
+    fn hx711_read(mut cx: hx711_read::Context) {
         cx.local.read_timer.clear_interrupt(Event::Update);
-
-        let mut ads1256 = cx.local.ads1256;
-
-        //TODO: I have only one connected sensor for now
-        let code_res = ads1256.read_channel(Channel::AIN0, Channel::AIN1);
+        // This conversion works fine.
+        // But for protocol simplicity I will send raw data.
+        // let conversion_rate: f32 = 0.035274;
+        // let gramms = data as f32 * conversion_rate;
+        // let kilogramms = gramms / 1000f32;
         let mut buffer: [i32; 4] = [0, i32::MIN, i32::MIN, i32::MIN];
-        if let Ok(result) = code_res {
-            let in_volt = ads1256.convert_to_volt(result);
-            buffer[0] = (in_volt * 1_0_000f64) as i32; // multiply to be able to see difference in motor speed
-                                                       // cause it set speed = data_from_bluetooth * 50_000
-        } else {
-            defmt::error!("fail to read from ads1256");
+        //TODO: I have only one connected sensor for now
+        for i in 0..1 {
+            if let Ok(data) = cx.local.hx711.retrieve() {
+                buffer[i] = data;
+            } else {
+                buffer[i] = i32::MIN;
+                defmt::debug!("fail to read data from hx711 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ");
+            }
         }
 
         cx.shared.companion_message.lock(|cm| {
@@ -194,9 +150,12 @@ mod app {
         //lets try to send data only if sensor update data at least for 100gr
         let prev_tensor_0_val: &mut i32 = cx.local.curr_tensor_0_val;
         let curr_tensor_0_val = companion_message.load_sensor_0;
-        let tensor_diff = robot_core::i32_diff(curr_tensor_0_val, *prev_tensor_0_val);
+        let tensor_diff = robot_core::f32_diff(
+            robot_core::tensor_to_kg(curr_tensor_0_val),
+            robot_core::tensor_to_kg(*prev_tensor_0_val),
+        );
 
-        if tensor_diff >= 10 {
+        if tensor_diff >= 1.0 {
             defmt::debug!("sending data, diff: {}, curr: {}", tensor_diff, curr_tensor_0_val);
             *prev_tensor_0_val = curr_tensor_0_val;
 

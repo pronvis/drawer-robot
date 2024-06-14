@@ -17,10 +17,10 @@ mod app {
     use embedded_hal::digital::OutputPin;
     use robot_core::*;
     use stm32f1xx_hal::{
-        gpio::{gpioa, Output, Pin, PullUp},
+        gpio::{gpioa, Alternate, Output, Pin, PullUp},
         pac::SPI1,
         prelude::*,
-        spi::{self, Mode, Phase, Polarity, Spi, Spi1NoRemap},
+        spi::{self, Mode, Phase, Polarity, Slave, Spi, Spi1NoRemap},
         timer::{counter, Counter, Delay, Event},
     };
 
@@ -34,6 +34,15 @@ mod app {
     #[local]
     struct Local {
         read_timer: Counter<stm32f1xx_hal::pac::TIM2, TIMER_CLOCK_FREQ>,
+        //SLAVE SPI
+        // ads1256: ADS1256<
+        //     Spi<SPI1, Spi1NoRemap, (Pin<'A', 5>, Pin<'A', 6, Alternate>, Pin<'A', 7>), u8, Slave>,
+        //     Pin<'A', 4, Output>,
+        //     Pin<'A', 3, Output>,
+        //     Pin<'A', 2, stm32f1xx_hal::gpio::Input<PullUp>>,
+        //     Delay<stm32f1xx_hal::pac::TIM3, 2000000>,
+        // >,
+        // MASTER SPI
         ads1256: ADS1256<
             Spi<
                 stm32f1xx_hal::pac::SPI1,
@@ -92,12 +101,23 @@ mod app {
         // DRDY  - PA2
         // PDWN  - +3.3 V
         //
+        // SLAVE SPI
+        // let spi_pins = (gpioa.pa5, gpioa.pa6.into_alternate_push_pull(&mut gpioa.crl), gpioa.pa7);
+        // let ads1256_spi = spi::Spi::spi1_slave(cx.device.SPI1, spi_pins, &mut afio.mapr, embedded_hal::spi::MODE_1);
+        // MASTER SPI
         let spi_pins = (
             gpioa.pa5.into_alternate_push_pull(&mut gpioa.crl),
-            gpioa.pa6.into_floating_input(&mut gpioa.crl),
+            gpioa.pa6,
             gpioa.pa7.into_alternate_push_pull(&mut gpioa.crl),
         );
-        let ads1256_spi = spi::Spi::spi1(cx.device.SPI1, spi_pins, &mut afio.mapr, embedded_hal::spi::MODE_1, 8.MHz(), clocks);
+        let ads1256_spi = spi::Spi::spi1(
+            cx.device.SPI1,
+            spi_pins,
+            &mut afio.mapr,
+            embedded_hal::spi::MODE_1,
+            1920000.Hz(),
+            clocks,
+        );
         let cs_pin = gpioa.pa4.into_push_pull_output(&mut gpioa.crl);
         // reset_pin does not used anywhere in ADS1256 codebase
         let reset_pin = gpioa.pa3.into_push_pull_output(&mut gpioa.crl);
@@ -105,12 +125,12 @@ mod app {
         let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM3, ADS1256_TIMER_CLOCK_FREQ>::new(cx.device.TIM3, &clocks);
         let mut ads1256 = ADS1256::new(ads1256_spi, cs_pin, reset_pin, data_ready_pin, timer.delay()).unwrap();
 
-        let config = Ads1256Config::new(SamplingRate::Sps30000, PGA::Gain1);
+        let config = Ads1256Config::new(SamplingRate::Sps7500, PGA::Gain1);
         ads1256.set_config(&config).unwrap();
 
         // Debug Timer
         let mut read_timer = robot_core::get_counter(cx.device.TIM2, &clocks);
-        read_timer.start(1.Hz::<1, 1>().into_duration()).unwrap();
+        read_timer.start(2.Hz::<1, 1>().into_duration()).unwrap();
         read_timer.listen(Event::Update);
 
         (Shared {}, Local { read_timer, ads1256 })
@@ -119,24 +139,21 @@ mod app {
     #[task(binds = TIM2, priority = 5, local = [read_timer, ads1256])]
     fn hx711_read(cx: hx711_read::Context) {
         cx.local.read_timer.clear_interrupt(Event::Update);
-        let conversion_rate: f32 = 0.035274;
 
         let mut ads1256 = cx.local.ads1256;
-        for ch in &[
-            Channel::AIN0,
-            Channel::AIN1,
-            // Channel::AIN2,
-            // Channel::AIN3,
-            // Channel::AIN4,
-            // Channel::AIN5,
-            // Channel::AIN6,
-            // Channel::AIN7,
-        ] {
-            let code = ads1256.read_channel(*ch, Channel::AINCOM).unwrap();
-            let in_volt = ads1256.convert_to_volt(code);
-            let gramms = code as f32 * conversion_rate;
-            let kilogramms = gramms / 1000f32;
-            defmt::debug!("Channel {:?} : {:#08x}, {} V, kg: {}", ch, code, in_volt, kilogramms);
+
+        let code_res = ads1256.read_channel(Channel::AIN0, Channel::AIN1);
+        match code_res {
+            Ok(code) => {
+                let in_volt = ads1256.convert_to_volt(code);
+                defmt::debug!("Channel 0 : {:#08x}, {} V", code, in_volt);
+            }
+            Err(err) => match err {
+                stm32f1xx_hal::spi::Error::Crc => defmt::error!("error CRC"),
+                stm32f1xx_hal::spi::Error::Overrun => defmt::error!("error Overrun"),
+                stm32f1xx_hal::spi::Error::ModeFault => defmt::error!("error ModeFault"),
+                _ => defmt::error!("unknown error"),
+            },
         }
         defmt::debug!("============================================================");
     }

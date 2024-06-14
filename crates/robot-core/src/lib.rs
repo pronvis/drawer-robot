@@ -129,3 +129,11 @@ pub fn f32_diff(f1: f32, f2: f32) -> f32 {
         f1 - f2
     }
 }
+
+pub fn i32_diff(i1: i32, i2: i32) -> i32 {
+    if i2 > i1 {
+        i2 - i1
+    } else {
+        i1 - i2
+    }
+}
