@@ -1,43 +1,27 @@
 use crate::{
     display,
     robot::{RobotCommand, RobotCommandsSender},
-    DisplayMemoryPool, DisplayString, CHANNEL_CAPACITY, PS3_CHANNEL_CAPACITY,
+    DisplayMemoryPool, DisplayString,
 };
 use heapless::pool::singleton::Box;
 use rtic_sync::channel::{Receiver, Sender};
 
 use super::Ps3Event;
 
-// CrossDown,
-// CrossUp,
-// SquareUp,
-// SquareDown,
-// TriangleUp,
-// TriangleDown,
-// CurcleUp,
-// CurcleDown,
-// UpUp,
-// UpDown,
-// DownUp,
-// DownDown,
-// LeftUp,
-// LeftDown,
-// RightUp,
-// RightDown,
-// LeftStick { x: i8, y: i8 },
-// RightStick { x: i8, y: i8 },
+const DISPLAY_CHANNEL_CAPACITY: usize = crate::display::CHANNEL_CAPACITY;
+const PS3_CHANNEL_CAPACITY: usize = crate::ps3::CHANNEL_CAPACITY;
 
 pub struct Ps3EventParser {
     ps3_events_receiver: Receiver<'static, Ps3Event, PS3_CHANNEL_CAPACITY>,
     robot_commands_sender: RobotCommandsSender,
-    display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
+    display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
 }
 
 impl Ps3EventParser {
     pub fn new(
         ps3_events_receiver: Receiver<'static, Ps3Event, PS3_CHANNEL_CAPACITY>,
         robot_commands_sender: RobotCommandsSender,
-        display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
+        display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
     ) -> Self {
         Ps3EventParser {
             ps3_events_receiver,
@@ -50,10 +34,7 @@ impl Ps3EventParser {
         match self.ps3_events_receiver.recv().await {
             Ok(event) => self.receive_event(event).await,
             Err(err) => {
-                defmt::error!(
-                    "fail to receive data from channel: {}",
-                    defmt::Debug2Format(&err)
-                );
+                defmt::error!("fail to receive data from channel: {}", defmt::Debug2Format(&err));
                 return;
             }
         };
@@ -63,9 +44,7 @@ impl Ps3EventParser {
         match event {
             Ps3Event::OnConnect => {
                 let data_str = DisplayString::from("PS3 connected");
-                display::display_str(data_str, &mut self.display_sender)
-                    .await
-                    .unwrap();
+                display::display_str(data_str, &mut self.display_sender).await.unwrap();
             }
 
             Ps3Event::DigitalSignal(signal) => {
@@ -83,12 +62,7 @@ impl Ps3EventParser {
                     true => "left",
                     false => "right",
                 };
-                defmt::debug!(
-                    "sticker event:\t{}\tx: {}\ty: {}",
-                    right_left_str,
-                    x_axis,
-                    y_axis
-                );
+                defmt::debug!("sticker event:\t{}\tx: {}\ty: {}", right_left_str, x_axis, y_axis);
 
                 let robot_command = analog_signal_to_robot_command(is_left_stick, x_axis, y_axis);
                 if let Some(robot_command) = robot_command {
@@ -134,11 +108,7 @@ fn digital_signal_to_robot_command(signal: u8) -> Option<RobotCommand> {
     robot_command
 }
 
-fn analog_signal_to_robot_command(
-    is_left_stick: bool,
-    byte_1: i8,
-    byte_2: i8,
-) -> Option<RobotCommand> {
+fn analog_signal_to_robot_command(is_left_stick: bool, byte_1: i8, byte_2: i8) -> Option<RobotCommand> {
     let mut robot_command = None;
     if is_left_stick {
         if byte_1 == -1 && byte_2 == -1 {

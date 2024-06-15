@@ -168,13 +168,13 @@ mod app {
         //global max & min possible values from sensor
         const max_val: i32 = 50_000;
         const min_val: i32 = -100_000;
-        fn normalized_val(self) -> i32;
+        fn dymh_norm_val(self) -> i32;
     }
 
     const dymh_default_min: i32 = -18000;
     const dymh_default_max: i32 = -12000;
     impl DymhVal for i32 {
-        fn normalized_val(self) -> i32 {
+        fn dymh_norm_val(self) -> i32 {
             if self <= dymh_default_max && self >= dymh_default_min {
                 return 0;
             }
@@ -224,7 +224,7 @@ mod app {
             current = result;
             *cx.local.last_elems += current;
             let in_volt = ads1256.convert_to_volt(result);
-            buffer[0] = result.normalized_val();
+            buffer[0] = result.dymh_norm_val();
         } else {
             defmt::error!("fail to read from ads1256");
         }
@@ -236,7 +236,7 @@ mod app {
                 cx.local.max,
                 cx.local.min,
                 current,
-                current.normalized_val()
+                current.dymh_norm_val()
             );
         } else {
             *cx.local.counter += 1;

@@ -9,12 +9,14 @@ use stm32f1xx_hal::{
     timer::{Counter, Event, Instance},
 };
 
-use crate::{display, DisplayMemoryPool, DisplayString, CHANNEL_CAPACITY};
+use crate::{display, DisplayMemoryPool, DisplayString};
 use crate::{EDirPin, EStepPin, XDirPin, XStepPin, YDirPin, YStepPin, ZDirPin, ZStepPin};
 use core::fmt::Write;
 use heapless::pool::singleton::Box;
 
+const DISPLAY_CHANNEL_CAPACITY: usize = crate::display::CHANNEL_CAPACITY;
 const TIMER_CLOCK_FREQ: u32 = 10_000;
+
 // step = 100_000 nanos, 100 micros
 // I use 1/2 microstep mode, so min speed = 200
 // with delay = 200 speed of a thread on a coil with diameter 40mm = 7.85 mm/s
@@ -28,7 +30,7 @@ pub type MyStepper1 = MyStepper<stm32f1xx_hal::pac::TIM1, XStepPin, XDirPin>;
 pub type MyStepper2 = MyStepper<stm32f1xx_hal::pac::TIM2, YStepPin, YDirPin>;
 pub type MyStepper3 = MyStepper<stm32f1xx_hal::pac::TIM3, ZStepPin, ZDirPin>;
 pub type MyStepper4 = MyStepper<stm32f1xx_hal::pac::TIM4, EStepPin, EDirPin>;
-pub type MyStepperCommandsSender = Sender<'static, MyStepperCommands, CHANNEL_CAPACITY>;
+pub type MyStepperCommandsSender = Sender<'static, MyStepperCommands, DISPLAY_CHANNEL_CAPACITY>;
 
 #[derive(Clone)]
 pub struct MyStepperState {
@@ -82,8 +84,8 @@ pub struct MyStepper<Tim, StepPin, DirPin> {
     timer: Counter<Tim, TIMER_CLOCK_FREQ>,
     step_pin: StepPin,
     direction_pin: DirPin,
-    commands_channel: Receiver<'static, MyStepperCommands, CHANNEL_CAPACITY>,
-    display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
+    commands_channel: Receiver<'static, MyStepperCommands, DISPLAY_CHANNEL_CAPACITY>,
+    display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
 }
 
 impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPin, DirPin> {
@@ -93,8 +95,8 @@ impl<Tim: Instance, StepPin: OutputPin, DirPin: OutputPin> MyStepper<Tim, StepPi
         timer: Counter<Tim, TIMER_CLOCK_FREQ>,
         step_pin: StepPin,
         dir_pin: DirPin,
-        commands_channel: Receiver<'static, MyStepperCommands, CHANNEL_CAPACITY>,
-        display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
+        commands_channel: Receiver<'static, MyStepperCommands, DISPLAY_CHANNEL_CAPACITY>,
+        display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
     ) -> Self {
         Self {
             index,
@@ -275,7 +277,7 @@ pub fn create_steppers(
     tim2: TIM2,
     tim3: TIM3,
     tim4: TIM4,
-    display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
+    display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
 ) -> (
     (MyStepper1, MyStepperCommandsSender),
     (MyStepper2, MyStepperCommandsSender),
@@ -325,10 +327,10 @@ pub fn create_steppers(
     timer_1.start(stepper_state.micros_pulse_duration().micros()).unwrap();
     timer_1.listen(Event::Update);
 
-    let (sender_0, stepper_0_commands_receiver) = make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
-    let (sender_1, stepper_1_commands_receiver) = make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
-    let (sender_2, stepper_2_commands_receiver) = make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
-    let (sender_3, stepper_3_commands_receiver) = make_channel!(MyStepperCommands, CHANNEL_CAPACITY);
+    let (sender_0, stepper_0_commands_receiver) = make_channel!(MyStepperCommands, DISPLAY_CHANNEL_CAPACITY);
+    let (sender_1, stepper_1_commands_receiver) = make_channel!(MyStepperCommands, DISPLAY_CHANNEL_CAPACITY);
+    let (sender_2, stepper_2_commands_receiver) = make_channel!(MyStepperCommands, DISPLAY_CHANNEL_CAPACITY);
+    let (sender_3, stepper_3_commands_receiver) = make_channel!(MyStepperCommands, DISPLAY_CHANNEL_CAPACITY);
 
     let stepper_0 = MyStepper::new(
         0,

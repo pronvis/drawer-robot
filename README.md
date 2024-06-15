@@ -15,6 +15,9 @@ To get info about sections size on microcontoller: `cargo xtask size -p {project
 ## ReadObj
 To get info about binary object: `cargo xtask readobj -p {project_name} -b {bin_file_name}`, for example: `cargo xtask readobj -p experiments -b stepper_configurator`.
 
+## Attach
+To attach to running microcontroller, example: `probe-rs attach $CARGO_TARGET_DIR/thumbv7m-none-eabi/release/companion --chip STM32F103C8 --probe 0483:3748:C296C294070132124647524B4E  --log-format "{L} {s}"`
+
 ## TMC2209
 
 Good Vref calculator: https://wiki.fysetc.com/TMC2208/#motor-current-setting

@@ -3,13 +3,16 @@ use rtic_sync::channel::{Receiver, Sender};
 use crate::{
     display,
     my_stepper::{MyStepperCommands, MyStepperCommandsSender},
-    DisplayMemoryPool, DisplayString, CHANNEL_CAPACITY,
+    DisplayMemoryPool, DisplayString,
 };
 use core::fmt::Write;
 use heapless::pool::singleton::Box;
 
-pub type RobotCommandsSender = Sender<'static, RobotCommand, CHANNEL_CAPACITY>;
-pub type RobotCommandsReceiver = Receiver<'static, RobotCommand, CHANNEL_CAPACITY>;
+const COMMUNICATOR_CHANNEL_CAPACITY: usize = crate::my_tmc2209::communicator::CHANNEL_CAPACITY;
+const DISPLAY_CHANNEL_CAPACITY: usize = crate::display::CHANNEL_CAPACITY;
+
+pub type RobotCommandsSender = Sender<'static, RobotCommand, COMMUNICATOR_CHANNEL_CAPACITY>;
+pub type RobotCommandsReceiver = Receiver<'static, RobotCommand, COMMUNICATOR_CHANNEL_CAPACITY>;
 
 //TODO: improve
 pub enum RobotCommand {
@@ -31,24 +34,24 @@ struct RobotState {
 }
 
 pub struct Robot {
-    stepper_0: MyStepperCommandsSender,
+    stepper_0: Sender<'static, crate::my_tmc2209::Request, COMMUNICATOR_CHANNEL_CAPACITY>,
     stepper_1: MyStepperCommandsSender,
     stepper_2: MyStepperCommandsSender,
     stepper_3: MyStepperCommandsSender,
     commands_receiver: RobotCommandsReceiver,
     state: RobotState,
-    display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
+    display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
     speed: u32,
 }
 
 impl Robot {
     pub fn new(
-        stepper_0: MyStepperCommandsSender,
+        stepper_0: Sender<'static, crate::my_tmc2209::Request, COMMUNICATOR_CHANNEL_CAPACITY>,
         stepper_1: MyStepperCommandsSender,
         stepper_2: MyStepperCommandsSender,
         stepper_3: MyStepperCommandsSender,
         commands_receiver: RobotCommandsReceiver,
-        display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
+        display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
     ) -> Self {
         Robot {
             stepper_0,
@@ -69,10 +72,7 @@ impl Robot {
         match self.commands_receiver.recv().await {
             Ok(event) => self.receive_command(event).await,
             Err(err) => {
-                defmt::error!(
-                    "fail to receive command from channel: {}",
-                    defmt::Debug2Format(&err)
-                );
+                defmt::error!("fail to receive command from channel: {}", defmt::Debug2Format(&err));
                 return;
             }
         };
@@ -157,7 +157,7 @@ impl Robot {
             let stepper = self.get_stepper_sender();
             stepper.send(command).await.ok();
         } else {
-            self.stepper_0.send(command.clone()).await.ok();
+            // self.stepper_0.send(command.clone()).await.ok();
             self.stepper_1.send(command.clone()).await.ok();
             self.stepper_2.send(command.clone()).await.ok();
             self.stepper_3.send(command.clone()).await.ok();
@@ -170,8 +170,8 @@ impl Robot {
             stepper.send(command).await.ok();
             stepper.send(command_2).await.ok();
         } else {
-            self.stepper_0.send(command.clone()).await.ok();
-            self.stepper_0.send(command_2.clone()).await.ok();
+            // self.stepper_0.send(command.clone()).await.ok();
+            // self.stepper_0.send(command_2.clone()).await.ok();
             self.stepper_1.send(command.clone()).await.ok();
             self.stepper_1.send(command_2.clone()).await.ok();
             self.stepper_2.send(command.clone()).await.ok();
@@ -184,7 +184,7 @@ impl Robot {
     fn get_stepper_sender(&mut self) -> &mut MyStepperCommandsSender {
         let index = self.state.stepper_index;
         if index == 0 {
-            return &mut self.stepper_0;
+            return &mut self.stepper_1; //instead of a comment to not bother with return type
         } else if index == 1 {
             return &mut self.stepper_1;
         } else if index == 2 {
@@ -193,6 +193,6 @@ impl Robot {
             return &mut self.stepper_3;
         }
 
-        return &mut self.stepper_0;
+        return &mut self.stepper_1;
     }
 }

@@ -1,4 +1,6 @@
-use crate::{CHANNEL_CAPACITY, *};
+use crate::DisplayMemoryPool;
+use crate::*;
+
 use fugit::RateExtU32;
 use rtic_sync::channel::{Sender, TrySendError};
 use ssd1306::{I2CDisplayInterface, Ssd1306};
@@ -8,7 +10,6 @@ use stm32f1xx_hal::{
     rcc::Clocks,
 };
 
-use crate::DisplayMemoryPool;
 use embedded_graphics::{
     mono_font::{ascii::FONT_6X12, MonoTextStyle},
     pixelcolor::BinaryColor,
@@ -18,6 +19,7 @@ use embedded_graphics::{
 use heapless::pool::singleton::Box;
 use heapless::Deque;
 
+pub const CHANNEL_CAPACITY: usize = 2;
 const FONT: embedded_graphics::mono_font::MonoFont = FONT_6X12;
 
 pub struct OledDisplay {
@@ -26,20 +28,12 @@ pub struct OledDisplay {
 }
 
 impl OledDisplay {
-    pub fn new(
-        scl: Scl1Pin,
-        sda: Sda1Pin,
-        parts: &mut afio::Parts,
-        clocks: Clocks,
-        i2c1: I2C1,
-    ) -> Self {
+    pub fn new(scl: Scl1Pin, sda: Sda1Pin, parts: &mut afio::Parts, clocks: Clocks, i2c1: I2C1) -> Self {
         let i2c = BlockingI2c::i2c1(
             i2c1,
             (scl, sda),
             &mut parts.mapr,
-            Mode::Standard {
-                frequency: 400_000.Hz(),
-            },
+            Mode::Standard { frequency: 400_000.Hz() },
             clocks,
             1000,
             10,
@@ -48,8 +42,7 @@ impl OledDisplay {
         );
 
         let interface = I2CDisplayInterface::new(i2c);
-        let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
-            .into_buffered_graphics_mode();
+        let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0).into_buffered_graphics_mode();
         display.init().unwrap();
 
         OledDisplay {
@@ -74,10 +67,7 @@ impl OledDisplay {
         for (text, i) in self.string_queue.iter().zip(0..queue_len) {
             let _ = Text::new(
                 text,
-                Point::new(
-                    0,
-                    (FONT.character_size.height as i32) * (queue_len - i) as i32,
-                ),
+                Point::new(0, (FONT.character_size.height as i32) * (queue_len - i) as i32),
                 text_style,
             )
             .draw(&mut self.disp)

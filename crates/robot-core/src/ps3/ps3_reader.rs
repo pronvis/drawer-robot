@@ -1,13 +1,12 @@
 use rtic_sync::channel::{Receiver, Sender};
 
-use crate::PS3_CHANNEL_CAPACITY;
-
 //two header bytes come first
 const HEADER_BYTE: u8 = 0x11;
 const COMMAND_DIGITAL: u8 = 0x12;
 const COMMAND_ANALOG: u8 = 0x13;
 const COMMAND_CONNECT: u8 = 0x14;
 const END_BYTE: u8 = 0x15;
+const PS3_CHANNEL_CAPACITY: usize = crate::ps3::CHANNEL_CAPACITY;
 
 const ANALOG_SIGNAL_DATA_LEN: u8 = 3;
 
@@ -102,10 +101,7 @@ impl Ps3Reader {
         match self.bytes_receiver.recv().await {
             Ok(b) => self.receive_byte(b).await,
             Err(err) => {
-                defmt::error!(
-                    "fail to receive data from channel: {}",
-                    defmt::Debug2Format(&err)
-                );
+                defmt::error!("fail to receive data from channel: {}", defmt::Debug2Format(&err));
                 self.reset_state();
                 return;
             }
@@ -164,9 +160,7 @@ impl Ps3Reader {
     async fn catch_end_byte(&mut self) {
         let event = self.event_builder.get_event();
         let send_res = self.events_sender.send(event).await;
-        send_res
-            .err()
-            .map(|_| defmt::error!("fail to send event - No Receiver"));
+        send_res.err().map(|_| defmt::error!("fail to send event - No Receiver"));
     }
 
     fn catch_command_type(&mut self, command: u8) {
@@ -177,14 +171,12 @@ impl Ps3Reader {
             }
 
             COMMAND_DIGITAL => {
-                self.event_builder
-                    .set_event_type(Ps3EventType::DigitalSignal);
+                self.event_builder.set_event_type(Ps3EventType::DigitalSignal);
                 self.state = Ps3ReaderState::WaitingForDigitalData;
             }
 
             COMMAND_ANALOG => {
-                self.event_builder
-                    .set_event_type(Ps3EventType::AnalogSignal);
+                self.event_builder.set_event_type(Ps3EventType::AnalogSignal);
                 self.state = Ps3ReaderState::WaitingForAnalogData(0);
             }
 

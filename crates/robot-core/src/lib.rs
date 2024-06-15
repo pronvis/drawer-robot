@@ -20,9 +20,6 @@ use stm32f1xx_hal::{
 
 use heapless::{pool, pool::singleton::Pool};
 
-pub const CHANNEL_CAPACITY: usize = 2;
-pub const PS3_CHANNEL_CAPACITY: usize = 32;
-
 use panic_probe as _;
 
 use stm32f1xx_hal as _; // memory layout
