@@ -1,10 +1,10 @@
 #![no_std]
 
 pub mod display;
+pub mod legacy_robot;
 pub mod my_stepper;
 pub mod my_tmc2209;
 pub mod ps3;
-pub mod robot;
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 use ssd1306::{mode::BufferedGraphicsMode, prelude::*, Ssd1306};

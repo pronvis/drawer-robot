@@ -1,5 +1,7 @@
 use rtic_sync::channel::{Receiver, Sender};
 
+use super::{Ps3Command, Ps3DigitalCommand, Ps3Stick, Ps3StickCommand, Ps3StickValue};
+
 //two header bytes come first
 const HEADER_BYTE: u8 = 0x11;
 const COMMAND_DIGITAL: u8 = 0x12;
@@ -44,12 +46,35 @@ impl Ps3EventBuilder {
         self.event_type = et;
     }
 
-    fn get_event(&self) -> Ps3Event {
+    fn get_event(&self) -> Option<Ps3Command> {
         match self.event_type {
-            Ps3EventType::OnConnect => Ps3Event::OnConnect,
-            Ps3EventType::DigitalSignal => Ps3Event::DigitalSignal(self.buffer[0]),
-            Ps3EventType::AnalogSignal => Ps3Event::AnalogSignal(self.buffer),
+            Ps3EventType::OnConnect => Some(Ps3Command::OnConnect),
+            Ps3EventType::DigitalSignal => {
+                if let Some(command) = Ps3DigitalCommand::from_u8(self.buffer[0]) {
+                    Some(Ps3Command::Digital(command))
+                } else {
+                    None
+                }
+            }
+            Ps3EventType::AnalogSignal => Some(Ps3Command::Stick(Self::analog_to_command(self.buffer))),
         }
+    }
+
+    /// For Analog Signal:
+    ///   First byte is a 'type':
+    ///      0x01 means left stick
+    ///      0x02 means right stick
+    ///   Second byte is for X axis
+    ///   Third byte is for Y axis
+    fn analog_to_command(data: [u8; 3]) -> Ps3StickCommand {
+        let is_left_stick = data[0] == 0x01;
+        let x_axis = data[1] as i8;
+        let y_axis = data[2] as i8;
+
+        return Ps3StickCommand {
+            stick: if is_left_stick { Ps3Stick::Left } else { Ps3Stick::Right },
+            value: Ps3StickValue { x_axis, y_axis },
+        };
     }
 }
 
@@ -59,31 +84,18 @@ enum Ps3EventType {
     AnalogSignal,
 }
 
-/// For Analog Signal:
-///   First byte is a 'type':
-///      0x01 means left stick
-///      0x02 means right stick
-///   Second byte is for X axis
-///   Third byte is for Y axis
-#[derive(Debug)]
-pub enum Ps3Event {
-    OnConnect,
-    DigitalSignal(u8),
-    AnalogSignal([u8; 3]),
-}
-
 pub struct Ps3Reader {
     bytes_receiver: Receiver<'static, u8, PS3_CHANNEL_CAPACITY>,
     state: Ps3ReaderState,
     // channel to send commands from PS3
-    events_sender: Sender<'static, Ps3Event, PS3_CHANNEL_CAPACITY>,
+    events_sender: Sender<'static, Ps3Command, PS3_CHANNEL_CAPACITY>,
     event_builder: Ps3EventBuilder,
 }
 
 impl Ps3Reader {
     pub fn new(
         bytes_receiver: Receiver<'static, u8, PS3_CHANNEL_CAPACITY>,
-        events_sender: Sender<'static, Ps3Event, PS3_CHANNEL_CAPACITY>,
+        events_sender: Sender<'static, Ps3Command, PS3_CHANNEL_CAPACITY>,
     ) -> Self {
         Ps3Reader {
             bytes_receiver,
@@ -158,9 +170,10 @@ impl Ps3Reader {
     }
 
     async fn catch_end_byte(&mut self) {
-        let event = self.event_builder.get_event();
-        let send_res = self.events_sender.send(event).await;
-        send_res.err().map(|_| defmt::error!("fail to send event - No Receiver"));
+        if let Some(event) = self.event_builder.get_event() {
+            let send_res = self.events_sender.send(event).await;
+            send_res.err().map(|_| defmt::error!("fail to send event - No Receiver"));
+        }
     }
 
     fn catch_command_type(&mut self, command: u8) {

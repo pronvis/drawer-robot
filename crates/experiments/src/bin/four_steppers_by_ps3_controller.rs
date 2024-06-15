@@ -43,6 +43,8 @@ mod app {
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
     const SOFT_CLOCK_FREQ: u32 = 115_200; // this doesn't mean 115_200 baudrate
     static mut DISPLAY_MEMORY_POOL_MEMORY: [u8; 96] = [32u8; 96];
+    const DISPLAY_CHANNEL_CAPACITY: usize = robot_core::display::CHANNEL_CAPACITY;
+    const PS3_CHANNEL_CAPACITY: usize = robot_core::ps3::CHANNEL_CAPACITY;
 
     #[shared]
     struct Shared {}
@@ -57,13 +59,12 @@ mod app {
         stepper_2: MyStepper2,
         stepper_3: MyStepper3,
         stepper_4: MyStepper4,
-        display_receiver: Receiver<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
-        display_sender: Sender<'static, Box<DisplayMemoryPool>, CHANNEL_CAPACITY>,
+        display_receiver: Receiver<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
+        display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
         display: OledDisplay,
         ps3_bytes_sender: Sender<'static, u8, PS3_CHANNEL_CAPACITY>,
         ps3_reader: ps3::Ps3Reader,
-        ps3_event_parser: ps3::Ps3EventParser,
-        robot: robot::Robot,
+        robot: legacy_robot::Robot,
         cr: stm32f1xx_hal::gpio::Cr<'C', true>,
     }
 
@@ -140,7 +141,7 @@ mod app {
             &clocks,
         );
 
-        let (mut display_sender, display_receiver) = make_channel!(Box<DisplayMemoryPool>, CHANNEL_CAPACITY);
+        let (mut display_sender, display_receiver) = make_channel!(Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY);
 
         let ((stepper_1, stepper_1_sender), (stepper_2, stepper_2_sender), (stepper_3, stepper_3_sender), (stepper_4, stepper_4_sender)) =
             create_steppers(
@@ -168,10 +169,8 @@ mod app {
             );
 
         let (mut ps3_bytes_sender, ps3_bytes_receiver) = make_channel!(u8, PS3_CHANNEL_CAPACITY);
-        let (mut ps3_events_sender, ps3_events_receiver) = make_channel!(ps3::Ps3Event, PS3_CHANNEL_CAPACITY);
-        let (mut robot_commands_sender, robot_commands_receiver) = make_channel!(robot::RobotCommand, CHANNEL_CAPACITY);
-        let ps3_reader = ps3::Ps3Reader::new(ps3_bytes_receiver, ps3_events_sender);
-        let ps3_event_parser = ps3::Ps3EventParser::new(ps3_events_receiver, robot_commands_sender, display_sender.clone());
+        let (mut ps3_commands_sender, ps3_commands_receiver) = make_channel!(ps3::Ps3Command, PS3_CHANNEL_CAPACITY);
+        let ps3_reader = ps3::Ps3Reader::new(ps3_bytes_receiver, ps3_commands_sender);
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, MAIN_CLOCK_FREQ, systick_mono_token);
@@ -181,17 +180,16 @@ mod app {
         let (tx_usart1, rx_usart1) = serial_usart1.split();
         let (tx_usart2, rx_usart2) = serial_usart2.split();
 
-        let robot = robot::Robot::new(
+        let robot = legacy_robot::Robot::new(
             stepper_1_sender,
             stepper_2_sender,
             stepper_3_sender,
             stepper_4_sender,
-            robot_commands_receiver,
+            ps3_commands_receiver,
             display_sender.clone(),
         );
 
         // display_task_writer::spawn().unwrap();
-        ps3_events_reader::spawn().unwrap();
         ps3_reader_task::spawn().unwrap();
         robot_task::spawn().unwrap();
 
@@ -211,7 +209,6 @@ mod app {
                 display,
                 ps3_bytes_sender,
                 ps3_reader,
-                ps3_event_parser,
                 robot,
                 cr: gpioc.crh,
             },
@@ -224,13 +221,6 @@ mod app {
             if let Ok(message) = cx.local.display_receiver.try_recv() {
                 cx.local.display.print(message);
             }
-        }
-    }
-
-    #[task( priority = 4, local = [ ps3_event_parser ])]
-    async fn ps3_events_reader(mut cx: ps3_events_reader::Context) {
-        loop {
-            cx.local.ps3_event_parser.work().await;
         }
     }
 

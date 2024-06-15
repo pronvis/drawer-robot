@@ -3,16 +3,16 @@ use rtic_sync::channel::{Receiver, Sender};
 use crate::{
     display,
     my_stepper::{MyStepperCommands, MyStepperCommandsSender},
+    ps3::{Ps3Command, Ps3DigitalCommand, Ps3Stick},
     DisplayMemoryPool, DisplayString,
 };
 use core::fmt::Write;
 use heapless::pool::singleton::Box;
 
-const COMMUNICATOR_CHANNEL_CAPACITY: usize = crate::my_tmc2209::communicator::CHANNEL_CAPACITY;
 const DISPLAY_CHANNEL_CAPACITY: usize = crate::display::CHANNEL_CAPACITY;
+const PS3_CHANNEL_CAPACITY: usize = crate::ps3::CHANNEL_CAPACITY;
 
-pub type RobotCommandsSender = Sender<'static, RobotCommand, COMMUNICATOR_CHANNEL_CAPACITY>;
-pub type RobotCommandsReceiver = Receiver<'static, RobotCommand, COMMUNICATOR_CHANNEL_CAPACITY>;
+pub type Ps3CommandsReceiver = Receiver<'static, Ps3Command, PS3_CHANNEL_CAPACITY>;
 
 //TODO: improve
 pub enum RobotCommand {
@@ -34,23 +34,67 @@ struct RobotState {
 }
 
 pub struct Robot {
-    stepper_0: Sender<'static, crate::my_tmc2209::Request, COMMUNICATOR_CHANNEL_CAPACITY>,
+    stepper_0: MyStepperCommandsSender,
     stepper_1: MyStepperCommandsSender,
     stepper_2: MyStepperCommandsSender,
     stepper_3: MyStepperCommandsSender,
-    commands_receiver: RobotCommandsReceiver,
+    ps3_commands_receiver: Ps3CommandsReceiver,
     state: RobotState,
     display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
     speed: u32,
 }
 
+impl From<Ps3Command> for Option<RobotCommand> {
+    fn from(value: Ps3Command) -> Self {
+        match value {
+            Ps3Command::Digital(command) => match command {
+                Ps3DigitalCommand::CROSS_DOWN => Some(RobotCommand::SelectStepper(3)),
+                Ps3DigitalCommand::SQUARE_DOWN => Some(RobotCommand::SelectStepper(0)),
+                Ps3DigitalCommand::TRIANGLE_DOWN => Some(RobotCommand::SelectStepper(1)),
+                Ps3DigitalCommand::CIRCLE_DOWN => Some(RobotCommand::SelectStepper(2)),
+                Ps3DigitalCommand::UP_DOWN => Some(RobotCommand::AddSteps(100)),
+                Ps3DigitalCommand::RIGHT_DOWN => Some(RobotCommand::IncreaseSpeed),
+                Ps3DigitalCommand::DOWN_DOWN => Some(RobotCommand::Stay),
+                Ps3DigitalCommand::LEFT_DOWN => Some(RobotCommand::ReduceSpeed),
+                Ps3DigitalCommand::START_DOWN => Some(RobotCommand::StartMove),
+                Ps3DigitalCommand::SELECT_DOWN => Some(RobotCommand::AllMode),
+                Ps3DigitalCommand::L1_DOWN => Some(RobotCommand::AddSteps(1)),
+                Ps3DigitalCommand::L2_DOWN => Some(RobotCommand::ChangeDirection(false)),
+                Ps3DigitalCommand::R1_DOWN => Some(RobotCommand::AddSteps(10)),
+                Ps3DigitalCommand::R2_DOWN => Some(RobotCommand::ChangeDirection(true)),
+                _ => None,
+            },
+            Ps3Command::Stick(command) => {
+                if command.stick == Ps3Stick::Left {
+                    let byte_1 = command.value.x_axis;
+                    let byte_2 = command.value.y_axis;
+
+                    if byte_1 == -1 && byte_2 == -1 {
+                        return Some(RobotCommand::Stay);
+                    }
+
+                    let speed = byte_1 / 10;
+                    if speed < 0 {
+                        Some(RobotCommand::MoveToLeft(speed.abs() as u8))
+                    } else {
+                        Some(RobotCommand::MoveToRight(speed as u8))
+                    }
+                } else {
+                    None
+                }
+            }
+            Ps3Command::OnConnect => None,
+        }
+    }
+}
+
 impl Robot {
     pub fn new(
-        stepper_0: Sender<'static, crate::my_tmc2209::Request, COMMUNICATOR_CHANNEL_CAPACITY>,
+        stepper_0: MyStepperCommandsSender,
         stepper_1: MyStepperCommandsSender,
         stepper_2: MyStepperCommandsSender,
         stepper_3: MyStepperCommandsSender,
-        commands_receiver: RobotCommandsReceiver,
+        ps3_commands_receiver: Ps3CommandsReceiver,
         display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
     ) -> Self {
         Robot {
@@ -58,7 +102,7 @@ impl Robot {
             stepper_1,
             stepper_2,
             stepper_3,
-            commands_receiver,
+            ps3_commands_receiver,
             state: RobotState {
                 separate_mode: false,
                 stepper_index: 0,
@@ -69,8 +113,13 @@ impl Robot {
     }
 
     pub async fn work(&mut self) {
-        match self.commands_receiver.recv().await {
-            Ok(event) => self.receive_command(event).await,
+        match self.ps3_commands_receiver.recv().await {
+            Ok(event) => {
+                let command: Option<RobotCommand> = event.into();
+                if let Some(c) = command {
+                    self.receive_command(c).await;
+                }
+            }
             Err(err) => {
                 defmt::error!("fail to receive command from channel: {}", defmt::Debug2Format(&err));
                 return;
