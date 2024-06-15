@@ -31,7 +31,7 @@ mod app {
     };
 
     const MAIN_CLOCK_FREQ: u32 = 72_000_000;
-    const CHANNEL_CAPACITY: usize = robot_core::my_tmc2209::communicator::CHANNEL_CAPACITY;
+    const COMMUNICATOR_CHANNEL_CAPACITY: usize = robot_core::my_tmc2209::communicator::CHANNEL_CAPACITY;
     const BIT_SEND_TICKS: u32 = 40;
     const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_0_000;
     const ADS1256_DEFAULT_VALUE: i32 = 0;
@@ -45,8 +45,8 @@ mod app {
     struct Local {
         configurator: robot_core::my_tmc2209::configurator::Configurator,
         tmc2209_communicator_timer: Counter<stm32f1xx_hal::pac::TIM2, TMC2209COMMUNICATOR_CLOCK_FREQ>,
-        tmc2209_msg_sender: Sender<'static, robot_core::my_tmc2209::Request, CHANNEL_CAPACITY>,
-        tmc2209_rsp_receiver: Receiver<'static, u32, CHANNEL_CAPACITY>,
+        tmc2209_msg_sender: Sender<'static, robot_core::my_tmc2209::Request, COMMUNICATOR_CHANNEL_CAPACITY>,
+        tmc2209_rsp_receiver: Receiver<'static, u32, COMMUNICATOR_CHANNEL_CAPACITY>,
         communicator: TMC2209SerialCommunicator<'C', 10>,
         bluetooth_rx: stm32f1xx_hal::serial::Rx1,
     }
@@ -112,8 +112,8 @@ mod app {
         defmt::debug!("tmc2209_communicator_timer period: {} nanos", tmc2209_timer_ticks.to_nanos());
         tmc2209_communicator_timer.listen(Event::Update);
 
-        let (tmc2209_msg_sender, tmc2209_msg_receiver) = make_channel!(robot_core::my_tmc2209::Request, CHANNEL_CAPACITY);
-        let (tmc2209_rsp_sender, tmc2209_rsp_receiver) = make_channel!(u32, CHANNEL_CAPACITY);
+        let (tmc2209_msg_sender, tmc2209_msg_receiver) = make_channel!(robot_core::my_tmc2209::Request, COMMUNICATOR_CHANNEL_CAPACITY);
+        let (tmc2209_rsp_sender, tmc2209_rsp_receiver) = make_channel!(u32, COMMUNICATOR_CHANNEL_CAPACITY);
 
         let communicator = TMC2209SerialCommunicator::new(tmc2209_msg_receiver, tmc2209_rsp_sender, x_stepper_uart_pin, gpioc.crh);
         let configurator = robot_core::my_tmc2209::configurator::Configurator::new(tmc2209_msg_sender.clone());

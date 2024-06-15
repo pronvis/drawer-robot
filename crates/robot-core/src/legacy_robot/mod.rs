@@ -14,7 +14,6 @@ const PS3_CHANNEL_CAPACITY: usize = crate::ps3::CHANNEL_CAPACITY;
 
 pub type Ps3CommandsReceiver = Receiver<'static, Ps3Command, PS3_CHANNEL_CAPACITY>;
 
-//TODO: improve
 pub enum RobotCommand {
     Stay,
     StartMove,
