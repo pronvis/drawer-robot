@@ -124,7 +124,9 @@ mod app {
         ads1256.set_config(&config).unwrap();
 
         // Configure the USART1:
-        //
+        // USART1 for HC-05
+        // hc-05 RX - PA9
+        // hc-05 TX - PA10
         let tx_usart1 = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
         let rx_usart1 = gpioa.pa10.into_pull_up_input(&mut gpioa.crh);
         let mut serial_usart1 = Serial::new(
