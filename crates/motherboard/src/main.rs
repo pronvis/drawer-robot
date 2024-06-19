@@ -56,7 +56,7 @@ mod app {
     struct Local {
         ps3_reader: ps3::Ps3Reader,
         ps3_bytes_sender: Sender<'static, u8, PS3_CHANNEL_CAPACITY>,
-        ps3_usart_rx: stm32f1xx_hal::serial::Rx2,
+        ps3_rx: stm32f1xx_hal::serial::Rx2,
         display_receiver: Receiver<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
         display: OledDisplay,
         configurator: robot_core::my_tmc2209::configurator::Configurator,
@@ -111,12 +111,30 @@ mod app {
         let communicator = TMC2209SerialCommunicator::new(tmc2209_msg_receiver, tmc2209_rsp_sender, x_stepper_uart_pin, gpioc.crh);
         let configurator = robot_core::my_tmc2209::configurator::Configurator::new(tmc2209_msg_sender.clone());
 
-        // UART2 (esp32)
-        let tx_usart2 = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
-        let rx_usart2 = gpioa.pa3.into_pull_up_input(&mut gpioa.crl);
+        // USART1 for HC-05
+        let hc05_tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
+        let hc05_rx = gpioa.pa10.into_pull_up_input(&mut gpioa.crh);
+
+        let mut serial_usart1 = Serial::new(
+            cx.device.USART1,
+            (hc05_tx, hc05_rx),
+            &mut afio.mapr,
+            Config::default()
+                .baudrate(115200.bps())
+                .wordlength_8bits()
+                .stopbits(stm32f1xx_hal::serial::StopBits::STOP1)
+                .parity_none(),
+            &clocks,
+        );
+        serial_usart1.listen(stm32f1xx_hal::serial::Event::Rxne);
+        let (hc05_tx, _) = serial_usart1.split();
+
+        // USART2 (esp32)
+        let ps3_tx = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
+        let ps3_rx = gpioa.pa3.into_pull_up_input(&mut gpioa.crl);
         let mut serial_usart2 = Serial::new(
             cx.device.USART2,
-            (tx_usart2, rx_usart2),
+            (ps3_tx, ps3_rx),
             &mut afio.mapr,
             Config::default()
                 .baudrate(57600.bps())
@@ -126,7 +144,7 @@ mod app {
             &clocks,
         );
         serial_usart2.listen(stm32f1xx_hal::serial::Event::Rxne);
-        let (_, ps3_usart_rx) = serial_usart2.split();
+        let (_, ps3_rx) = serial_usart2.split();
 
         let (mut ps3_bytes_sender, ps3_bytes_receiver) = make_channel!(u8, PS3_CHANNEL_CAPACITY);
         let (mut ps3_commands_sender, ps3_commands_receiver) = make_channel!(ps3::Ps3Command, PS3_CHANNEL_CAPACITY);
@@ -139,7 +157,7 @@ mod app {
         let (mut display_sender, display_receiver) = make_channel!(Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY);
 
         // ROBOT
-        let robot = Robot::new(tmc2209_msg_sender, ps3_commands_receiver, display_sender);
+        let robot = Robot::new(tmc2209_msg_sender, ps3_commands_receiver, hc05_tx, display_sender);
 
         stepper_conf_task::spawn().ok();
         ps3_reader_task::spawn().unwrap();
@@ -148,7 +166,7 @@ mod app {
         (
             Shared {},
             Local {
-                ps3_usart_rx,
+                ps3_rx,
                 ps3_bytes_sender,
                 display_receiver,
                 display,
@@ -198,9 +216,9 @@ mod app {
         }
     }
 
-    #[task(binds = USART2, priority = 10, local = [ ps3_usart_rx, ps3_bytes_sender ])]
+    #[task(binds = USART2, priority = 10, local = [ ps3_rx, ps3_bytes_sender ])]
     fn esp32_reader(cx: esp32_reader::Context) {
-        let rx = cx.local.ps3_usart_rx;
+        let rx = cx.local.ps3_rx;
         if rx.is_rx_not_empty() {
             let received = rx.read();
             match received {

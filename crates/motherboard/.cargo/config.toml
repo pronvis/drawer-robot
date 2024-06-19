@@ -1,6 +1,6 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
 # to get probe id: `probe-rs list`
-runner = "probe-rs run --probe 0483:3748:15 --chip STM32F103RE"
+runner = ["probe-rs", "run", "--probe", "0483:3748:15", "--chip", "STM32F103RE", "--log-format", "{L} {s}"]
 # runner = "probe-run --probe C296C294070132124647524B4E00 --chip STM32F103C8"
 # runner = "arm-none-eabi-gdb -x openocd.gdb" # for debugging
 rustflags = [

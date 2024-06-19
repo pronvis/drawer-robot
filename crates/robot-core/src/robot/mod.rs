@@ -5,6 +5,8 @@ use crate::{
 use heapless::pool::singleton::Box;
 use rtic_sync::channel::{Receiver, Sender};
 
+pub const HC05_CALIBRATE_ADS1256_CODE: u8 = 221;
+
 const DISPLAY_CHANNEL_CAPACITY: usize = crate::display::CHANNEL_CAPACITY;
 const PS3_CHANNEL_CAPACITY: usize = crate::ps3::CHANNEL_CAPACITY;
 const COMMUNICATOR_CHANNEL_CAPACITY: usize = crate::my_tmc2209::communicator::CHANNEL_CAPACITY;
@@ -17,6 +19,7 @@ pub enum RobotCommand {
     Free,
     Balance,
     SetBalance,
+    CalibrateAds1256,
     SetSpeed(u32),
 }
 
@@ -27,6 +30,7 @@ impl From<Ps3Command> for Option<RobotCommand> {
                 Ps3DigitalCommand::CROSS_DOWN => Some(RobotCommand::Balance),
                 Ps3DigitalCommand::TRIANGLE_DOWN => Some(RobotCommand::SetSpeed(50_000)),
                 Ps3DigitalCommand::TRIANGLE_UP => Some(RobotCommand::SetSpeed(0)),
+                Ps3DigitalCommand::SQUARE_DOWN => Some(RobotCommand::CalibrateAds1256),
                 _ => None,
             },
             Ps3Command::Stick(_) => None,
@@ -43,6 +47,7 @@ pub struct Robot {
     stepper_0: Tmc2209CommandsSender,
     state: RobotState,
     ps3_commands_receiver: Ps3CommandsReceiver,
+    hc05_tx: stm32f1xx_hal::serial::Tx1,
     display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
     //TODO: experiment
     speed: u32,
@@ -52,12 +57,14 @@ impl Robot {
     pub fn new(
         stepper_0: Tmc2209CommandsSender,
         ps3_commands_receiver: Ps3CommandsReceiver,
+        hc05_tx: stm32f1xx_hal::serial::Tx1,
         display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
     ) -> Self {
         Robot {
             stepper_0,
             ps3_commands_receiver,
             state: RobotState::Stay(false),
+            hc05_tx,
             display_sender,
             speed: 0,
         }
@@ -99,6 +106,13 @@ impl Robot {
             RobotCommand::SetBalance => (),
             RobotCommand::SetSpeed(speed) => {
                 self.speed = speed;
+            },
+            RobotCommand::CalibrateAds1256 => {
+                if let Err(err) = self.hc05_tx.write(HC05_CALIBRATE_ADS1256_CODE) {
+                    defmt::error!("Fail to send 'Calibrate' message to hc05: {:?}", defmt::Debug2Format(&err))
+                } else {
+                    defmt::debug!("Successfully send message via hc05");
+                }
             },
         }
     }

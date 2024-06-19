@@ -35,13 +35,6 @@ mod app {
     #[shared]
     struct Shared {
         companion_message: CompanionMessage,
-    }
-
-    #[local]
-    struct Local {
-        tx_usart1: stm32f1xx_hal::serial::Tx1,
-        send_timer: Counter<stm32f1xx_hal::pac::TIM1, SEND_TIMER_CLOCK_FREQ>,
-        read_timer: Counter<stm32f1xx_hal::pac::TIM2, READ_TIMER_CLOCK_FREQ>,
         ads1256: ADS1256<
             Spi<
                 stm32f1xx_hal::pac::SPI1,
@@ -58,6 +51,14 @@ mod app {
             stm32f1xx_hal::gpio::Pin<'A', 2, stm32f1xx_hal::gpio::Input<PullUp>>,
             Delay<stm32f1xx_hal::pac::TIM3, 2000000>,
         >,
+    }
+
+    #[local]
+    struct Local {
+        hc05_tx: stm32f1xx_hal::serial::Tx1,
+        hc05_rx: stm32f1xx_hal::serial::Rx1,
+        send_timer: Counter<stm32f1xx_hal::pac::TIM1, SEND_TIMER_CLOCK_FREQ>,
+        read_timer: Counter<stm32f1xx_hal::pac::TIM2, READ_TIMER_CLOCK_FREQ>,
     }
 
     #[init]
@@ -127,11 +128,11 @@ mod app {
         // USART1 for HC-05
         // hc-05 RX - PA9
         // hc-05 TX - PA10
-        let tx_usart1 = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
-        let rx_usart1 = gpioa.pa10.into_pull_up_input(&mut gpioa.crh);
+        let hc05_tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
+        let hc05_rx = gpioa.pa10.into_pull_up_input(&mut gpioa.crh);
         let mut serial_usart1 = Serial::new(
             cx.device.USART1,
-            (tx_usart1, rx_usart1),
+            (hc05_tx, hc05_rx),
             &mut afio.mapr,
             Config::default()
                 .baudrate(115200.bps())
@@ -140,7 +141,8 @@ mod app {
                 .parity_none(),
             &clocks,
         );
-        let (tx_usart1, _) = serial_usart1.split();
+        serial_usart1.listen(stm32f1xx_hal::serial::Event::Rxne);
+        let (hc05_tx, hc05_rx) = serial_usart1.split();
 
         // Timer to read from ADS1256
         let mut read_timer = robot_core::get_counter(cx.device.TIM2, &clocks);
@@ -155,11 +157,12 @@ mod app {
         (
             Shared {
                 companion_message: Default::default(),
+                ads1256,
             },
             Local {
-                ads1256,
                 read_timer,
-                tx_usart1,
+                hc05_tx,
+                hc05_rx,
                 send_timer,
             },
         )
@@ -189,7 +192,7 @@ mod app {
         }
     }
 
-    #[task(binds = TIM2, priority = 10, local = [ read_timer, ads1256, counter: u32 = 0, max: i32 = i32::MIN, min: i32 = i32::MAX, first_start: bool = true, last_elems: i32 = 0, last_elems_counter: u32 = 0 ], shared = [companion_message])]
+    #[task(binds = TIM2, priority = 10, local = [ read_timer, counter: u32 = 0, max: i32 = i32::MIN, min: i32 = i32::MAX, first_start: bool = true, last_elems: i32 = 0, last_elems_counter: u32 = 0 ], shared = [ads1256, companion_message])]
     fn ads1256_read(mut cx: ads1256_read::Context) {
         cx.local.read_timer.clear_interrupt(Event::Update);
         if *cx.local.first_start {
@@ -214,10 +217,12 @@ mod app {
             *cx.local.last_elems = 0;
         }
 
-        let mut ads1256 = cx.local.ads1256;
-
         //TODO: I have only one connected sensor for now
-        let code_res = ads1256.read_channel(Channel::AIN0, Channel::AIN1);
+        let code_res = cx
+            .shared
+            .ads1256
+            .lock(|ads1256| ads1256.read_channel(Channel::AIN0, Channel::AIN1));
+
         let mut buffer: [i32; 4] = [0, i32::MIN, i32::MIN, i32::MIN];
         let mut current: i32 = 0;
         if let Ok(result) = code_res {
@@ -225,7 +230,6 @@ mod app {
             *cx.local.min = (*cx.local.min).min(result);
             current = result;
             *cx.local.last_elems += current;
-            let in_volt = ads1256.convert_to_volt(result);
             buffer[0] = result.dymh_norm_val();
         } else {
             defmt::error!("fail to read from ads1256");
@@ -252,7 +256,7 @@ mod app {
         });
     }
 
-    #[task(binds = TIM1_UP, priority = 5, local = [ tx_usart1, send_timer, curr_tensor_0_val: i32 = 0 ], shared = [companion_message])]
+    #[task(binds = TIM1_UP, priority = 5, local = [ hc05_tx, send_timer, curr_tensor_0_val: i32 = 0 ], shared = [companion_message])]
     fn hc05_send(mut cx: hc05_send::Context) {
         cx.local.send_timer.clear_interrupt(Event::Update);
 
@@ -275,7 +279,7 @@ mod app {
                 data_to_send[i + 1] = sensor_0[i];
             }
 
-            let mut tx = cx.local.tx_usart1;
+            let mut tx = cx.local.hc05_tx;
             for elem in data_to_send.iter() {
                 let mut write_res = tx.write(*elem);
                 while write_res.is_err() {
@@ -284,6 +288,42 @@ mod app {
                         cortex_m::asm::nop();
                     }
                     write_res = tx.write(*elem);
+                }
+            }
+        }
+    }
+
+    #[task(binds = USART1, priority = 6, local = [ hc05_rx ], shared = [ ads1256 ])]
+    fn hc05_reader(mut cx: hc05_reader::Context) {
+        let rx = cx.local.hc05_rx;
+        if rx.is_rx_not_empty() {
+            let received = rx.read();
+            match received {
+                Ok(read) => {
+                    if read == robot::HC05_CALIBRATE_ADS1256_CODE {
+                        cx.shared.ads1256.lock(|ads1256| {
+                            let send_res = ads1256.init();
+                            match send_res {
+                                Err(err) => defmt::error!("ads1256: fail to send SELFCAL message"),
+                                Ok(_) => {
+                                    let mut self_cal_finish = false;
+                                    while !self_cal_finish {
+                                        let is_rdy = ads1256.wait_for_ready();
+                                        if let Ok(is_rdy) = is_rdy {
+                                            self_cal_finish = is_rdy;
+                                            if is_rdy {
+                                                defmt::debug!("ads1256: SELFCAL finished");
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+
+                Err(err) => {
+                    defmt::debug!("data from hc05 read err: {:?}", defmt::Debug2Format(&err));
                 }
             }
         }

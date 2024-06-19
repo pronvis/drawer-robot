@@ -48,7 +48,7 @@ mod app {
         tmc2209_msg_sender: Sender<'static, robot_core::my_tmc2209::Request, COMMUNICATOR_CHANNEL_CAPACITY>,
         tmc2209_rsp_receiver: Receiver<'static, u32, COMMUNICATOR_CHANNEL_CAPACITY>,
         communicator: TMC2209SerialCommunicator<'C', 10>,
-        bluetooth_rx: stm32f1xx_hal::serial::Rx1,
+        hc05_rx: stm32f1xx_hal::serial::Rx1,
     }
 
     #[init]
@@ -83,13 +83,13 @@ mod app {
         let x_stepper_uart_pin = gpioc.pc10.into_dynamic(&mut gpioc.crh);
 
         // USART1 for HC-05
-        let tx_usart1 = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
-        let rx_usart1 = gpioa.pa10.into_pull_up_input(&mut gpioa.crh);
+        let hc05_tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
+        let hc05_rx = gpioa.pa10.into_pull_up_input(&mut gpioa.crh);
 
         let mut afio = cx.device.AFIO.constrain();
         let mut serial_usart1 = Serial::new(
             cx.device.USART1,
-            (tx_usart1, rx_usart1),
+            (hc05_tx, hc05_rx),
             &mut afio.mapr,
             Config::default()
                 .baudrate(115200.bps())
@@ -98,12 +98,11 @@ mod app {
                 .parity_none(),
             &clocks,
         );
+        serial_usart1.listen(stm32f1xx_hal::serial::Event::Rxne);
+        let (_, hc05_rx) = serial_usart1.split();
 
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, MAIN_CLOCK_FREQ, systick_mono_token);
-
-        serial_usart1.listen(stm32f1xx_hal::serial::Event::Rxne);
-        let (_, mut bluetooth_rx) = serial_usart1.split();
 
         // TMC2209
         let mut tmc2209_communicator_timer = robot_core::get_counter(cx.device.TIM2, &clocks);
@@ -131,14 +130,14 @@ mod app {
                 tmc2209_msg_sender,
                 tmc2209_rsp_receiver,
                 communicator,
-                bluetooth_rx,
+                hc05_rx,
             },
         )
     }
 
-    #[task(binds = USART1, priority = 9, shared = [ tensor_0_val ], local = [ bluetooth_rx, data_to_receive: [u8; 16] = [0; 16], counter: usize = 0 ])]
+    #[task(binds = USART1, priority = 9, shared = [ tensor_0_val ], local = [ hc05_rx, data_to_receive: [u8; 16] = [0; 16], counter: usize = 0 ])]
     fn bluetooth_reader(mut cx: bluetooth_reader::Context) {
-        let rx = cx.local.bluetooth_rx;
+        let rx = cx.local.hc05_rx;
         let mut counter = cx.local.counter;
         if rx.is_rx_not_empty() {
             let received = rx.read();
