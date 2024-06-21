@@ -1,9 +1,24 @@
 use super::TensionData;
+use crate::{i32_diff, tension_to_speed};
+
+#[derive(Eq, PartialEq)]
+enum ArmMode {
+    ByTension,
+    Free,
+}
+
+impl Default for ArmMode {
+    fn default() -> Self {
+        ArmMode::ByTension
+    }
+}
 
 #[derive(Default)]
 struct Arm {
     tension: i32,
     desired_tension: Option<i32>,
+    last_sended_tension: Option<i32>,
+    mode: ArmMode,
 }
 
 impl Arm {
@@ -15,9 +30,20 @@ impl Arm {
         self.desired_tension = None;
     }
 
-    pub fn get_speed(&self) -> u32 {
-        //test code
-        self.tension as u32 * 10
+    pub fn get_speed(&mut self) -> Option<u32> {
+        if self.mode == ArmMode::Free {
+            return None;
+        }
+
+        if let Some(last_sended_tension) = self.last_sended_tension {
+            if last_sended_tension == self.tension {
+                return None;
+            }
+        }
+
+        self.last_sended_tension = Some(self.tension);
+        // return Some(tension_to_speed(i32_diff(self.tension, self.desired_tension.unwrap_or(0))));
+        return Some(tension_to_speed(self.tension));
     }
 }
 
@@ -30,10 +56,10 @@ pub struct RobotArms {
 }
 
 pub struct ArmsSpeed {
-    pub s0: u32,
-    pub s1: u32,
-    pub s2: u32,
-    pub s3: u32,
+    pub s0: Option<u32>,
+    pub s1: Option<u32>,
+    pub s2: Option<u32>,
+    pub s3: Option<u32>,
 }
 
 impl RobotArms {
@@ -53,20 +79,24 @@ impl RobotArms {
     }
 
     pub fn set_desired_tension(&mut self) {
+        self.arm0.mode = ArmMode::ByTension;
+        self.arm1.mode = ArmMode::ByTension;
+        self.arm2.mode = ArmMode::ByTension;
+        self.arm3.mode = ArmMode::ByTension;
         self.arm0.set_desired_tension();
         self.arm1.set_desired_tension();
         self.arm2.set_desired_tension();
         self.arm3.set_desired_tension();
     }
 
-    pub fn remove_desired_tension(&mut self) {
-        self.arm0.remove_desired_tension();
-        self.arm1.remove_desired_tension();
-        self.arm2.remove_desired_tension();
-        self.arm3.remove_desired_tension();
+    pub fn set_free_tenstion(&mut self) {
+        self.arm0.mode = ArmMode::Free;
+        self.arm1.mode = ArmMode::Free;
+        self.arm2.mode = ArmMode::Free;
+        self.arm3.mode = ArmMode::Free;
     }
 
-    pub fn get_speed(&self) -> ArmsSpeed {
+    pub fn get_speed(&mut self) -> ArmsSpeed {
         ArmsSpeed {
             s0: self.arm0.get_speed(),
             s1: self.arm1.get_speed(),

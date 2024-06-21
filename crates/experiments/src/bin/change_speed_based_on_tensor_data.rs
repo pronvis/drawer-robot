@@ -187,7 +187,7 @@ mod app {
             let curr_tensor_0_val = *cx.local.curr_tensor_0_val;
             let tensor_diff = robot_core::i32_diff(curr_tensor_0_val, tensor_0_val);
 
-            let speed: u32 = tensor_0_val as u32 * 1_0;
+            let speed: u32 = robot_core::tension_to_speed(tensor_0_val);
 
             let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(speed));
             let req = robot_core::my_tmc2209::Request::write(write_req);

@@ -51,13 +51,8 @@ impl From<Ps3Command> for Option<RobotCommand> {
     }
 }
 
-enum RobotState {
-    Stay(bool),
-}
-
 pub struct Robot {
     stepper_0: Tmc2209CommandsSender,
-    state: RobotState,
     ps3_commands_receiver: Ps3CommandsReceiver,
     tension_data_receiver: TensionDataReceiver,
     hc05_tx: stm32f1xx_hal::serial::Tx1,
@@ -77,7 +72,6 @@ impl Robot {
             stepper_0,
             ps3_commands_receiver,
             tension_data_receiver,
-            state: RobotState::Stay(false),
             hc05_tx,
             display_sender,
             arms: Default::default(),
@@ -91,9 +85,11 @@ impl Robot {
         //test code
         let arms_speed = self.arms.get_speed();
         let arm0_speed = arms_speed.s0;
-        let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(arm0_speed));
-        let req = crate::my_tmc2209::Request::write(write_req);
-        self.stepper_0.send(req).await.ok();
+        if let Some(arm0_speed) = arm0_speed {
+            let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(arm0_speed));
+            let req = crate::my_tmc2209::Request::write(write_req);
+            self.stepper_0.send(req).await.ok();
+        }
     }
 
     fn ps3_handler(&mut self) {
@@ -129,7 +125,7 @@ impl Robot {
     fn receive_command(&mut self, event: RobotCommand) {
         match event {
             RobotCommand::SetFreeTension => {
-                self.arms.remove_desired_tension();
+                self.arms.set_free_tenstion();
             },
             RobotCommand::SetDesiredTension => {
                 self.arms.set_desired_tension();
