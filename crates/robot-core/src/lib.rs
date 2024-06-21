@@ -100,6 +100,8 @@ pub fn get_counter<TIM: timer::Instance, const FREQ: u32>(tim: TIM, clocks: &Clo
     return counter;
 }
 
+pub const DEFAULT_DYMH06_VALUE: i32 = i32::MIN;
+
 pub const COMPANION_SYNC: u8 = 0b01000101;
 #[derive(Default, Copy, Clone)]
 pub struct CompanionMessage {

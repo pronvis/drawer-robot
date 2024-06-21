@@ -16,6 +16,7 @@ mod app {
     use defmt_brtt as _; // global logger
     use embedded_hal::digital::OutputPin;
     use robot_core::CompanionMessage;
+    use robot_core::DEFAULT_DYMH06_VALUE;
     use robot_core::*;
     use stm32f1xx_hal::{
         gpio::{gpioa, Alternate, Output, Pin, PullUp},
@@ -223,7 +224,12 @@ mod app {
             .ads1256
             .lock(|ads1256| ads1256.read_channel(Channel::AIN0, Channel::AIN1));
 
-        let mut buffer: [i32; 4] = [0, i32::MIN, i32::MIN, i32::MIN];
+        let mut buffer: [i32; 4] = [
+            DEFAULT_DYMH06_VALUE,
+            DEFAULT_DYMH06_VALUE,
+            DEFAULT_DYMH06_VALUE,
+            DEFAULT_DYMH06_VALUE,
+        ];
         let mut current: i32 = 0;
         if let Ok(result) = code_res {
             *cx.local.max = (*cx.local.max).max(result);

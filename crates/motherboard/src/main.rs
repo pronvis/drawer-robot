@@ -1,6 +1,7 @@
 #![no_main]
 #![no_std]
 #![feature(type_alias_impl_trait)]
+#![feature(slice_as_chunks)]
 
 #[rtic::app(
     device = stm32f1xx_hal::pac,
@@ -21,6 +22,7 @@ mod app {
     use robot::Robot;
     use robot_core::display::OledDisplay;
     use robot_core::my_tmc2209::communicator::TMC2209SerialCommunicator;
+    use robot_core::robot::{TensionData, TENSION_DATA_CHANNEL_CAPACITY};
     use robot_core::DisplayMemoryPool;
     use robot_core::*;
     use rtic_sync::{channel::*, make_channel};
@@ -56,7 +58,9 @@ mod app {
     struct Local {
         ps3_reader: ps3::Ps3Reader,
         ps3_bytes_sender: Sender<'static, u8, PS3_CHANNEL_CAPACITY>,
+        tension_data_sender: Sender<'static, TensionData, TENSION_DATA_CHANNEL_CAPACITY>,
         ps3_rx: stm32f1xx_hal::serial::Rx2,
+        hc05_rx: stm32f1xx_hal::serial::Rx1,
         display_receiver: Receiver<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
         display: OledDisplay,
         configurator: robot_core::my_tmc2209::configurator::Configurator,
@@ -127,7 +131,7 @@ mod app {
             &clocks,
         );
         serial_usart1.listen(stm32f1xx_hal::serial::Event::Rxne);
-        let (hc05_tx, _) = serial_usart1.split();
+        let (hc05_tx, hc05_rx) = serial_usart1.split();
 
         // USART2 (esp32)
         let ps3_tx = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
@@ -157,7 +161,14 @@ mod app {
         let (mut display_sender, display_receiver) = make_channel!(Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY);
 
         // ROBOT
-        let robot = Robot::new(tmc2209_msg_sender, ps3_commands_receiver, hc05_tx, display_sender);
+        let (tension_data_sender, tension_data_receiver) = make_channel!(TensionData, TENSION_DATA_CHANNEL_CAPACITY);
+        let robot = Robot::new(
+            tmc2209_msg_sender,
+            ps3_commands_receiver,
+            tension_data_receiver,
+            hc05_tx,
+            display_sender,
+        );
 
         stepper_conf_task::spawn().ok();
         ps3_reader_task::spawn().unwrap();
@@ -167,7 +178,9 @@ mod app {
             Shared {},
             Local {
                 ps3_rx,
+                hc05_rx,
                 ps3_bytes_sender,
+                tension_data_sender,
                 display_receiver,
                 display,
                 tmc2209_rsp_receiver,
@@ -216,7 +229,49 @@ mod app {
         }
     }
 
-    #[task(binds = USART2, priority = 10, local = [ ps3_rx, ps3_bytes_sender ])]
+    #[task(binds = USART1, priority = 9, local = [ tension_data_sender, hc05_rx, data_to_receive: [u8; 16] = [0; 16], counter: usize = 0 ])]
+    fn hc05_reader(mut cx: hc05_reader::Context) {
+        let rx = cx.local.hc05_rx;
+        let mut counter = cx.local.counter;
+        if rx.is_rx_not_empty() {
+            let received = rx.read();
+            match received {
+                Ok(read) => {
+                    if read == robot_core::COMPANION_SYNC {
+                        if *counter != 0 {
+                            defmt::debug!("receive SYNC byte when counter = {}", *counter);
+                        }
+                        *counter = 0;
+                    } else {
+                        cx.local.data_to_receive[*counter] = read;
+                        *counter += 1;
+                    }
+
+                    if *counter == 16 {
+                        *counter = 0;
+                        let splitted = cx.local.data_to_receive[0..16].as_chunks::<4>().0;
+                        let sensors_data = splitted.iter().map(|sensor_data| i32::from_be_bytes(*sensor_data));
+                        let tension_data = TensionData {
+                            t0: i32::from_be_bytes(splitted[0]),
+                            t1: i32::from_be_bytes(splitted[1]),
+                            t2: i32::from_be_bytes(splitted[2]),
+                            t3: i32::from_be_bytes(splitted[3]),
+                        };
+
+                        cx.local.tension_data_sender.try_send(tension_data).err().map(|err| {
+                            defmt::debug!("fail to send tension_data to tension_data_sender: {:?}", defmt::Debug2Format(&err));
+                        });
+                    }
+                }
+
+                Err(err) => {
+                    defmt::debug!("read err: {:?}", defmt::Debug2Format(&err));
+                }
+            }
+        }
+    }
+
+    #[task(binds = USART2, priority = 9, local = [ ps3_rx, ps3_bytes_sender ])]
     fn esp32_reader(cx: esp32_reader::Context) {
         let rx = cx.local.ps3_rx;
         if rx.is_rx_not_empty() {

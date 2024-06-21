@@ -162,7 +162,7 @@ mod app {
                         // let kilogramms = robot_core::tensor_to_kg(sensor_0_data);
                         // let kilogramms = sensor_0_data as f32 * 0.025f32;
                         let kilogramms = sensor_0_data;
-                        if kilogramms != i32::MIN {
+                        if kilogramms != robot_core::DEFAULT_DYMH06_VALUE {
                             defmt::debug!("sensor 0 data: {}", kilogramms);
                             cx.shared.tensor_0_val.lock(|tval| *tval = kilogramms);
                         }
