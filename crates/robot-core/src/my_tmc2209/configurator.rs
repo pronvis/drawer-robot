@@ -2,13 +2,13 @@ use rtic_sync::channel::*;
 
 const CHANNEL_CAPACITY: usize = crate::my_tmc2209::communicator::CHANNEL_CAPACITY;
 
-pub struct Configurator {
+pub struct TMC2209Configurator {
     ifcnt: u8,
     first_call: bool,
     sender: Sender<'static, crate::my_tmc2209::Request, CHANNEL_CAPACITY>,
 }
 
-impl Configurator {
+impl TMC2209Configurator {
     const MAX_SAME_REQ_COUNT: u8 = 5;
 
     pub fn new(sender: Sender<'static, crate::my_tmc2209::Request, CHANNEL_CAPACITY>) -> Self {

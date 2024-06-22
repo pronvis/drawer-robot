@@ -16,6 +16,7 @@ mod app {
     use fugit::Duration;
     use robot_core::my_stepper::*;
     use robot_core::my_tmc2209::communicator::TMC2209SerialCommunicator;
+    use robot_core::my_tmc2209::configurator::TMC2209Configurator;
     use robot_core::*;
     use rtic_monotonics::systick::*;
     use rtic_sync::{channel::*, make_channel};
@@ -43,7 +44,7 @@ mod app {
 
     #[local]
     struct Local {
-        configurator: robot_core::my_tmc2209::configurator::Configurator,
+        configurator: TMC2209Configurator,
         tmc2209_communicator_timer: Counter<stm32f1xx_hal::pac::TIM2, TMC2209COMMUNICATOR_CLOCK_FREQ>,
         tmc2209_msg_sender: Sender<'static, robot_core::my_tmc2209::Request, COMMUNICATOR_CHANNEL_CAPACITY>,
         tmc2209_rsp_receiver: Receiver<'static, u32, COMMUNICATOR_CHANNEL_CAPACITY>,
@@ -115,7 +116,7 @@ mod app {
         let (tmc2209_rsp_sender, tmc2209_rsp_receiver) = make_channel!(u32, COMMUNICATOR_CHANNEL_CAPACITY);
 
         let communicator = TMC2209SerialCommunicator::new(tmc2209_msg_receiver, tmc2209_rsp_sender, x_stepper_uart_pin, gpioc.crh);
-        let configurator = robot_core::my_tmc2209::configurator::Configurator::new(tmc2209_msg_sender.clone());
+        let configurator = TMC2209Configurator::new(tmc2209_msg_sender.clone());
 
         stepper_conf_task::spawn().ok();
         stepper_change_speed_task::spawn().ok();

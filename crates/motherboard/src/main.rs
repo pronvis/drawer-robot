@@ -12,6 +12,7 @@
 )]
 mod app {
 
+    use core::cell::{RefCell, UnsafeCell};
     use defmt_brtt as _; // global logger
     use fugit::Duration;
     use heapless::{
@@ -21,7 +22,9 @@ mod app {
     };
     use robot::Robot;
     use robot_core::display::OledDisplay;
-    use robot_core::my_tmc2209::{communicator::TMC2209SerialCommunicator, configurator::Configurator as TMC2209Configurator};
+    use robot_core::my_tmc2209::{
+        communicator::TMC2209SerialCommunicator, configurator::TMC2209Configurator, Tmc2209Constructor, TMC2209COMMUNICATOR_CLOCK_FREQ,
+    };
     use robot_core::robot::{TensionData, TENSION_DATA_CHANNEL_CAPACITY};
     use robot_core::DisplayMemoryPool;
     use robot_core::*;
@@ -40,8 +43,6 @@ mod app {
     };
 
     const TIMER_CLOCK_FREQ: u32 = 72_000_000;
-    const TMC2209COMMUNICATOR_CLOCK_FREQ: u32 = 72_0_000;
-    const TMC2209_BIT_SEND_TICKS: u32 = 40;
 
     const COMMUNICATOR_CHANNEL_CAPACITY: usize = robot_core::my_tmc2209::communicator::CHANNEL_CAPACITY;
     const PS3_CHANNEL_CAPACITY: usize = robot_core::ps3::CHANNEL_CAPACITY;
@@ -95,20 +96,29 @@ mod app {
         let mut gpioa: stm32f1xx_hal::gpio::gpioa::Parts = cx.device.GPIOA.split();
         let mut gpiob: stm32f1xx_hal::gpio::gpiob::Parts = cx.device.GPIOB.split();
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
+        let mut gpiod: stm32f1xx_hal::gpio::gpiod::Parts = cx.device.GPIOD.split();
         let mut afio = cx.device.AFIO.constrain();
+
+        let x_stepper_uart_pin = gpioc.pc10.into_dynamic(&mut gpioc.crh);
+        let y_stepper_uart_pin = gpioc.pc11.into_dynamic(&mut gpioc.crh);
+        let z_stepper_uart_pin = gpioc.pc12.into_dynamic(&mut gpioc.crh);
+        let e_stepper_uart_pin = gpiod.pd2.into_dynamic(&mut gpiod.crl);
 
         // STEPPER 0
         let mut en = gpioc.pc7.into_push_pull_output(&mut gpioc.crl);
-        let x_stepper_uart_pin = gpioc.pc10.into_dynamic(&mut gpioc.crh);
-        let (communicator, configurator, tmc2209_req_sender, tmc2209_rsp_receiver, tmc2209_communicator_timer) =
-            create_tmc_communicator(en, x_stepper_uart_pin, gpioc.crh, cx.device.TIM2, &clocks);
+        let tmc2209_0 = Tmc2209Constructor::new(en, x_stepper_uart_pin, gpioc.crh, cx.device.TIM2, &clocks);
 
-        // TODO:
-        // STEPPER 1
+        // // STEPPER 1
         // let mut en = gpiob.pb14.into_push_pull_output(&mut gpiob.crh);
-        // let y_stepper_uart_pin = gpioc.pc11.into_dynamic(&mut gpioc.crh);
-        // let (communicator, configurator, tmc2209_req_sender, tmc2209_rsp_receiver, tmc2209_communicator_timer) =
-        //     create_tmc_communicator(en, y_stepper_uart_pin, gpioc.crh, cx.device.TIM3, &clocks);
+        // let tmc2209_1 = Tmc2209Constructor::new(en, y_stepper_uart_pin, gpioc_crh.clone(), cx.device.TIM3, &clocks);
+
+        // // STEPPER 2
+        // let mut en = gpiob.pb11.into_push_pull_output(&mut gpiob.crh);
+        // let tmc2209_2 = Tmc2209Constructor::new(en, z_stepper_uart_pin, gpioc_crh, cx.device.TIM4, &clocks);
+
+        // // STEPPER 3
+        // let mut en = gpiob.pb1.into_push_pull_output(&mut gpiob.crl);
+        // let tmc2209_3 = Tmc2209Constructor::new(en, e_stepper_uart_pin, gpiod_crl, cx.device.TIM5, &clocks);
 
         // USART1 for HC-05
         let hc05_tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
@@ -158,7 +168,7 @@ mod app {
         // ROBOT
         let (tension_data_sender, tension_data_receiver) = make_channel!(TensionData, TENSION_DATA_CHANNEL_CAPACITY);
         let robot = Robot::new(
-            tmc2209_req_sender,
+            tmc2209_0.req_sender,
             ps3_commands_receiver,
             tension_data_receiver,
             hc05_tx,
@@ -175,14 +185,14 @@ mod app {
                 ps3_rx,
                 hc05_rx,
                 ps3_bytes_sender,
+                ps3_reader,
                 tension_data_sender,
                 display_receiver,
                 display,
-                tmc2209_rsp_receiver,
-                configurator,
-                ps3_reader,
-                communicator,
-                tmc2209_communicator_timer,
+                tmc2209_rsp_receiver: tmc2209_0.rsp_receiver,
+                configurator: tmc2209_0.configurator,
+                communicator: tmc2209_0.communicator,
+                tmc2209_communicator_timer: tmc2209_0.timer,
                 robot,
             },
         )
@@ -197,7 +207,7 @@ mod app {
         }
     }
 
-    #[task(priority = 1, local = [configurator, tmc2209_rsp_receiver])]
+    #[task(priority = 2, local = [configurator, tmc2209_rsp_receiver])]
     async fn stepper_conf_task(cx: stepper_conf_task::Context) {
         let setup_res = cx.local.configurator.setup(cx.local.tmc2209_rsp_receiver).await;
         match setup_res {
@@ -217,7 +227,7 @@ mod app {
         }
     }
 
-    #[task( priority = 5, local = [robot])]
+    #[task( priority = 1, local = [robot])]
     async fn robot_task(mut cx: robot_task::Context) {
         loop {
             cx.local.robot.work().await;
@@ -289,45 +299,5 @@ mod app {
     fn communicator_task(cx: communicator_task::Context) {
         cx.local.tmc2209_communicator_timer.clear_interrupt(Event::Update);
         cx.local.communicator.handle_interrupt();
-    }
-
-    fn create_tmc_communicator<EN_PIN, const PIN_C: char, const PIN_N: u8, TIM>(
-        mut en_pin: EN_PIN,
-        uart_pin: Pin<PIN_C, PIN_N, Dynamic>,
-        cr: <Pin<PIN_C, PIN_N, Dynamic> as HL>::Cr,
-        tim: TIM,
-        clocks: &Clocks,
-    ) -> (
-        TMC2209SerialCommunicator<PIN_C, PIN_N>,
-        TMC2209Configurator,
-        Sender<'static, Tmc2209Request, COMMUNICATOR_CHANNEL_CAPACITY>,
-        Receiver<'static, u32, COMMUNICATOR_CHANNEL_CAPACITY>,
-        Counter<TIM, TMC2209COMMUNICATOR_CLOCK_FREQ>,
-    )
-    where
-        EN_PIN: embedded_hal::digital::v2::OutputPin,
-        Pin<PIN_C, PIN_N, Dynamic>: HL,
-        TIM: stm32f1xx_hal::timer::Instance,
-    {
-        let _ = en_pin.set_low();
-
-        let mut tmc2209_communicator_timer = robot_core::get_counter(tim, &clocks);
-        let tmc2209_timer_ticks = Duration::<u32, 1, TMC2209COMMUNICATOR_CLOCK_FREQ>::from_ticks(TMC2209_BIT_SEND_TICKS);
-        tmc2209_communicator_timer.start(tmc2209_timer_ticks).unwrap();
-        defmt::debug!("tmc2209_communicator_timer period: {} nanos", tmc2209_timer_ticks.to_nanos());
-        tmc2209_communicator_timer.listen(Event::Update);
-
-        let (tmc2209_req_sender, tmc2209_req_receiver) = make_channel!(Tmc2209Request, COMMUNICATOR_CHANNEL_CAPACITY);
-        let (tmc2209_rsp_sender, tmc2209_rsp_receiver) = make_channel!(u32, COMMUNICATOR_CHANNEL_CAPACITY);
-        let communicator = TMC2209SerialCommunicator::new(tmc2209_req_receiver, tmc2209_rsp_sender, uart_pin, cr);
-        let configurator = TMC2209Configurator::new(tmc2209_req_sender.clone());
-
-        (
-            communicator,
-            configurator,
-            tmc2209_req_sender,
-            tmc2209_rsp_receiver,
-            tmc2209_communicator_timer,
-        )
     }
 }
