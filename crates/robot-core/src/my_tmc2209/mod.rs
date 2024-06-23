@@ -1,5 +1,6 @@
 pub mod communicator;
 pub mod configurator;
+mod manual_pin;
 
 use communicator::TMC2209SerialCommunicator;
 use configurator::TMC2209Configurator;
@@ -7,7 +8,7 @@ use rtic_sync::{channel::*, make_channel};
 
 use fugit::Duration;
 use stm32f1xx_hal::{
-    gpio::{Dynamic, Pin, HL},
+    gpio::{Dynamic, Pin},
     rcc::Clocks,
     timer::{Counter, Event},
 };
@@ -35,7 +36,6 @@ impl Request {
 
 pub struct Tmc2209Constructor<const PIN_C: char, const PIN_N: u8, TIM>
 where
-    Pin<PIN_C, PIN_N, Dynamic>: HL,
     TIM: stm32f1xx_hal::timer::Instance,
 {
     pub communicator: TMC2209SerialCommunicator<PIN_C, PIN_N>,
@@ -47,16 +47,9 @@ where
 
 impl<const PIN_C: char, const PIN_N: u8, TIM> Tmc2209Constructor<PIN_C, PIN_N, TIM>
 where
-    Pin<PIN_C, PIN_N, Dynamic>: HL,
     TIM: stm32f1xx_hal::timer::Instance,
 {
-    pub fn new<EnPin>(
-        mut en_pin: EnPin,
-        uart_pin: Pin<PIN_C, PIN_N, Dynamic>,
-        cr: <Pin<PIN_C, PIN_N, Dynamic> as HL>::Cr,
-        tim: TIM,
-        clocks: &Clocks,
-    ) -> Self
+    pub fn new<EnPin>(mut en_pin: EnPin, uart_pin: Pin<PIN_C, PIN_N, Dynamic>, tim: TIM, clocks: &Clocks) -> Self
     where
         EnPin: embedded_hal::digital::v2::OutputPin,
     {
@@ -70,7 +63,7 @@ where
 
         let (tmc2209_req_sender, tmc2209_req_receiver) = make_channel!(Request, COMMUNICATOR_CHANNEL_CAPACITY);
         let (tmc2209_rsp_sender, tmc2209_rsp_receiver) = make_channel!(u32, COMMUNICATOR_CHANNEL_CAPACITY);
-        let communicator = TMC2209SerialCommunicator::new(tmc2209_req_receiver, tmc2209_rsp_sender, uart_pin, cr);
+        let communicator = TMC2209SerialCommunicator::new(tmc2209_req_receiver, tmc2209_rsp_sender, uart_pin);
         let configurator = TMC2209Configurator::new(tmc2209_req_sender.clone());
 
         Self {

@@ -12,14 +12,8 @@
 )]
 mod app {
 
-    use core::cell::{RefCell, UnsafeCell};
     use defmt_brtt as _; // global logger
-    use fugit::Duration;
-    use heapless::{
-        pool,
-        pool::singleton::{Box, Pool},
-        String,
-    };
+    use heapless::pool::singleton::Box;
     use robot::Robot;
     use robot_core::display::OledDisplay;
     use robot_core::my_tmc2209::{
@@ -30,15 +24,8 @@ mod app {
     use robot_core::*;
     use rtic_sync::{channel::*, make_channel};
     use stm32f1xx_hal::{
-        afio,
-        gpio::{Alternate, Dynamic, OpenDrain, Pin, PinState, HL},
-        pac,
-        pac::interrupt,
-        pac::I2C1,
         prelude::*,
-        rcc::{Clocks, *},
         serial::{Config, Serial},
-        timer::Timer,
         timer::{Counter, Event},
     };
 
@@ -47,8 +34,6 @@ mod app {
     const COMMUNICATOR_CHANNEL_CAPACITY: usize = robot_core::my_tmc2209::communicator::CHANNEL_CAPACITY;
     const PS3_CHANNEL_CAPACITY: usize = robot_core::ps3::CHANNEL_CAPACITY;
     const DISPLAY_CHANNEL_CAPACITY: usize = robot_core::display::CHANNEL_CAPACITY;
-
-    type Tmc2209Request = robot_core::my_tmc2209::Request;
 
     #[shared]
     struct Shared {}
@@ -105,8 +90,8 @@ mod app {
         let e_stepper_uart_pin = gpiod.pd2.into_dynamic(&mut gpiod.crl);
 
         // STEPPER 0
-        let mut en = gpioc.pc7.into_push_pull_output(&mut gpioc.crl);
-        let tmc2209_0 = Tmc2209Constructor::new(en, x_stepper_uart_pin, gpioc.crh, cx.device.TIM2, &clocks);
+        let en = gpioc.pc7.into_push_pull_output(&mut gpioc.crl);
+        let tmc2209_0 = Tmc2209Constructor::new(en, x_stepper_uart_pin, cx.device.TIM2, &clocks);
 
         // // STEPPER 1
         // let mut en = gpiob.pb14.into_push_pull_output(&mut gpiob.crh);
@@ -155,15 +140,15 @@ mod app {
         serial_usart2.listen(stm32f1xx_hal::serial::Event::Rxne);
         let (_, ps3_rx) = serial_usart2.split();
 
-        let (mut ps3_bytes_sender, ps3_bytes_receiver) = make_channel!(u8, PS3_CHANNEL_CAPACITY);
-        let (mut ps3_commands_sender, ps3_commands_receiver) = make_channel!(ps3::Ps3Command, PS3_CHANNEL_CAPACITY);
+        let (ps3_bytes_sender, ps3_bytes_receiver) = make_channel!(u8, PS3_CHANNEL_CAPACITY);
+        let (ps3_commands_sender, ps3_commands_receiver) = make_channel!(ps3::Ps3Command, PS3_CHANNEL_CAPACITY);
         let ps3_reader = ps3::Ps3Reader::new(ps3_bytes_receiver, ps3_commands_sender);
 
         // SSD1306 display pins
         let scl: Scl1Pin = gpiob.pb8.into_alternate_open_drain(&mut gpiob.crh);
         let sda: Sda1Pin = gpiob.pb9.into_alternate_open_drain(&mut gpiob.crh);
         let display = OledDisplay::new(scl, sda, &mut afio, clocks.clone(), cx.device.I2C1);
-        let (mut display_sender, display_receiver) = make_channel!(Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY);
+        let (display_sender, display_receiver) = make_channel!(Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY);
 
         // ROBOT
         let (tension_data_sender, tension_data_receiver) = make_channel!(TensionData, TENSION_DATA_CHANNEL_CAPACITY);
@@ -221,23 +206,23 @@ mod app {
     }
 
     #[task( priority = 4, local = [  ps3_reader  ])]
-    async fn ps3_reader_task(mut cx: ps3_reader_task::Context) {
+    async fn ps3_reader_task(cx: ps3_reader_task::Context) {
         loop {
             cx.local.ps3_reader.work().await;
         }
     }
 
     #[task( priority = 1, local = [robot])]
-    async fn robot_task(mut cx: robot_task::Context) {
+    async fn robot_task(cx: robot_task::Context) {
         loop {
             cx.local.robot.work().await;
         }
     }
 
     #[task(binds = USART1, priority = 9, local = [ tension_data_sender, hc05_rx, data_to_receive: [u8; 16] = [0; 16], counter: usize = 0 ])]
-    fn hc05_reader(mut cx: hc05_reader::Context) {
+    fn hc05_reader(cx: hc05_reader::Context) {
         let rx = cx.local.hc05_rx;
-        let mut counter = cx.local.counter;
+        let counter = cx.local.counter;
         if rx.is_rx_not_empty() {
             let received = rx.read();
             match received {
@@ -255,7 +240,6 @@ mod app {
                     if *counter == 16 {
                         *counter = 0;
                         let splitted = cx.local.data_to_receive[0..16].as_chunks::<4>().0;
-                        let sensors_data = splitted.iter().map(|sensor_data| i32::from_be_bytes(*sensor_data));
                         let tension_data = TensionData {
                             t0: i32::from_be_bytes(splitted[0]),
                             t1: i32::from_be_bytes(splitted[1]),
