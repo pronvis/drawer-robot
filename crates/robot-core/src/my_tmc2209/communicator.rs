@@ -1,7 +1,7 @@
 use crate::my_tmc2209::Request;
-use embedded_hal::digital::v2::{InputPin, OutputPin};
 use rtic_sync::channel::{Receiver, Sender};
 use stm32f1xx_hal::gpio::{Dynamic, Pin, HL};
+use stm32f1xx_hal::pac::{self, gpioa::RegisterBlock};
 use tmc2209::ReadResponse;
 
 const OVERSAMPLE: u8 = 3;
@@ -106,8 +106,106 @@ where
 
         self.tx_bits_buffer = Self::add_start_and_stop_bits(self.bytes_to_send[self.tx_bytes_counter - 1]);
         self.current_state = CommunicatorState::Writing;
-        self.pin.make_push_pull_output(&mut self.cr);
-        self.pin.set_high().ok().unwrap();
+
+        // self.pin.make_push_pull_output(&mut self.cr);
+        Self::change_pin_mode_to_output_push_pull();
+
+        Self::set_pin_high();
+        // self.pin.set_high().ok().unwrap();
+    }
+
+    // First: choose register:
+    //
+    // match N {
+    //     0..=7 => {
+    //         let register = 0x00; // GPIOn_CRL
+    //         register.modify(|r, w| unsafe { w.bits(f(r.bits())) });
+    //     }
+    //     8..=15 => {
+    //         let register = 0x04; // GPIOn_CRH
+    //         register.modify(|r, w| unsafe { w.bits(f(r.bits())) });
+    //     }
+    //
+    //Second: Modifies the contents of the register by reading and then writing it.
+    //
+    //
+    // impl PinMode for Output<PushPull> {
+    //     const CNF: u32 = 0b00;
+    //     const MODE: u32 = 0b11;
+    // }
+    // let bits = (0b00 << 2) | 0b11;
+    // let current_bits = read_current_register_state(); //hope I can avoid that
+    // const OFFSET: u32 = (4 * (PIN_N as u32)) % 32;
+    // let write_to_register = (current_bits & !(0b1111 << Self::OFFSET)) | (bits << Self::OFFSET)
+    fn change_pin_mode_to_pull_up_input() {
+        let register_block = Self::get_register_block();
+        // for Output<PushPull>
+        let cnf = 0b10;
+        let mode: u32 = 0b00;
+
+        //Input<PullUp> requires changing 'Port bit set/reset register'(bsrr)
+        unsafe {
+            (*register_block).bsrr.write(|w| w.bits(1 << PIN_N));
+        }
+        Self::change_pin_mode(cnf, mode, register_block);
+    }
+
+    fn change_pin_mode_to_output_push_pull() {
+        // for Output<PushPull>
+        let cnf = 0b00;
+        let mode: u32 = 0b11;
+        Self::change_pin_mode(cnf, mode, Self::get_register_block());
+    }
+
+    fn get_register_block() -> *const RegisterBlock {
+        match PIN_C {
+            'C' => pac::GPIOC::ptr(),
+            'D' => pac::GPIOD::ptr(),
+            _ => unreachable!(),
+        }
+    }
+
+    fn change_pin_mode(cnf: u32, mode: u32, register_block: *const RegisterBlock) {
+        let offset: u32 = (4 * (PIN_N as u32)) % 32;
+        let bits = (cnf << 2) | mode;
+        unsafe {
+            match PIN_N {
+                0..=7 => {
+                    (*register_block)
+                        .crl
+                        .modify(|r, w| w.bits((r.bits() & !(0b1111 << offset)) | (bits << offset)));
+                }
+                8..=15 => {
+                    (*register_block)
+                        .crh
+                        .modify(|r, w| w.bits((r.bits() & !(0b1111 << offset)) | (bits << offset)));
+                }
+                _ => unreachable!(),
+            };
+        }
+    }
+
+    fn set_pin_high() {
+        let register_block = Self::get_register_block();
+        unsafe {
+            (*register_block).bsrr.write(|w| w.bits(1 << PIN_N));
+        }
+    }
+
+    fn set_pin_low() {
+        let register_block = Self::get_register_block();
+        unsafe {
+            (*register_block).bsrr.write(|w| w.bits(1 << (16 + PIN_N)));
+        }
+    }
+
+    fn is_pin_high() -> bool {
+        !Self::is_pin_low()
+    }
+
+    fn is_pin_low() -> bool {
+        let register_block = Self::get_register_block();
+        unsafe { (*register_block).idr.read().bits() & (1 << PIN_N) == 0 }
     }
 
     fn prepare_to_send_write_req(&mut self, data: &[u8]) {
@@ -129,9 +227,11 @@ where
             // 10 = stop, end + 8 bits
             if self.tx_bit_counter <= 10 {
                 if self.tx_bits_buffer & 1 == 1 {
-                    self.pin.set_high().ok().unwrap();
+                    // self.pin.set_high().ok().unwrap();
+                    Self::set_pin_high();
                 } else {
-                    self.pin.set_low().ok().unwrap();
+                    // self.pin.set_low().ok().unwrap();
+                    Self::set_pin_low();
                 }
                 self.tx_bits_buffer >>= 1;
                 self.tx_tick_counter = OVERSAMPLE;
@@ -174,7 +274,8 @@ where
         self.rx_tick_counter = 1;
         self.rx_buffer = 0;
         self.bytes_to_read = ReadResponse::LEN_BYTES as u8;
-        self.pin.make_pull_up_input(&mut self.cr);
+        // self.pin.make_pull_up_input(&mut self.cr);
+        Self::change_pin_mode_to_pull_up_input();
         self.bytes_read = 0;
         self.receive_buffer.fill(0);
     }
@@ -183,7 +284,8 @@ where
         self.rx_tick_counter -= 1;
         if self.rx_tick_counter <= 0 {
             // if rx_tick_counter > 0 interrupt is discarded. Only when rx_tick_counter reach 0 RX pin is considered
-            let bit_value = self.pin.is_high().ok().unwrap();
+            // let bit_value = self.pin.is_high().ok().unwrap();
+            let bit_value = Self::is_pin_high();
             if self.rx_bit_counter == -1 {
                 // rx_bit_counter = -1 :  waiting for start bit
                 if !bit_value {
@@ -252,8 +354,10 @@ where
         // The output becomes switched off four bit times after transfer of the last stop bit"
         self.bits_to_wait_after_get_response = 4 * OVERSAMPLE as u32;
         self.current_state = CommunicatorState::Nothing;
-        self.pin.make_push_pull_output(&mut self.cr);
-        self.pin.set_high().ok().unwrap();
+        // self.pin.make_push_pull_output(&mut self.cr);
+        // self.pin.set_high().ok().unwrap();
+        Self::change_pin_mode_to_output_push_pull();
+        Self::set_pin_high();
     }
 
     pub fn handle_interrupt(&mut self) {

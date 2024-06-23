@@ -42,7 +42,8 @@ impl Arm {
         }
 
         self.last_sended_tension = Some(self.tension);
-        return Some(tension_to_speed(i32_diff(self.tension, self.desired_tension.unwrap_or(0))));
+        // return Some(tension_to_speed(i32_diff(self.tension, self.desired_tension.unwrap_or(0))));
+        return Some(tension_to_speed(self.tension));
     }
 }
 
