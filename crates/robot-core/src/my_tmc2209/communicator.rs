@@ -1,9 +1,6 @@
-use crate::my_tmc2209::Request;
-use rtic_sync::channel::{Receiver, Sender};
+use crate::my_tmc2209::{manual_pin::ManualPin, Request, Tmc2209RequestConsumer, Tmc2209ResponseProducer};
 use stm32f1xx_hal::gpio::{Dynamic, Pin};
 use tmc2209::ReadResponse;
-
-use crate::my_tmc2209::manual_pin::ManualPin;
 
 const OVERSAMPLE: u8 = 3;
 //'default=8 bit times', but looks like it is too much and we skip some data if 'SWITCH_DELAY=8'
@@ -47,14 +44,14 @@ pub struct TMC2209SerialCommunicator<const PIN_C: char, const PIN_N: u8> {
 
     pin: Pin<PIN_C, PIN_N, Dynamic>,
 
-    commands_channel: Receiver<'static, Request, CHANNEL_CAPACITY>,
-    responses_channel: Sender<'static, u32, CHANNEL_CAPACITY>,
+    commands_channel: Tmc2209RequestConsumer,
+    responses_channel: Tmc2209ResponseProducer,
 }
 
 impl<const PIN_C: char, const PIN_N: u8> TMC2209SerialCommunicator<PIN_C, PIN_N> {
     pub fn new(
-        commands_channel: Receiver<'static, Request, CHANNEL_CAPACITY>,
-        responses_channel: Sender<'static, u32, CHANNEL_CAPACITY>,
+        commands_channel: Tmc2209RequestConsumer,
+        responses_channel: Tmc2209ResponseProducer,
         pin: Pin<PIN_C, PIN_N, Dynamic>,
     ) -> Self {
         Self {

@@ -2,7 +2,7 @@ mod arm;
 
 use crate::{
     ps3::{Ps3Command, Ps3DigitalCommand},
-    DisplayMemoryPool, DisplayString,
+    DisplayMemoryPool,
 };
 use arm::RobotArms;
 use heapless::pool::singleton::Box;

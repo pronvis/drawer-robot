@@ -1,5 +1,5 @@
 use super::TensionData;
-use crate::{i32_diff, tension_to_speed};
+use crate::tension_to_speed;
 
 #[derive(Eq, PartialEq)]
 enum ArmMode {

@@ -12,6 +12,8 @@
 mod app {
     use robot_core::my_tmc2209::communicator::TMC2209SerialCommunicator;
     use robot_core::my_tmc2209::configurator::TMC2209Configurator;
+    use robot_core::my_tmc2209::Tmc2209Constructor;
+    use robot_core::my_tmc2209::{Tmc2209RequestCh, Tmc2209RequestProducer, Tmc2209ResponseCh, Tmc2209ResponseConsumer};
 
     use defmt_brtt as _; // global logger
     use fugit::Duration;
@@ -33,12 +35,14 @@ mod app {
     struct Local {
         configurator: TMC2209Configurator,
         tmc2209_communicator_timer: Counter<stm32f1xx_hal::pac::TIM2, TMC2209COMMUNICATOR_CLOCK_FREQ>,
-        tmc2209_msg_sender: Sender<'static, robot_core::my_tmc2209::Request, CHANNEL_CAPACITY>,
-        tmc2209_rsp_receiver: Receiver<'static, u32, CHANNEL_CAPACITY>,
+        tmc2209_msg_sender: Tmc2209RequestProducer,
         communicator: TMC2209SerialCommunicator<'C', 10>,
     }
 
-    #[init]
+    #[init(local = [
+           tmc2209_req_ch_0: Tmc2209RequestCh = Channel::new(),
+           tmc2209_rsp_ch_0: Tmc2209ResponseCh = Channel::new(),
+    ])]
     fn init(cx: init::Context) -> (Shared, Local) {
         defmt::info!("init");
 
@@ -65,42 +69,37 @@ mod app {
         // Acquire the GPIOC peripheral
         let mut gpioc: stm32f1xx_hal::gpio::gpioc::Parts = cx.device.GPIOC.split();
 
-        let mut en = gpioc.pc7.into_push_pull_output(&mut gpioc.crl);
-        en.set_low();
-        let x_stepper_uart_pin = gpioc.pc10.into_dynamic(&mut gpioc.crh);
-
-        let mut tmc2209_communicator_timer = robot_core::get_counter(cx.device.TIM2, &clocks);
-        let tmc2209_timer_ticks = Duration::<u32, 1, TMC2209COMMUNICATOR_CLOCK_FREQ>::from_ticks(BIT_SEND_TICKS);
-        tmc2209_communicator_timer.start(tmc2209_timer_ticks).unwrap();
-        defmt::debug!("tmc2209_communicator_timer period: {} nanos", tmc2209_timer_ticks.to_nanos());
-        tmc2209_communicator_timer.listen(Event::Update);
-
         let systick_mono_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, MAIN_CLOCK_FREQ, systick_mono_token);
 
-        let (tmc2209_msg_sender, tmc2209_msg_receiver) = make_channel!(robot_core::my_tmc2209::Request, CHANNEL_CAPACITY);
-        let (tmc2209_rsp_sender, tmc2209_rsp_receiver) = make_channel!(u32, CHANNEL_CAPACITY);
-
-        let communicator = TMC2209SerialCommunicator::new(tmc2209_msg_receiver, tmc2209_rsp_sender, x_stepper_uart_pin, gpioc.crh);
-        let configurator = TMC2209Configurator::new(tmc2209_msg_sender.clone());
+        // TMC2209
+        let en = gpioc.pc7.into_push_pull_output(&mut gpioc.crl);
+        let x_stepper_uart_pin = gpioc.pc10.into_dynamic(&mut gpioc.crh);
+        let tmc2209_0 = Tmc2209Constructor::new(
+            en,
+            x_stepper_uart_pin,
+            cx.device.TIM2,
+            &clocks,
+            cx.local.tmc2209_req_ch_0,
+            cx.local.tmc2209_rsp_ch_0,
+        );
 
         stepper_conf_task::spawn().ok();
         stepper_change_speed_task::spawn().ok();
         (
             Shared {},
             Local {
-                configurator,
-                tmc2209_communicator_timer,
-                tmc2209_msg_sender,
-                tmc2209_rsp_receiver,
-                communicator,
+                configurator: tmc2209_0.configurator,
+                tmc2209_communicator_timer: tmc2209_0.timer,
+                tmc2209_msg_sender: tmc2209_0.req_sender,
+                communicator: tmc2209_0.communicator,
             },
         )
     }
 
-    #[task(priority = 1, local = [configurator, tmc2209_rsp_receiver])]
+    #[task(priority = 1, local = [configurator])]
     async fn stepper_conf_task(cx: stepper_conf_task::Context) {
-        let setup_res = cx.local.configurator.setup(cx.local.tmc2209_rsp_receiver).await;
+        let setup_res = cx.local.configurator.setup().await;
         match setup_res {
             Ok(_) => {
                 defmt::debug!("Stepper driver configured successfully!");

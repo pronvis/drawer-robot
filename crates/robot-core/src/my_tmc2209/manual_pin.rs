@@ -50,6 +50,29 @@ impl<const PIN_C: char, const PIN_N: u8> ManualPin<PIN_C, PIN_N> for Pin<PIN_C, 
         }
     }
 
+    // First: choose register:
+    //
+    // match N {
+    //     0..=7 => {
+    //         let register = 0x00; // GPIOn_CRL
+    //         register.modify(|r, w| unsafe { w.bits(f(r.bits())) });
+    //     }
+    //     8..=15 => {
+    //         let register = 0x04; // GPIOn_CRH
+    //         register.modify(|r, w| unsafe { w.bits(f(r.bits())) });
+    //     }
+    //
+    //Second: Modifies the contents of the register by reading and then writing it.
+    //
+    //
+    // impl PinMode for Output<PushPull> {
+    //     const CNF: u32 = 0b00;
+    //     const MODE: u32 = 0b11;
+    // }
+    // let bits = (0b00 << 2) | 0b11;
+    // let current_bits = read_current_register_state(); //hope I can avoid that
+    // const OFFSET: u32 = (4 * (PIN_N as u32)) % 32;
+    // let write_to_register = (current_bits & !(0b1111 << Self::OFFSET)) | (bits << Self::OFFSET)
     fn change_mode(&self, cnf: u32, mode: u32, register_block: *const RegisterBlock) {
         let offset: u32 = (4 * (PIN_N as u32)) % 32;
         let bits = (cnf << 2) | mode;
