@@ -302,7 +302,7 @@ mod app {
                 Ok(read) => {
                     if read == robot_core::COMPANION_SYNC {
                         if *counter != 0 {
-                            defmt::debug!("receive SYNC byte when counter = {}", *counter);
+                            defmt::warn!("receive SYNC byte when counter = {}", *counter);
                         }
                         *counter = 0;
                     } else {
@@ -320,14 +320,22 @@ mod app {
                             t3: i32::from_be_bytes(splitted[3]),
                         };
 
+                        defmt::debug!(
+                            "get tension data: {}:{}:{}:{}",
+                            tension_data.t0,
+                            tension_data.t1,
+                            tension_data.t2,
+                            tension_data.t3
+                        );
                         cx.local.tension_data_sender.try_send(tension_data).err().map(|err| {
-                            defmt::debug!("fail to send tension_data to tension_data_sender: {:?}", defmt::Debug2Format(&err));
+                            defmt::error!("fail to send tension_data to tension_data_sender: {:?}", defmt::Debug2Format(&err));
                         });
                     }
                 }
 
                 Err(err) => {
-                    defmt::debug!("read err: {:?}", defmt::Debug2Format(&err));
+                    defmt::error!("read err: {:?}", defmt::Debug2Format(&err));
+                    rx.clear_idle_interrupt();
                 }
             }
         }

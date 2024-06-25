@@ -33,25 +33,27 @@ mod app {
     const ADS1256_TIMER_CLOCK_FREQ: u32 = 2_000_000;
     const DYMH_106_RESP_FREQ: u32 = 1_000;
 
+    type Ads1256 = ADS1256<
+        Spi<
+            stm32f1xx_hal::pac::SPI1,
+            Spi1NoRemap,
+            (
+                stm32f1xx_hal::gpio::Pin<'A', 5, stm32f1xx_hal::gpio::Alternate>,
+                stm32f1xx_hal::gpio::Pin<'A', 6>,
+                stm32f1xx_hal::gpio::Pin<'A', 7, stm32f1xx_hal::gpio::Alternate>,
+            ),
+            u8,
+        >,
+        stm32f1xx_hal::gpio::Pin<'A', 4, stm32f1xx_hal::gpio::Output>,
+        stm32f1xx_hal::gpio::Pin<'A', 3, stm32f1xx_hal::gpio::Output>,
+        stm32f1xx_hal::gpio::Pin<'A', 2, stm32f1xx_hal::gpio::Input<PullUp>>,
+        Delay<stm32f1xx_hal::pac::TIM3, ADS1256_TIMER_CLOCK_FREQ>,
+    >;
+
     #[shared]
     struct Shared {
         companion_message: CompanionMessage,
-        ads1256: ADS1256<
-            Spi<
-                stm32f1xx_hal::pac::SPI1,
-                Spi1NoRemap,
-                (
-                    stm32f1xx_hal::gpio::Pin<'A', 5, stm32f1xx_hal::gpio::Alternate>,
-                    stm32f1xx_hal::gpio::Pin<'A', 6>,
-                    stm32f1xx_hal::gpio::Pin<'A', 7, stm32f1xx_hal::gpio::Alternate>,
-                ),
-                u8,
-            >,
-            stm32f1xx_hal::gpio::Pin<'A', 4, stm32f1xx_hal::gpio::Output>,
-            stm32f1xx_hal::gpio::Pin<'A', 3, stm32f1xx_hal::gpio::Output>,
-            stm32f1xx_hal::gpio::Pin<'A', 2, stm32f1xx_hal::gpio::Input<PullUp>>,
-            Delay<stm32f1xx_hal::pac::TIM3, 2000000>,
-        >,
+        ads1256: Ads1256,
     }
 
     #[local]
@@ -122,7 +124,7 @@ mod app {
         let mut ads1256 = ADS1256::new(ads1256_spi, cs_pin, reset_pin, data_ready_pin, timer.delay()).unwrap();
 
         //DYMH_106_RESP_FREQ is 1_000
-        let config = Ads1256Config::new(SamplingRate::Sps2000, PGA::Gain64);
+        let config = Ads1256Config::new(SamplingRate::Sps30000, PGA::Gain64);
         ads1256.set_config(&config).unwrap();
 
         // Configure the USART1:
@@ -152,6 +154,7 @@ mod app {
 
         // Timer to send data via bluetooth
         let mut send_timer = robot_core::get_counter(cx.device.TIM1, &clocks);
+        //TODO: 30 times per second... looks like not enough
         send_timer.start(30.millis()).unwrap();
         send_timer.listen(Event::Update);
 
@@ -193,7 +196,7 @@ mod app {
         }
     }
 
-    #[task(binds = TIM2, priority = 10, local = [ read_timer, counter: u32 = 0, max: i32 = i32::MIN, min: i32 = i32::MAX, first_start: bool = true, last_elems: i32 = 0, last_elems_counter: u32 = 0 ], shared = [ads1256, companion_message])]
+    #[task(binds = TIM2, priority = 10, local = [ read_timer, counter: u32 = 0, max: i32 = i32::MIN, min: i32 = i32::MAX, first_start: bool = true ], shared = [ads1256, companion_message])]
     fn ads1256_read(mut cx: ads1256_read::Context) {
         cx.local.read_timer.clear_interrupt(Event::Update);
         if *cx.local.first_start {
@@ -203,56 +206,53 @@ mod app {
             *cx.local.first_start = false;
         }
 
-        let last_elems_counter: u32 = *cx.local.last_elems_counter;
-        let mut last_elems: i32 = *cx.local.last_elems;
-
-        let slice_size = 100;
-        if last_elems_counter == 5000 {
-            defmt::debug!("mean: {}", last_elems as f32 / slice_size as f32);
-            *cx.local.last_elems_counter = 0;
-        } else {
-            *cx.local.last_elems_counter += 1;
-        }
-
-        if last_elems_counter % slice_size == 0 {
-            *cx.local.last_elems = 0;
-        }
-
-        //TODO: I have only one connected sensor for now
-        let code_res = cx
-            .shared
-            .ads1256
-            .lock(|ads1256| ads1256.read_channel(Channel::AIN0, Channel::AIN1));
-
         let mut buffer: [i32; 4] = [
             DEFAULT_DYMH06_VALUE,
             DEFAULT_DYMH06_VALUE,
             DEFAULT_DYMH06_VALUE,
             DEFAULT_DYMH06_VALUE,
         ];
+
+        let first_channel_res = cx.shared.ads1256.lock(|ads1256| {
+            let res = read_from_ads_into_buffer(ads1256, 0, &mut buffer);
+            read_from_ads_into_buffer(ads1256, 1, &mut buffer);
+            read_from_ads_into_buffer(ads1256, 2, &mut buffer);
+            read_from_ads_into_buffer(ads1256, 3, &mut buffer);
+            res
+        });
+        // cx.shared.ads1256.lock(|ads1256| {
+        //     read_from_ads_into_buffer(ads1256, 1, &mut buffer);
+        // });
+        // cx.shared.ads1256.lock(|ads1256| {
+        //     read_from_ads_into_buffer(ads1256, 2, &mut buffer);
+        // });
+        // cx.shared.ads1256.lock(|ads1256| {
+        //     read_from_ads_into_buffer(ads1256, 3, &mut buffer);
+        // });
+
+        //INFO: Debug related
+        // ================================
         let mut current: i32 = 0;
-        if let Ok(result) = code_res {
-            *cx.local.max = (*cx.local.max).max(result);
-            *cx.local.min = (*cx.local.min).min(result);
-            current = result;
-            *cx.local.last_elems += current;
-            buffer[0] = result.dymh_norm_val();
-        } else {
-            defmt::error!("fail to read from ads1256");
+        if first_channel_res != DEFAULT_DYMH06_VALUE {
+            *cx.local.max = (*cx.local.max).max(first_channel_res);
+            *cx.local.min = (*cx.local.min).min(first_channel_res);
+            current = first_channel_res;
         }
 
         if *cx.local.counter == DYMH_106_RESP_FREQ {
             *cx.local.counter = 0;
             defmt::debug!(
-                "max: {}\tmin: {}\tcurrent: {}\tcurrent normalized: {}",
+                "max: {}\tmin: {}\tcurrent: {}\tcurrent normalized: {}\t\t\tbuffer: {:?}",
                 cx.local.max,
                 cx.local.min,
                 current,
-                current.dymh_norm_val()
+                current.dymh_norm_val(),
+                buffer
             );
         } else {
             *cx.local.counter += 1;
         }
+        // ================================
 
         cx.shared.companion_message.lock(|cm| {
             cm.load_sensor_0 = buffer[0];
@@ -260,6 +260,25 @@ mod app {
             cm.load_sensor_2 = buffer[2];
             cm.load_sensor_3 = buffer[3];
         });
+    }
+
+    fn read_from_ads_into_buffer(ads1256: &mut Ads1256, channel: usize, buffer: &mut [i32; 4]) -> i32 {
+        let (channel_0, channel_1) = match channel {
+            0 => (Channel::AIN0, Channel::AIN1),
+            1 => (Channel::AIN2, Channel::AIN3),
+            2 => (Channel::AIN4, Channel::AIN5),
+            3 => (Channel::AIN6, Channel::AIN7),
+            _ => panic!("wrong channel"),
+        };
+
+        ads1256.write_register(ads1256::Register::MUX, channel_0.bits() << 4 | channel_1.bits());
+        if let Ok(result) = ads1256.read_channel(channel_0, channel_1) {
+            buffer[channel] = result.dymh_norm_val();
+            return result;
+        } else {
+            defmt::error!("fail to read from ads1256 channel: {}", channel);
+            return DEFAULT_DYMH06_VALUE;
+        }
     }
 
     #[task(binds = TIM1_UP, priority = 5, local = [ hc05_tx, send_timer, curr_tensor_0_val: i32 = 0 ], shared = [companion_message])]
@@ -273,29 +292,36 @@ mod app {
         let curr_tensor_0_val = companion_message.load_sensor_0;
         let tensor_diff = robot_core::i32_diff(curr_tensor_0_val, *prev_tensor_0_val);
 
-        if tensor_diff >= 100 {
-            // defmt::debug!("sending data, diff: {}, curr: {}", tensor_diff, curr_tensor_0_val);
-            *prev_tensor_0_val = curr_tensor_0_val;
+        //TODO: remove 'tensor_diff' condition?
+        // if tensor_diff >= 100 {
+        // defmt::debug!("sending data, diff: {}, curr: {}", tensor_diff, curr_tensor_0_val);
+        *prev_tensor_0_val = curr_tensor_0_val;
 
-            let mut data_to_send: [u8; 17] = [0; 17];
-            data_to_send[0] = robot_core::COMPANION_SYNC;
-            //here I send only 0 sensor data, cause it is only one attached
-            let sensor_0 = curr_tensor_0_val.to_be_bytes();
-            for i in 0..4 {
-                data_to_send[i + 1] = sensor_0[i];
-            }
+        let mut data_to_send: [u8; 17] = [0; 17];
+        data_to_send[0] = robot_core::COMPANION_SYNC;
+        write_sensor_data(&mut data_to_send, companion_message.load_sensor_0.to_be_bytes(), 1);
+        write_sensor_data(&mut data_to_send, companion_message.load_sensor_1.to_be_bytes(), 5);
+        write_sensor_data(&mut data_to_send, companion_message.load_sensor_2.to_be_bytes(), 9);
+        write_sensor_data(&mut data_to_send, companion_message.load_sensor_3.to_be_bytes(), 13);
 
-            let mut tx = cx.local.hc05_tx;
-            for elem in data_to_send.iter() {
-                let mut write_res = tx.write(*elem);
-                while write_res.is_err() {
-                    //TODO: Make it async
-                    for _ in 0..72 {
-                        cortex_m::asm::nop();
-                    }
-                    write_res = tx.write(*elem);
-                }
-            }
+        let mut tx = cx.local.hc05_tx;
+        tx.bwrite_all(&data_to_send);
+        //for elem in data_to_send.iter() {
+        //    let mut write_res = tx.write(*elem);
+        //    while write_res.is_err() {
+        //        //TODO: Make it async
+        //        for _ in 0..72 {
+        //            cortex_m::asm::nop();
+        //        }
+        //        write_res = tx.write(*elem);
+        //    }
+        //}
+        // }
+    }
+
+    fn write_sensor_data(data_to_send: &mut [u8; 17], sensor_data: [u8; 4], start_index: usize) {
+        for i in 0..4 {
+            data_to_send[start_index + i] = sensor_data[i];
         }
     }
 
@@ -310,19 +336,20 @@ mod app {
                         cx.shared.ads1256.lock(|ads1256| {
                             let send_res = ads1256.init();
                             match send_res {
-                                Err(err) => defmt::error!("ads1256: fail to send SELFCAL message"),
-                                Ok(_) => {
-                                    let mut self_cal_finish = false;
-                                    while !self_cal_finish {
-                                        let is_rdy = ads1256.wait_for_ready();
-                                        if let Ok(is_rdy) = is_rdy {
-                                            self_cal_finish = is_rdy;
-                                            if is_rdy {
-                                                defmt::debug!("ads1256: SELFCAL finished");
-                                            }
-                                        }
-                                    }
-                                }
+                                Err(_) => defmt::error!("ads1256: fail to send SELFCAL message"),
+                                Ok(_) => defmt::debug!("ads1256: SELFCAL finished"),
+                                // {
+                                //     let mut self_cal_finish = false;
+                                //     while !self_cal_finish {
+                                //         let is_rdy = ads1256.wait_for_ready();
+                                //         if let Ok(is_rdy) = is_rdy {
+                                //             self_cal_finish = is_rdy;
+                                //             if is_rdy {
+                                //                 defmt::debug!("ads1256: SELFCAL finished");
+                                //             }
+                                //         }
+                                //     }
+                                // }
                             }
                         });
                     }
