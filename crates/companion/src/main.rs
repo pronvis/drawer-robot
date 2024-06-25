@@ -31,8 +31,17 @@ mod app {
     const READ_TIMER_CLOCK_FREQ: u32 = 10_000;
     const SEND_TIMER_CLOCK_FREQ: u32 = 10_000;
     const ADS1256_TIMER_CLOCK_FREQ: u32 = 2_000_000;
-    const DYMH_106_RESP_FREQ: u32 = 1_000;
+    const DYMH_106_RESP_FREQ: u32 = 100;
 
+    //NOTE:
+    //INFO:
+    //WARN:
+    //TODO: configure 3 parameters:
+    // 1) DYMH_106_RESP_FREQ - freq that you get the data from ads1256 (for all 4 sensors)
+    // 2) ads1256 'SamplingRate' - small value gets small noise, but require more time to get data.
+    // 3) 'send_timer' delay - should be the same as DYMH_106_RESP_FREQ. Cause sending with the
+    //    same rate as getting data. Current value - 30ms is too small!
+    // 4) HC-05 Baud Rate - you cant send data fast with small baud rate!
     type Ads1256 = ADS1256<
         Spi<
             stm32f1xx_hal::pac::SPI1,
@@ -124,7 +133,7 @@ mod app {
         let mut ads1256 = ADS1256::new(ads1256_spi, cs_pin, reset_pin, data_ready_pin, timer.delay()).unwrap();
 
         //DYMH_106_RESP_FREQ is 1_000
-        let config = Ads1256Config::new(SamplingRate::Sps30000, PGA::Gain64);
+        let config = Ads1256Config::new(SamplingRate::Sps3750, PGA::Gain64);
         ads1256.set_config(&config).unwrap();
 
         // Configure the USART1:
@@ -133,6 +142,11 @@ mod app {
         // hc-05 TX - PA10
         let hc05_tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
         let hc05_rx = gpioa.pa10.into_pull_up_input(&mut gpioa.crh);
+        // 115200 -> 115200 bits/s
+        // 230400 -> 230400 bits/s
+        // 460800 -> 460800 bits/s
+        // 921600 -> 921600 bits/s
+        // 1382400 -> 1382400 bits/s
         let mut serial_usart1 = Serial::new(
             cx.device.USART1,
             (hc05_tx, hc05_rx),
@@ -220,15 +234,6 @@ mod app {
             read_from_ads_into_buffer(ads1256, 3, &mut buffer);
             res
         });
-        // cx.shared.ads1256.lock(|ads1256| {
-        //     read_from_ads_into_buffer(ads1256, 1, &mut buffer);
-        // });
-        // cx.shared.ads1256.lock(|ads1256| {
-        //     read_from_ads_into_buffer(ads1256, 2, &mut buffer);
-        // });
-        // cx.shared.ads1256.lock(|ads1256| {
-        //     read_from_ads_into_buffer(ads1256, 3, &mut buffer);
-        // });
 
         //INFO: Debug related
         // ================================
@@ -271,7 +276,6 @@ mod app {
             _ => panic!("wrong channel"),
         };
 
-        ads1256.write_register(ads1256::Register::MUX, channel_0.bits() << 4 | channel_1.bits());
         if let Ok(result) = ads1256.read_channel(channel_0, channel_1) {
             buffer[channel] = result.dymh_norm_val();
             return result;
@@ -292,7 +296,7 @@ mod app {
         let curr_tensor_0_val = companion_message.load_sensor_0;
         let tensor_diff = robot_core::i32_diff(curr_tensor_0_val, *prev_tensor_0_val);
 
-        //TODO: remove 'tensor_diff' condition?
+        //TODO: remove 'tensor_diff' condition???
         // if tensor_diff >= 100 {
         // defmt::debug!("sending data, diff: {}, curr: {}", tensor_diff, curr_tensor_0_val);
         *prev_tensor_0_val = curr_tensor_0_val;
@@ -306,17 +310,6 @@ mod app {
 
         let mut tx = cx.local.hc05_tx;
         tx.bwrite_all(&data_to_send);
-        //for elem in data_to_send.iter() {
-        //    let mut write_res = tx.write(*elem);
-        //    while write_res.is_err() {
-        //        //TODO: Make it async
-        //        for _ in 0..72 {
-        //            cortex_m::asm::nop();
-        //        }
-        //        write_res = tx.write(*elem);
-        //    }
-        //}
-        // }
     }
 
     fn write_sensor_data(data_to_send: &mut [u8; 17], sensor_data: [u8; 4], start_index: usize) {
@@ -338,18 +331,6 @@ mod app {
                             match send_res {
                                 Err(_) => defmt::error!("ads1256: fail to send SELFCAL message"),
                                 Ok(_) => defmt::debug!("ads1256: SELFCAL finished"),
-                                // {
-                                //     let mut self_cal_finish = false;
-                                //     while !self_cal_finish {
-                                //         let is_rdy = ads1256.wait_for_ready();
-                                //         if let Ok(is_rdy) = is_rdy {
-                                //             self_cal_finish = is_rdy;
-                                //             if is_rdy {
-                                //                 defmt::debug!("ads1256: SELFCAL finished");
-                                //             }
-                                //         }
-                                //     }
-                                // }
                             }
                         });
                     }
