@@ -101,15 +101,7 @@ pub fn get_counter<TIM: timer::Instance, const FREQ: u32>(tim: TIM, clocks: &Clo
 }
 
 pub const DEFAULT_DYMH06_VALUE: i32 = i32::MIN;
-
 pub const COMPANION_SYNC: u8 = 0b01000101;
-#[derive(Default, Copy, Clone)]
-pub struct CompanionMessage {
-    pub load_sensor_0: i32,
-    pub load_sensor_1: i32,
-    pub load_sensor_2: i32,
-    pub load_sensor_3: i32,
-}
 
 const TENSOR_CONVERSION_RATE: f32 = 0.035274;
 pub fn tensor_to_kg(data: i32) -> f32 {

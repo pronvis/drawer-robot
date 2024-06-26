@@ -25,6 +25,14 @@ mod app {
     const TIMER_CLOCK_FREQ: u32 = 72_000;
     const HX711_TIMER_CLOCK_FREQ: u32 = 2_000_000;
 
+    #[derive(Default, Copy, Clone)]
+    pub struct CompanionMessage {
+        pub load_sensor_0: i32,
+        pub load_sensor_1: i32,
+        pub load_sensor_2: i32,
+        pub load_sensor_3: i32,
+    }
+
     #[shared]
     struct Shared {
         companion_message: CompanionMessage,

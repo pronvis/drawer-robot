@@ -20,7 +20,7 @@ pub type Ps3CommandsReceiver = Receiver<'static, Ps3Command, PS3_CHANNEL_CAPACIT
 pub type TensionDataReceiver = Receiver<'static, TensionData, TENSION_DATA_CHANNEL_CAPACITY>;
 pub type Tmc2209CommandsSender = Sender<'static, Tmc2209Request, COMMUNICATOR_CHANNEL_CAPACITY>;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct TensionData {
     pub t0: i32,
     pub t1: i32,

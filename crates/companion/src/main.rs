@@ -15,9 +15,8 @@ mod app {
     use ads1256::{Channel, Config as Ads1256Config, SamplingRate, ADS1256, PGA};
     use defmt_brtt as _; // global logger
     use embedded_hal::digital::OutputPin;
-    use robot_core::CompanionMessage;
-    use robot_core::DEFAULT_DYMH06_VALUE;
-    use robot_core::*;
+    use heapless::spsc::{Consumer, Producer, Queue};
+    use robot_core::{robot::TensionData, DEFAULT_DYMH06_VALUE, *};
     use stm32f1xx_hal::{
         gpio::{gpioa, Alternate, Output, Pin, PullUp},
         pac::SPI1,
@@ -32,17 +31,20 @@ mod app {
     const SEND_TIMER_CLOCK_FREQ: u32 = 10_000;
     const ADS1256_TIMER_CLOCK_FREQ: u32 = 2_000_000;
     const DYMH_106_REQ_FREQ: u32 = 300;
+    const DYMH_106_QUEUE_SIZE: usize = 15;
 
-    //NOTE:
-    //INFO:
-    //WARN:
-    //TODO: configure 3 parameters:
+    //NOTE: To configure dymh106 data sending frequency think about those elements:
     // 1) DYMH_106_RESP_FREQ - freq that you get the data from ads1256 (for all 4 sensors)
     // 2) ads1256 'SamplingRate' - small value gets small noise, but require more time to get data.
-    // 3) 'send_timer' delay - should be the same as DYMH_106_RESP_FREQ. Cause sending with the
-    //    same rate as getting data. Current value - 30ms is too small!
-    // 4) HC-05 Baud Rate - you cant send data fast with small baud rate!
-    // 5) Add noise filter based on Normal Distribution
+    // 3) 'send_timer' delay. Current value - 30ms is too small! But to lower it I need to change
+    //    HC-05 BaudRate.
+    // 4) HC-05 Baud Rate - you cant send data fast with small baud rate! Current hc-05 max value 115200 for some reason (another one works fine on 1382400)
+    // 5) DYMH_106_QUEUE_SIZE - queue to buffering DYMH106 data.
+    // Current values:
+    // DYMH_106_REQ_FREQ = 300
+    // send_timer.delay = 30millis
+    // DYMH_106_QUEUE_SIZE = 15
+    // DYMH_106_REQ_FREQ / send_timer.delay = 10. Means averaging on ~10 elements in cache.
     type Ads1256 = ADS1256<
         Spi<
             stm32f1xx_hal::pac::SPI1,
@@ -62,7 +64,6 @@ mod app {
 
     #[shared]
     struct Shared {
-        companion_message: CompanionMessage,
         ads1256: Ads1256,
     }
 
@@ -72,9 +73,11 @@ mod app {
         hc05_rx: stm32f1xx_hal::serial::Rx1,
         send_timer: Counter<stm32f1xx_hal::pac::TIM1, SEND_TIMER_CLOCK_FREQ>,
         read_timer: Counter<stm32f1xx_hal::pac::TIM2, READ_TIMER_CLOCK_FREQ>,
+        dymh_106_data_producer: Producer<'static, TensionData, DYMH_106_QUEUE_SIZE>,
+        dymh_106_data_consumer: Consumer<'static, TensionData, DYMH_106_QUEUE_SIZE>,
     }
 
-    #[init]
+    #[init(local = [dymh106_queue: Queue<TensionData, DYMH_106_QUEUE_SIZE> = Queue::new()])]
     fn init(cx: init::Context) -> (Shared, Local) {
         defmt::info!("init");
 
@@ -172,16 +175,16 @@ mod app {
         send_timer.start(30.millis()).unwrap();
         send_timer.listen(Event::Update);
 
+        let (dymh_106_data_producer, dymh_106_data_consumer) = cx.local.dymh106_queue.split();
         (
-            Shared {
-                companion_message: Default::default(),
-                ads1256,
-            },
+            Shared { ads1256 },
             Local {
                 read_timer,
                 hc05_tx,
                 hc05_rx,
                 send_timer,
+                dymh_106_data_producer,
+                dymh_106_data_consumer,
             },
         )
     }
@@ -189,28 +192,44 @@ mod app {
     //for PGA::Gain64
     trait DymhVal {
         //global max & min possible values from sensor
-        const max_val: i32 = 50_000;
-        const min_val: i32 = -100_000;
+        //calculated based on possible Nema17 Speed which is calculated
+        //by multiply DymhValue on 10
+        const max_val: i32 = 80_000;
+        const min_val: i32 = -80_000;
+
+        const default_min: i32 = -18000;
+        const default_max: i32 = -12000;
+
+        fn apply_default_min_max(self) -> i32;
         fn dymh_norm_val(self) -> i32;
     }
 
-    const dymh_default_min: i32 = -18000;
-    const dymh_default_max: i32 = -12000;
     impl DymhVal for i32 {
-        fn dymh_norm_val(self) -> i32 {
-            if self <= dymh_default_max && self >= dymh_default_min {
+        fn apply_default_min_max(self) -> i32 {
+            if self <= Self::default_max && self >= Self::default_min {
                 return 0;
             }
 
-            if self < dymh_default_min {
-                return self + (dymh_default_min * -1);
+            if self < Self::default_min {
+                return self + (Self::default_min * -1);
             }
 
-            return self + (dymh_default_max * -1);
+            return self + (Self::default_max * -1);
+        }
+
+        fn dymh_norm_val(self) -> i32 {
+            let default_applied = self.apply_default_min_max();
+            if default_applied >= Self::max_val {
+                return Self::max_val;
+            } else if default_applied <= Self::min_val {
+                return Self::min_val;
+            }
+
+            default_applied
         }
     }
 
-    #[task(binds = TIM2, priority = 10, local = [ read_timer, counter: u32 = 0, max: i32 = i32::MIN, min: i32 = i32::MAX, first_start: bool = true ], shared = [ads1256, companion_message])]
+    #[task(binds = TIM2, priority = 10, local = [ read_timer, dymh_106_data_producer, counter: u32 = 0, max: i32 = i32::MIN, min: i32 = i32::MAX, first_start: bool = true ], shared = [ads1256])]
     fn ads1256_read(mut cx: ads1256_read::Context) {
         cx.local.read_timer.clear_interrupt(Event::Update);
         if *cx.local.first_start {
@@ -258,13 +277,15 @@ mod app {
             *cx.local.counter += 1;
         }
         // ================================
-
-        cx.shared.companion_message.lock(|cm| {
-            cm.load_sensor_0 = buffer[0];
-            cm.load_sensor_1 = buffer[1];
-            cm.load_sensor_2 = buffer[2];
-            cm.load_sensor_3 = buffer[3];
-        });
+        cx.local
+            .dymh_106_data_producer
+            .enqueue(TensionData {
+                t0: buffer[0],
+                t1: buffer[1],
+                t2: buffer[2],
+                t3: buffer[3],
+            })
+            .unwrap();
     }
 
     fn read_from_ads_into_buffer(ads1256: &mut Ads1256, channel: usize, buffer: &mut [i32; 4]) -> i32 {
@@ -285,31 +306,68 @@ mod app {
         }
     }
 
-    #[task(binds = TIM1_UP, priority = 5, local = [ hc05_tx, send_timer, curr_tensor_0_val: i32 = 0 ], shared = [companion_message])]
+    #[task(binds = TIM1_UP, priority = 5, local = [ hc05_tx, send_timer, dymh_106_data_consumer, prev_tension_data: TensionData = TensionData { t0: 0, t1: 0, t2: 0, t3: 0 } ])]
     fn hc05_send(mut cx: hc05_send::Context) {
         cx.local.send_timer.clear_interrupt(Event::Update);
 
-        let companion_message = cx.shared.companion_message.lock(|cm| *cm);
+        let elems_count = cx.local.dymh_106_data_consumer.len() as i32;
+        let mut t0: i32 = 0;
+        let mut t1: i32 = 0;
+        let mut t2: i32 = 0;
+        let mut t3: i32 = 0;
 
-        //lets try to send data only if sensor update data at least for 100gr
-        let prev_tensor_0_val: &mut i32 = cx.local.curr_tensor_0_val;
-        let curr_tensor_0_val = companion_message.load_sensor_0;
-        let tensor_diff = robot_core::i32_diff(curr_tensor_0_val, *prev_tensor_0_val);
+        // let mut x: [i32; 10] = [0; 10];
+        // let mut i: usize = 0;
+        while let Some(data) = cx.local.dymh_106_data_consumer.dequeue() {
+            // x[i] = data.t0;
+            // i += 1;
 
-        //TODO: remove 'tensor_diff' condition???
-        // if tensor_diff >= 100 {
-        // defmt::debug!("sending data, diff: {}, curr: {}", tensor_diff, curr_tensor_0_val);
-        *prev_tensor_0_val = curr_tensor_0_val;
+            t0 += data.t0;
+            t1 += data.t1;
+            t2 += data.t2;
+            t3 += data.t3;
+        }
 
-        let mut data_to_send: [u8; 17] = [0; 17];
-        data_to_send[0] = robot_core::COMPANION_SYNC;
-        write_sensor_data(&mut data_to_send, companion_message.load_sensor_0.to_be_bytes(), 1);
-        write_sensor_data(&mut data_to_send, companion_message.load_sensor_1.to_be_bytes(), 5);
-        write_sensor_data(&mut data_to_send, companion_message.load_sensor_2.to_be_bytes(), 9);
-        write_sensor_data(&mut data_to_send, companion_message.load_sensor_3.to_be_bytes(), 13);
+        let curr_tension_data = TensionData {
+            t0: t0 / elems_count,
+            t1: t1 / elems_count,
+            t2: t2 / elems_count,
+            t3: t3 / elems_count,
+        };
 
-        let mut tx = cx.local.hc05_tx;
-        tx.bwrite_all(&data_to_send);
+        // if curr_tension_data.t0 != 0 {
+        //     defmt::debug!("elems: {:?}", x);
+        // }
+
+        let prev_tension_data: &mut TensionData = cx.local.prev_tension_data;
+        let mut tensor_diff = robot_core::i32_diff(curr_tension_data.t0, prev_tension_data.t0);
+        tensor_diff = i32::max(tensor_diff, robot_core::i32_diff(curr_tension_data.t1, prev_tension_data.t1));
+        tensor_diff = i32::max(tensor_diff, robot_core::i32_diff(curr_tension_data.t2, prev_tension_data.t2));
+        tensor_diff = i32::max(tensor_diff, robot_core::i32_diff(curr_tension_data.t3, prev_tension_data.t3));
+
+        *prev_tension_data = curr_tension_data.clone();
+
+        //lets try to send data only if sensor update data at least for X
+        if tensor_diff >= 1_00 {
+            // defmt::debug!(
+            //     "sending data, max diff: {}, curr: t0 = {}, t1 = {}, t2 = {}, t3 = {}",
+            //     tensor_diff,
+            //     curr_tension_data.t0,
+            //     curr_tension_data.t1,
+            //     curr_tension_data.t2,
+            //     curr_tension_data.t3
+            // );
+
+            let mut data_to_send: [u8; 17] = [0; 17];
+            data_to_send[0] = robot_core::COMPANION_SYNC;
+            write_sensor_data(&mut data_to_send, curr_tension_data.t0.to_be_bytes(), 1);
+            write_sensor_data(&mut data_to_send, curr_tension_data.t1.to_be_bytes(), 5);
+            write_sensor_data(&mut data_to_send, curr_tension_data.t2.to_be_bytes(), 9);
+            write_sensor_data(&mut data_to_send, curr_tension_data.t3.to_be_bytes(), 13);
+
+            let mut tx = cx.local.hc05_tx;
+            tx.bwrite_all(&data_to_send);
+        }
     }
 
     fn write_sensor_data(data_to_send: &mut [u8; 17], sensor_data: [u8; 4], start_index: usize) {
