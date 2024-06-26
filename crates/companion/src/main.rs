@@ -31,7 +31,7 @@ mod app {
     const READ_TIMER_CLOCK_FREQ: u32 = 10_000;
     const SEND_TIMER_CLOCK_FREQ: u32 = 10_000;
     const ADS1256_TIMER_CLOCK_FREQ: u32 = 2_000_000;
-    const DYMH_106_RESP_FREQ: u32 = 100;
+    const DYMH_106_REQ_FREQ: u32 = 300;
 
     //NOTE:
     //INFO:
@@ -42,6 +42,7 @@ mod app {
     // 3) 'send_timer' delay - should be the same as DYMH_106_RESP_FREQ. Cause sending with the
     //    same rate as getting data. Current value - 30ms is too small!
     // 4) HC-05 Baud Rate - you cant send data fast with small baud rate!
+    // 5) Add noise filter based on Normal Distribution
     type Ads1256 = ADS1256<
         Spi<
             stm32f1xx_hal::pac::SPI1,
@@ -132,8 +133,7 @@ mod app {
         let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM3, ADS1256_TIMER_CLOCK_FREQ>::new(cx.device.TIM3, &clocks);
         let mut ads1256 = ADS1256::new(ads1256_spi, cs_pin, reset_pin, data_ready_pin, timer.delay()).unwrap();
 
-        //DYMH_106_RESP_FREQ is 1_000
-        let config = Ads1256Config::new(SamplingRate::Sps3750, PGA::Gain64);
+        let config = Ads1256Config::new(SamplingRate::Sps2000, PGA::Gain64);
         ads1256.set_config(&config).unwrap();
 
         // Configure the USART1:
@@ -163,7 +163,7 @@ mod app {
 
         // Timer to read from ADS1256
         let mut read_timer = robot_core::get_counter(cx.device.TIM2, &clocks);
-        read_timer.start(DYMH_106_RESP_FREQ.Hz::<1, 1>().into_duration()).unwrap();
+        read_timer.start(DYMH_106_REQ_FREQ.Hz::<1, 1>().into_duration()).unwrap();
         read_timer.listen(Event::Update);
 
         // Timer to send data via bluetooth
@@ -244,7 +244,7 @@ mod app {
             current = first_channel_res;
         }
 
-        if *cx.local.counter == DYMH_106_RESP_FREQ {
+        if *cx.local.counter == DYMH_106_REQ_FREQ {
             *cx.local.counter = 0;
             defmt::debug!(
                 "max: {}\tmin: {}\tcurrent: {}\tcurrent normalized: {}\t\t\tbuffer: {:?}",
