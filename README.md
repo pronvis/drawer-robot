@@ -54,18 +54,21 @@ Commands can be found in `./documentation/HC-05_AT_Command_Set.pdf`
 
 One device should be Master. Another one slave.
 
-I set speed at 115200: `AT+UART=115200,0,0`
+I set speed to 460800: `AT+UART=460800,0,0`
 
 For slave: 
-- `AT+NAME=slave`
-- `AT+UART=115200,0,0`
+- `AT+NAME=DrawingRobot_slave`
+- `AT+UART=460800,0,0`
 - `AT+CMODE=1`
 - `AT+ROLE=0`
 - get addr, we will need it for master: `AT+ADDR?`
 
 For master: 
-- `AT+NAME=master`
-- `AT+UART=115200,0,0`
+- `AT+NAME=DrawingRobot_master`
+- `AT+UART=460800,0,0`
 - `AT+CMODE=0`
 - `AT+BIND={slave_addr}` // replace `:` with `,` in addr string
 - `AT+ROLE=1`
+
+For `AT+BIND={slave_addr}` it may require adding zeroes in front each part. For example: `AT+ADDR?` return
+`21:13:12622`. To bind that address send this command: `AT+BIND=0021,13,012622`

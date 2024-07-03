@@ -30,21 +30,24 @@ mod app {
     const READ_TIMER_CLOCK_FREQ: u32 = 10_000;
     const SEND_TIMER_CLOCK_FREQ: u32 = 10_000;
     const ADS1256_TIMER_CLOCK_FREQ: u32 = 2_000_000;
-    const DYMH_106_REQ_FREQ: u32 = 300;
-    const DYMH_106_QUEUE_SIZE: usize = 15;
+
+    const DYMH_106_REQ_FREQ: u32 = 500;
+    const DYMH_106_QUEUE_SIZE: usize = 30;
+    //TODO: 30 times per second... looks like not enough
+    const SEND_TIMER_MILLIS_DELAY: u32 = 40;
 
     //NOTE: To configure dymh106 data sending frequency think about those elements:
     // 1) DYMH_106_RESP_FREQ - freq that you get the data from ads1256 (for all 4 sensors)
     // 2) ads1256 'SamplingRate' - small value gets small noise, but require more time to get data.
-    // 3) 'send_timer' delay. Current value - 30ms is too small! But to lower it I need to change
-    //    HC-05 BaudRate.
-    // 4) HC-05 Baud Rate - you cant send data fast with small baud rate! Current hc-05 max value 115200 for some reason (another one works fine on 1382400)
-    // 5) DYMH_106_QUEUE_SIZE - queue to buffering DYMH106 data.
+    // 3) 'send_timer' delay
+    // 4) HC-05 Baud Rate - you cant send data fast with small baud rate
+    // 5) DYMH_106_QUEUE_SIZE - queue to buffering DYMH106 data
     // Current values:
-    // DYMH_106_REQ_FREQ = 300
-    // send_timer.delay = 30millis
-    // DYMH_106_QUEUE_SIZE = 15
-    // DYMH_106_REQ_FREQ / send_timer.delay = 10. Means averaging on ~10 elements in cache.
+    // DYMH_106_REQ_FREQ = 500
+    // send_timer.delay = 40 millis
+    // DYMH_106_REQ_FREQ / (1.secs() / send_timer.delay) = 20
+    // Means averaging on ~20 elements in cache
+    // DYMH_106_QUEUE_SIZE = 30
     type Ads1256 = ADS1256<
         Spi<
             stm32f1xx_hal::pac::SPI1,
@@ -136,7 +139,7 @@ mod app {
         let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM3, ADS1256_TIMER_CLOCK_FREQ>::new(cx.device.TIM3, &clocks);
         let mut ads1256 = ADS1256::new(ads1256_spi, cs_pin, reset_pin, data_ready_pin, timer.delay()).unwrap();
 
-        let config = Ads1256Config::new(SamplingRate::Sps2000, PGA::Gain64);
+        let config = Ads1256Config::new(SamplingRate::Sps7500, PGA::Gain64);
         ads1256.set_config(&config).unwrap();
 
         // Configure the USART1:
@@ -155,7 +158,7 @@ mod app {
             (hc05_tx, hc05_rx),
             &mut afio.mapr,
             Config::default()
-                .baudrate(115200.bps())
+                .baudrate(460800.bps())
                 .wordlength_8bits()
                 .stopbits(stm32f1xx_hal::serial::StopBits::STOP1)
                 .parity_none(),
@@ -171,8 +174,7 @@ mod app {
 
         // Timer to send data via bluetooth
         let mut send_timer = robot_core::get_counter(cx.device.TIM1, &clocks);
-        //TODO: 30 times per second... looks like not enough
-        send_timer.start(30.millis()).unwrap();
+        send_timer.start(SEND_TIMER_MILLIS_DELAY.millis()).unwrap();
         send_timer.listen(Event::Update);
 
         let (dymh_106_data_producer, dymh_106_data_consumer) = cx.local.dymh106_queue.split();
@@ -277,6 +279,7 @@ mod app {
             *cx.local.counter += 1;
         }
         // ================================
+
         cx.local
             .dymh_106_data_producer
             .enqueue(TensionData {
@@ -284,8 +287,7 @@ mod app {
                 t1: buffer[1],
                 t2: buffer[2],
                 t3: buffer[3],
-            })
-            .unwrap();
+            }).map_err(|_| defmt::error!("fail to add dymh_106 data into queue, cause it is full"));
     }
 
     fn read_from_ads_into_buffer(ads1256: &mut Ads1256, channel: usize, buffer: &mut [i32; 4]) -> i32 {
@@ -306,7 +308,7 @@ mod app {
         }
     }
 
-    #[task(binds = TIM1_UP, priority = 5, local = [ hc05_tx, send_timer, dymh_106_data_consumer, prev_tension_data: TensionData = TensionData { t0: 0, t1: 0, t2: 0, t3: 0 } ])]
+    #[task(binds = TIM1_UP, priority = 15, local = [ hc05_tx, send_timer, dymh_106_data_consumer, prev_tension_data: TensionData = TensionData { t0: 0, t1: 0, t2: 0, t3: 0 } ])]
     fn hc05_send(mut cx: hc05_send::Context) {
         cx.local.send_timer.clear_interrupt(Event::Update);
 
@@ -348,7 +350,7 @@ mod app {
         *prev_tension_data = curr_tension_data.clone();
 
         //lets try to send data only if sensor update data at least for X
-        if tensor_diff >= 1_00 {
+        if tensor_diff >= 500 {
             // defmt::debug!(
             //     "sending data, max diff: {}, curr: t0 = {}, t1 = {}, t2 = {}, t3 = {}",
             //     tensor_diff,
@@ -376,7 +378,7 @@ mod app {
         }
     }
 
-    #[task(binds = USART1, priority = 6, local = [ hc05_rx ], shared = [ ads1256 ])]
+    #[task(binds = USART1, priority = 5, local = [ hc05_rx ], shared = [ ads1256 ])]
     fn hc05_reader(mut cx: hc05_reader::Context) {
         let rx = cx.local.hc05_rx;
         if rx.is_rx_not_empty() {

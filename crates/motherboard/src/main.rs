@@ -166,7 +166,7 @@ mod app {
             (hc05_tx, hc05_rx),
             &mut afio.mapr,
             Config::default()
-                .baudrate(115200.bps())
+                .baudrate(460800.bps())
                 .wordlength_8bits()
                 .stopbits(stm32f1xx_hal::serial::StopBits::STOP1)
                 .parity_none(),
@@ -292,7 +292,7 @@ mod app {
         }
     }
 
-    #[task(binds = USART1, priority = 9, local = [ tension_data_sender, hc05_rx, data_to_receive: [u8; 16] = [0; 16], counter: usize = 0 ])]
+    #[task(binds = USART1, priority = 15, local = [ tension_data_sender, hc05_rx, data_to_receive: [u8; 16] = [0; 16], counter: usize = 0 ])]
     fn hc05_reader(cx: hc05_reader::Context) {
         let rx = cx.local.hc05_rx;
         let counter = cx.local.counter;
