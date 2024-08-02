@@ -9,16 +9,17 @@ enum ArmMode {
 
 impl Default for ArmMode {
     fn default() -> Self {
-        ArmMode::ByTension
+        ArmMode::Free
     }
 }
 
 #[derive(Default)]
-struct Arm {
+pub struct Arm {
     tension: i32,
     desired_tension: Option<i32>,
     last_sended_tension: Option<i32>,
     mode: ArmMode,
+    free_mode_speed: u32,
 }
 
 impl Arm {
@@ -30,9 +31,21 @@ impl Arm {
         self.desired_tension = None;
     }
 
+    pub fn increase_speed(&mut self, speed: u32) {
+        self.free_mode_speed += speed;
+    }
+
+    pub fn decrease_speed(&mut self, speed: u32) {
+        self.free_mode_speed -= speed;
+    }
+
+    pub fn stop(&mut self) {
+        self.free_mode_speed = 0;
+    }
+
     pub fn get_speed(&mut self) -> Option<u32> {
         if self.mode == ArmMode::Free {
-            return None;
+            return Some(self.free_mode_speed);
         }
 
         if let Some(last_sended_tension) = self.last_sended_tension {
@@ -101,6 +114,16 @@ impl RobotArms {
             s1: self.arm1.get_speed(),
             s2: self.arm2.get_speed(),
             s3: self.arm3.get_speed(),
+        }
+    }
+
+    pub fn get_arm(&mut self, i: u8) -> Option<&mut Arm> {
+        match i {
+            0 => Some(&mut self.arm0),
+            1 => Some(&mut self.arm1),
+            2 => Some(&mut self.arm2),
+            3 => Some(&mut self.arm3),
+            _ => None,
         }
     }
 }

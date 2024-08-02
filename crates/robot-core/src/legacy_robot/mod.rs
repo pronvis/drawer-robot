@@ -51,7 +51,7 @@ impl From<Ps3Command> for Option<RobotCommand> {
                 Ps3DigitalCommand::SQUARE_DOWN => Some(RobotCommand::SelectStepper(0)),
                 Ps3DigitalCommand::TRIANGLE_DOWN => Some(RobotCommand::SelectStepper(1)),
                 Ps3DigitalCommand::CIRCLE_DOWN => Some(RobotCommand::SelectStepper(2)),
-                Ps3DigitalCommand::UP_DOWN => Some(RobotCommand::AddSteps(100)),
+                Ps3DigitalCommand::UP_DOWN => Some(RobotCommand::AddSteps(1000)),
                 Ps3DigitalCommand::RIGHT_DOWN => Some(RobotCommand::IncreaseSpeed),
                 Ps3DigitalCommand::DOWN_DOWN => Some(RobotCommand::Stay),
                 Ps3DigitalCommand::LEFT_DOWN => Some(RobotCommand::ReduceSpeed),
@@ -232,7 +232,7 @@ impl Robot {
     fn get_stepper_sender(&mut self) -> &mut MyStepperCommandsSender {
         let index = self.state.stepper_index;
         if index == 0 {
-            return &mut self.stepper_1; //instead of a comment to not bother with return type
+            return &mut self.stepper_0; //instead of a comment to not bother with return type
         } else if index == 1 {
             return &mut self.stepper_1;
         } else if index == 2 {

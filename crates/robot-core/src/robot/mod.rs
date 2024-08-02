@@ -2,9 +2,10 @@ mod arm;
 
 use crate::{
     ps3::{Ps3Command, Ps3DigitalCommand},
-    DisplayMemoryPool,
+    DisplayMemoryPool, {display, DisplayString},
 };
 use arm::RobotArms;
+use core::fmt::Write;
 use heapless::pool::singleton::Box;
 use rtic_sync::channel::{ReceiveError, Receiver, Sender};
 
@@ -32,7 +33,12 @@ pub enum RobotCommand {
     CalibrateAds1256,
     SetFreeTension,
     SetDesiredTension,
-    ManualControlNextArm,
+
+    PreviousMotor,
+    NextMotor,
+    SpeedUp,
+    SpeedDown,
+    StopMotor,
 }
 
 impl From<Ps3Command> for Option<RobotCommand> {
@@ -42,7 +48,11 @@ impl From<Ps3Command> for Option<RobotCommand> {
                 Ps3DigitalCommand::TRIANGLE_DOWN => Some(RobotCommand::CalibrateAds1256),
                 Ps3DigitalCommand::CIRCLE_DOWN => Some(RobotCommand::SetDesiredTension),
                 Ps3DigitalCommand::SQUARE_DOWN => Some(RobotCommand::SetFreeTension),
-                Ps3DigitalCommand::RIGHT_DOWN => Some(RobotCommand::ManualControlNextArm),
+                Ps3DigitalCommand::LEFT_DOWN => Some(RobotCommand::PreviousMotor),
+                Ps3DigitalCommand::RIGHT_DOWN => Some(RobotCommand::NextMotor),
+                Ps3DigitalCommand::UP_DOWN => Some(RobotCommand::SpeedUp),
+                Ps3DigitalCommand::DOWN_DOWN => Some(RobotCommand::SpeedDown),
+                Ps3DigitalCommand::L1_DOWN => Some(RobotCommand::StopMotor),
                 _ => None,
             },
             Ps3Command::Stick(_) => None,
@@ -53,16 +63,23 @@ impl From<Ps3Command> for Option<RobotCommand> {
 
 pub struct Robot {
     stepper_0: Tmc2209CommandsSender,
+    stepper_1: Tmc2209CommandsSender,
+    stepper_2: Tmc2209CommandsSender,
+    stepper_3: Tmc2209CommandsSender,
     ps3_commands_receiver: Ps3CommandsReceiver,
     tension_data_receiver: TensionDataReceiver,
     hc05_tx: stm32f1xx_hal::serial::Tx1,
     display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
     arms: RobotArms,
+    arm_index: u8,
 }
 
 impl Robot {
     pub fn new(
         stepper_0: Tmc2209CommandsSender,
+        stepper_1: Tmc2209CommandsSender,
+        stepper_2: Tmc2209CommandsSender,
+        stepper_3: Tmc2209CommandsSender,
         ps3_commands_receiver: Ps3CommandsReceiver,
         tension_data_receiver: TensionDataReceiver,
         hc05_tx: stm32f1xx_hal::serial::Tx1,
@@ -70,11 +87,15 @@ impl Robot {
     ) -> Self {
         Robot {
             stepper_0,
+            stepper_1,
+            stepper_2,
             ps3_commands_receiver,
+            stepper_3,
             tension_data_receiver,
             hc05_tx,
             display_sender,
             arms: Default::default(),
+            arm_index: 0,
         }
     }
 
@@ -82,13 +103,31 @@ impl Robot {
         self.ps3_handler();
         self.tension_handler();
 
-        //test code
+        //TODO: fix me, test code
         let arms_speed = self.arms.get_speed();
         let arm0_speed = arms_speed.s0;
         if let Some(arm0_speed) = arm0_speed {
             let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(arm0_speed));
             let req = crate::my_tmc2209::Request::write(write_req);
             self.stepper_0.send(req).await.ok();
+        }
+        let arm1_speed = arms_speed.s1;
+        if let Some(arm1_speed) = arm1_speed {
+            let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(arm1_speed));
+            let req = crate::my_tmc2209::Request::write(write_req);
+            self.stepper_1.send(req).await.ok();
+        }
+        let arm2_speed = arms_speed.s2;
+        if let Some(arm2_speed) = arm2_speed {
+            let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(arm2_speed));
+            let req = crate::my_tmc2209::Request::write(write_req);
+            self.stepper_2.send(req).await.ok();
+        }
+        let arm3_speed = arms_speed.s3;
+        if let Some(arm3_speed) = arm3_speed {
+            let write_req = tmc2209::write_request(0, tmc2209::reg::VACTUAL(arm3_speed));
+            let req = crate::my_tmc2209::Request::write(write_req);
+            self.stepper_3.send(req).await.ok();
         }
     }
 
@@ -126,12 +165,15 @@ impl Robot {
         match event {
             RobotCommand::SetFreeTension => {
                 self.arms.set_free_tenstion();
+                //TODO: for some reason alloc return Error here :(
+                //to fix
+                //
+                // let mut data_str = DisplayString::new();
+                // write!(data_str, "Arms in Free Mode").expect("not written");
+                // display::display_str_sync(data_str, &mut self.display_sender).ok();
             },
             RobotCommand::SetDesiredTension => {
                 self.arms.set_desired_tension();
-            },
-            RobotCommand::ManualControlNextArm => {
-                //TODO:
             },
             RobotCommand::CalibrateAds1256 => {
                 if let Err(err) = self.hc05_tx.write(HC05_CALIBRATE_ADS1256_CODE) {
@@ -139,6 +181,27 @@ impl Robot {
                 } else {
                     defmt::debug!("Successfully send message via hc05");
                 }
+            },
+
+            RobotCommand::PreviousMotor => {
+                if self.arm_index == 0  {
+                    self.arm_index = 3;
+                } else {
+                    self.arm_index = self.arm_index - 1;
+                }
+            },
+            RobotCommand::NextMotor => {
+                self.arm_index = (self.arm_index + 1) % 4;
+            },
+
+            RobotCommand::SpeedUp => {
+                self.arms.get_arm(self.arm_index).map(|arm| arm.increase_speed(5_000));
+            },
+            RobotCommand::SpeedDown => {
+                self.arms.get_arm(self.arm_index).map(|arm| arm.decrease_speed(5_000));
+            },
+            RobotCommand::StopMotor => {
+                self.arms.get_arm(self.arm_index).map(|arm| arm.stop());
             },
         }
     }

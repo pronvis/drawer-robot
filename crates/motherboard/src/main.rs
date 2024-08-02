@@ -205,6 +205,9 @@ mod app {
         let (tension_data_sender, tension_data_receiver) = make_channel!(TensionData, TENSION_DATA_CHANNEL_CAPACITY);
         let robot = Robot::new(
             tmc2209_0.req_sender,
+            tmc2209_1.req_sender,
+            tmc2209_2.req_sender,
+            tmc2209_3.req_sender,
             ps3_commands_receiver,
             tension_data_receiver,
             hc05_tx,
