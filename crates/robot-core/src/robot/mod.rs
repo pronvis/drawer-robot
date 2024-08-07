@@ -165,12 +165,9 @@ impl Robot {
         match event {
             RobotCommand::SetFreeTension => {
                 self.arms.set_free_tenstion();
-                //TODO: for some reason alloc return Error here :(
-                //to fix
-                //
-                // let mut data_str = DisplayString::new();
-                // write!(data_str, "Arms in Free Mode").expect("not written");
-                // display::display_str_sync(data_str, &mut self.display_sender).ok();
+                let mut data_str = DisplayString::new();
+                write!(data_str, "Arms in Free Mode").expect("not written");
+                display::display_str_sync(data_str, &mut self.display_sender).ok();
             },
             RobotCommand::SetDesiredTension => {
                 self.arms.set_desired_tension();
@@ -189,9 +186,18 @@ impl Robot {
                 } else {
                     self.arm_index = self.arm_index - 1;
                 }
+                
+                let mut data_str = DisplayString::new();
+                let arm_speed  = self.arms.get_arm(self.arm_index).map_or(0, |arm| arm.get_speed().unwrap_or(0));
+                write!(data_str, "Arm {0} speed: {1}", self.arm_index, arm_speed).expect("not written");
+                display::display_str_sync(data_str, &mut self.display_sender).ok();
             },
             RobotCommand::NextMotor => {
                 self.arm_index = (self.arm_index + 1) % 4;
+                let mut data_str = DisplayString::new();
+                let arm_speed  = self.arms.get_arm(self.arm_index).map_or(0, |arm| arm.get_speed().unwrap_or(0));
+                write!(data_str, "Arm {0} speed: {1}", self.arm_index, arm_speed).expect("not written");
+                display::display_str_sync(data_str, &mut self.display_sender).ok();
             },
 
             RobotCommand::SpeedUp => {

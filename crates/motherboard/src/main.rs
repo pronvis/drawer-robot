@@ -12,7 +12,7 @@
 mod app {
 
     use defmt_brtt as _; // global logger
-    use heapless::pool::singleton::Box;
+    use heapless::pool::singleton::{Box, Pool};
     use robot::Robot;
     use robot_core::display::OledDisplay;
     use robot_core::my_tmc2209::{
@@ -22,6 +22,7 @@ mod app {
     use robot_core::robot::{TensionData, TENSION_DATA_CHANNEL_CAPACITY};
     use robot_core::DisplayMemoryPool;
     use robot_core::*;
+    use rtic_monotonics::systick::*;
     use rtic_sync::{channel::*, make_channel};
     use stm32f1xx_hal::{
         prelude::*,
@@ -30,6 +31,7 @@ mod app {
     };
 
     const TIMER_CLOCK_FREQ: u32 = 72_000_000;
+    static mut DISPLAY_MEMORY_POOL_MEMORY: [u8; 96] = [32u8; 96];
 
     const PS3_CHANNEL_CAPACITY: usize = robot_core::ps3::CHANNEL_CAPACITY;
     const DISPLAY_CHANNEL_CAPACITY: usize = robot_core::display::CHANNEL_CAPACITY;
@@ -45,6 +47,7 @@ mod app {
         ps3_rx: stm32f1xx_hal::serial::Rx2,
         hc05_rx: stm32f1xx_hal::serial::Rx1,
         display_receiver: Receiver<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
+        display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
         display: OledDisplay,
 
         //TMC2209 related
@@ -81,6 +84,9 @@ mod app {
     ])]
     fn init(cx: init::Context) -> (Shared, Local) {
         defmt::info!("init");
+        unsafe {
+            DisplayMemoryPool::grow(&mut DISPLAY_MEMORY_POOL_MEMORY);
+        }
 
         // Take ownership over the raw flash and rcc devices and convert them into the corresponding
         // HAL structs
@@ -211,7 +217,7 @@ mod app {
             ps3_commands_receiver,
             tension_data_receiver,
             hc05_tx,
-            display_sender,
+            display_sender.clone(),
         );
 
         steppers_conf_task::spawn().ok();
@@ -227,6 +233,7 @@ mod app {
                 ps3_reader,
                 tension_data_sender,
                 display_receiver,
+                display_sender,
                 display,
 
                 //TMC2209 related
@@ -245,7 +252,6 @@ mod app {
                 configurator_0: tmc2209_0.configurator,
                 communicator_0: tmc2209_0.communicator,
                 tmc2209_communicator_timer_0: tmc2209_0.timer,
-
                 robot,
             },
         )
@@ -274,8 +280,7 @@ mod app {
                 defmt::debug!("Stepper #{}: driver configured successfully!", i);
             }
             Err(_) => {
-                //TODO: panic here. Logging only because I testing it using only one stepper.
-                defmt::error!("Stepper #{}: fail to configure driver!", i);
+                panic!("Stepper #{}: fail to configure driver!", i);
             }
         }
     }
