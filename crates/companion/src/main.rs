@@ -287,7 +287,8 @@ mod app {
                 t1: buffer[1],
                 t2: buffer[2],
                 t3: buffer[3],
-            }).map_err(|_| defmt::error!("fail to add dymh_106 data into queue, cause it is full"));
+            })
+            .map_err(|_| defmt::error!("fail to add dymh_106 data into queue, cause it is full"));
     }
 
     fn read_from_ads_into_buffer(ads1256: &mut Ads1256, channel: usize, buffer: &mut [i32; 4]) -> i32 {
@@ -318,6 +319,7 @@ mod app {
         let mut t2: i32 = 0;
         let mut t3: i32 = 0;
 
+        // defmt::debug!("elems in queue: {}", elems_count);
         // let mut x: [i32; 10] = [0; 10];
         // let mut i: usize = 0;
         while let Some(data) = cx.local.dymh_106_data_consumer.dequeue() {
@@ -350,7 +352,7 @@ mod app {
         *prev_tension_data = curr_tension_data.clone();
 
         //lets try to send data only if sensor update data at least for X
-        if tensor_diff >= 500 {
+        if tensor_diff >= 100 {
             // defmt::debug!(
             //     "sending data, max diff: {}, curr: t0 = {}, t1 = {}, t2 = {}, t3 = {}",
             //     tensor_diff,

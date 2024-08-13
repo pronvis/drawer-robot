@@ -131,5 +131,9 @@ pub fn i32_diff(i1: i32, i2: i32) -> i32 {
 }
 
 pub fn tension_to_speed(tension: i32) -> u32 {
-    tension as u32 * 10
+    if tension.abs() <= 4_000 {
+        0
+    } else {
+        0 - (tension as u32 * 10)
+    }
 }

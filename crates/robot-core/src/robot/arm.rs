@@ -23,8 +23,9 @@ pub struct Arm {
 }
 
 impl Arm {
-    pub fn set_desired_tension(&mut self) {
-        self.desired_tension = Some(self.tension);
+    pub fn set_desired_tension(&mut self, desired_tension: i32) {
+        self.mode = ArmMode::ByTension;
+        self.desired_tension = Some(desired_tension);
     }
 
     pub fn remove_desired_tension(&mut self) {
@@ -55,7 +56,8 @@ impl Arm {
         }
 
         self.last_sended_tension = Some(self.tension);
-        return Some(tension_to_speed(self.tension + self.desired_tension.unwrap_or(0)));
+        let speed = tension_to_speed(self.desired_tension.unwrap_or(0) - self.tension);
+        return Some(speed);
     }
 }
 
@@ -90,15 +92,11 @@ impl RobotArms {
         }
     }
 
-    pub fn set_desired_tension(&mut self) {
-        self.arm0.mode = ArmMode::ByTension;
-        self.arm1.mode = ArmMode::ByTension;
-        self.arm2.mode = ArmMode::ByTension;
-        self.arm3.mode = ArmMode::ByTension;
-        self.arm0.set_desired_tension();
-        self.arm1.set_desired_tension();
-        self.arm2.set_desired_tension();
-        self.arm3.set_desired_tension();
+    pub fn set_desired_tension(&mut self, desired_tension: i32) {
+        self.arm0.set_desired_tension(desired_tension);
+        self.arm1.set_desired_tension(desired_tension);
+        self.arm2.set_desired_tension(desired_tension);
+        self.arm3.set_desired_tension(desired_tension);
     }
 
     pub fn set_free_tenstion(&mut self) {

@@ -33,6 +33,8 @@ pub enum RobotCommand {
     CalibrateAds1256,
     SetFreeTension,
     SetDesiredTension,
+    IncreaseDesiredTension,
+    DecreaseDesiredTension,
 
     PreviousMotor,
     NextMotor,
@@ -47,6 +49,8 @@ impl From<Ps3Command> for Option<RobotCommand> {
             Ps3Command::Digital(command) => match command {
                 Ps3DigitalCommand::TRIANGLE_DOWN => Some(RobotCommand::CalibrateAds1256),
                 Ps3DigitalCommand::CIRCLE_DOWN => Some(RobotCommand::SetDesiredTension),
+                Ps3DigitalCommand::L2_DOWN => Some(RobotCommand::DecreaseDesiredTension),
+                Ps3DigitalCommand::R2_DOWN => Some(RobotCommand::IncreaseDesiredTension),
                 Ps3DigitalCommand::SQUARE_DOWN => Some(RobotCommand::SetFreeTension),
                 Ps3DigitalCommand::LEFT_DOWN => Some(RobotCommand::PreviousMotor),
                 Ps3DigitalCommand::RIGHT_DOWN => Some(RobotCommand::NextMotor),
@@ -72,6 +76,7 @@ pub struct Robot {
     display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
     arms: RobotArms,
     arm_index: u8,
+    desired_arm_tension: i32,
 }
 
 impl Robot {
@@ -96,6 +101,8 @@ impl Robot {
             display_sender,
             arms: Default::default(),
             arm_index: 0,
+            //INFO: get it empirically
+            desired_arm_tension: 14_000
         }
     }
 
@@ -103,7 +110,6 @@ impl Robot {
         self.ps3_handler();
         self.tension_handler();
 
-        //TODO: fix me, test code
         let arms_speed = self.arms.get_speed();
         let arm0_speed = arms_speed.s0;
         if let Some(arm0_speed) = arm0_speed {
@@ -165,12 +171,33 @@ impl Robot {
         match event {
             RobotCommand::SetFreeTension => {
                 self.arms.set_free_tenstion();
+
                 let mut data_str = DisplayString::new();
                 write!(data_str, "Arms in Free Mode").expect("not written");
                 display::display_str_sync(data_str, &mut self.display_sender).ok();
             },
             RobotCommand::SetDesiredTension => {
-                self.arms.set_desired_tension();
+                self.arms.set_desired_tension(self.desired_arm_tension);
+
+                let mut data_str = DisplayString::new();
+                write!(data_str, "DesiredTension: {0}", self.desired_arm_tension).expect("not written");
+                display::display_str_sync(data_str, &mut self.display_sender).ok();
+            },
+            RobotCommand::IncreaseDesiredTension => {
+                self.desired_arm_tension += 1_000;
+                self.arms.set_desired_tension(self.desired_arm_tension);
+
+                let mut data_str = DisplayString::new();
+                write!(data_str, "DesiredTension: {0}", self.desired_arm_tension).expect("not written");
+                display::display_str_sync(data_str, &mut self.display_sender).ok();
+            },
+            RobotCommand::DecreaseDesiredTension => {
+                self.desired_arm_tension -= 1_000;
+                self.arms.set_desired_tension(self.desired_arm_tension);
+
+                let mut data_str = DisplayString::new();
+                write!(data_str, "DesiredTension: {0}", self.desired_arm_tension).expect("not written");
+                display::display_str_sync(data_str, &mut self.display_sender).ok();
             },
             RobotCommand::CalibrateAds1256 => {
                 if let Err(err) = self.hc05_tx.write(HC05_CALIBRATE_ADS1256_CODE) {
@@ -201,10 +228,10 @@ impl Robot {
             },
 
             RobotCommand::SpeedUp => {
-                self.arms.get_arm(self.arm_index).map(|arm| arm.increase_speed(5_000));
+                self.arms.get_arm(self.arm_index).map(|arm| arm.increase_speed(15_000));
             },
             RobotCommand::SpeedDown => {
-                self.arms.get_arm(self.arm_index).map(|arm| arm.decrease_speed(5_000));
+                self.arms.get_arm(self.arm_index).map(|arm| arm.decrease_speed(15_000));
             },
             RobotCommand::StopMotor => {
                 self.arms.get_arm(self.arm_index).map(|arm| arm.stop());
