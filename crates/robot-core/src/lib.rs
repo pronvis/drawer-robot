@@ -134,6 +134,6 @@ pub fn tension_to_speed(tension: i32) -> u32 {
     if tension.abs() <= 4_000 {
         0
     } else {
-        0 - (tension as u32 * 10)
+        0 - (tension as u32 * 1)
     }
 }

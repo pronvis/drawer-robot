@@ -32,9 +32,7 @@ pub struct TensionData {
 pub enum RobotCommand {
     CalibrateAds1256,
     SetFreeTension,
-    SetDesiredTension,
-    IncreaseDesiredTension,
-    DecreaseDesiredTension,
+    SetByTension,
 
     PreviousMotor,
     NextMotor,
@@ -48,9 +46,7 @@ impl From<Ps3Command> for Option<RobotCommand> {
         match value {
             Ps3Command::Digital(command) => match command {
                 Ps3DigitalCommand::TRIANGLE_DOWN => Some(RobotCommand::CalibrateAds1256),
-                Ps3DigitalCommand::CIRCLE_DOWN => Some(RobotCommand::SetDesiredTension),
-                Ps3DigitalCommand::L2_DOWN => Some(RobotCommand::DecreaseDesiredTension),
-                Ps3DigitalCommand::R2_DOWN => Some(RobotCommand::IncreaseDesiredTension),
+                Ps3DigitalCommand::CIRCLE_DOWN => Some(RobotCommand::SetByTension),
                 Ps3DigitalCommand::SQUARE_DOWN => Some(RobotCommand::SetFreeTension),
                 Ps3DigitalCommand::LEFT_DOWN => Some(RobotCommand::PreviousMotor),
                 Ps3DigitalCommand::RIGHT_DOWN => Some(RobotCommand::NextMotor),
@@ -170,33 +166,17 @@ impl Robot {
     fn receive_command(&mut self, event: RobotCommand) {
         match event {
             RobotCommand::SetFreeTension => {
-                self.arms.set_free_tenstion();
+                self.arms.set_free_tenstion_mode();
 
                 let mut data_str = DisplayString::new();
                 write!(data_str, "Arms in Free Mode").expect("not written");
                 display::display_str_sync(data_str, &mut self.display_sender).ok();
             },
-            RobotCommand::SetDesiredTension => {
-                self.arms.set_desired_tension(self.desired_arm_tension);
+            RobotCommand::SetByTension => {
+                self.arms.set_by_tenstion_mode();
 
                 let mut data_str = DisplayString::new();
-                write!(data_str, "DesiredTension: {0}", self.desired_arm_tension).expect("not written");
-                display::display_str_sync(data_str, &mut self.display_sender).ok();
-            },
-            RobotCommand::IncreaseDesiredTension => {
-                self.desired_arm_tension += 1_000;
-                self.arms.set_desired_tension(self.desired_arm_tension);
-
-                let mut data_str = DisplayString::new();
-                write!(data_str, "DesiredTension: {0}", self.desired_arm_tension).expect("not written");
-                display::display_str_sync(data_str, &mut self.display_sender).ok();
-            },
-            RobotCommand::DecreaseDesiredTension => {
-                self.desired_arm_tension -= 1_000;
-                self.arms.set_desired_tension(self.desired_arm_tension);
-
-                let mut data_str = DisplayString::new();
-                write!(data_str, "DesiredTension: {0}", self.desired_arm_tension).expect("not written");
+                write!(data_str, "Arms in By Tension Mode").expect("not written");
                 display::display_str_sync(data_str, &mut self.display_sender).ok();
             },
             RobotCommand::CalibrateAds1256 => {

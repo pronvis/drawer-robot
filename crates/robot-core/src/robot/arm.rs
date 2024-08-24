@@ -99,7 +99,14 @@ impl RobotArms {
         self.arm3.set_desired_tension(desired_tension);
     }
 
-    pub fn set_free_tenstion(&mut self) {
+    pub fn set_by_tenstion_mode(&mut self) {
+        self.arm0.mode = ArmMode::ByTension;
+        self.arm1.mode = ArmMode::ByTension;
+        self.arm2.mode = ArmMode::ByTension;
+        self.arm3.mode = ArmMode::ByTension;
+    }
+
+    pub fn set_free_tenstion_mode(&mut self) {
         self.arm0.mode = ArmMode::Free;
         self.arm1.mode = ArmMode::Free;
         self.arm2.mode = ArmMode::Free;
