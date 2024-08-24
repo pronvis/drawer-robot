@@ -92,18 +92,11 @@ impl RobotArms {
         }
     }
 
-    pub fn set_desired_tension(&mut self, desired_tension: i32) {
+    pub fn set_by_tenstion_mode(&mut self, desired_tension: i32) {
         self.arm0.set_desired_tension(desired_tension);
         self.arm1.set_desired_tension(desired_tension);
         self.arm2.set_desired_tension(desired_tension);
         self.arm3.set_desired_tension(desired_tension);
-    }
-
-    pub fn set_by_tenstion_mode(&mut self) {
-        self.arm0.mode = ArmMode::ByTension;
-        self.arm1.mode = ArmMode::ByTension;
-        self.arm2.mode = ArmMode::ByTension;
-        self.arm3.mode = ArmMode::ByTension;
     }
 
     pub fn set_free_tenstion_mode(&mut self) {

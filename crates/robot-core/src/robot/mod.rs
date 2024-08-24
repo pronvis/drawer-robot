@@ -173,7 +173,7 @@ impl Robot {
                 display::display_str_sync(data_str, &mut self.display_sender).ok();
             },
             RobotCommand::SetByTension => {
-                self.arms.set_by_tenstion_mode();
+                self.arms.set_by_tenstion_mode(self.desired_arm_tension);
 
                 let mut data_str = DisplayString::new();
                 write!(data_str, "Arms in By Tension Mode").expect("not written");
