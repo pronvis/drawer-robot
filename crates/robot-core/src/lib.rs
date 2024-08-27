@@ -114,22 +114,6 @@ pub fn tensor_to_kg(data: i32) -> f32 {
     return kilogramms;
 }
 
-pub fn f32_diff(f1: f32, f2: f32) -> f32 {
-    if f2 > f1 {
-        f2 - f1
-    } else {
-        f1 - f2
-    }
-}
-
-pub fn i32_diff(i1: i32, i2: i32) -> i32 {
-    if i2 > i1 {
-        i2 - i1
-    } else {
-        i1 - i2
-    }
-}
-
 pub fn tension_to_speed(tension: i32) -> u32 {
     let tolerance = 3_000;
     if tension <= tension - tolerance / 2 && tension >= tension + tolerance / 2 {

@@ -344,10 +344,10 @@ mod app {
         // }
 
         let prev_tension_data: &mut TensionData = cx.local.prev_tension_data;
-        let mut tensor_diff = robot_core::i32_diff(curr_tension_data.t0, prev_tension_data.t0);
-        tensor_diff = i32::max(tensor_diff, robot_core::i32_diff(curr_tension_data.t1, prev_tension_data.t1));
-        tensor_diff = i32::max(tensor_diff, robot_core::i32_diff(curr_tension_data.t2, prev_tension_data.t2));
-        tensor_diff = i32::max(tensor_diff, robot_core::i32_diff(curr_tension_data.t3, prev_tension_data.t3));
+        let mut tensor_diff = (curr_tension_data.t0 - prev_tension_data.t0).abs();
+        tensor_diff = i32::max(tensor_diff, (curr_tension_data.t1 - prev_tension_data.t1).abs());
+        tensor_diff = i32::max(tensor_diff, (curr_tension_data.t2 - prev_tension_data.t2).abs());
+        tensor_diff = i32::max(tensor_diff, (curr_tension_data.t3 - prev_tension_data.t3).abs());
 
         *prev_tension_data = curr_tension_data.clone();
 

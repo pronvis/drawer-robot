@@ -12,7 +12,6 @@ mod app {
     use defmt_brtt as _;
     // global logger
     use hx711::Hx711;
-    use robot_core::CompanionMessage;
     use robot_core::*;
     use stm32f1xx_hal::{
         gpio::{Output, Pin},
@@ -158,7 +157,7 @@ mod app {
         //lets try to send data only if sensor update data at least for 100gr
         let prev_tensor_0_val: &mut i32 = cx.local.curr_tensor_0_val;
         let curr_tensor_0_val = companion_message.load_sensor_0;
-        let tensor_diff = robot_core::f32_diff(
+        let tensor_diff = self::f32_diff(
             robot_core::tensor_to_kg(curr_tensor_0_val),
             robot_core::tensor_to_kg(*prev_tensor_0_val),
         );
@@ -186,6 +185,14 @@ mod app {
                     write_res = tx.write(*elem);
                 }
             }
+        }
+    }
+
+    pub fn f32_diff(f1: f32, f2: f32) -> f32 {
+        if f2 > f1 {
+            f2 - f1
+        } else {
+            f1 - f2
         }
     }
 }
