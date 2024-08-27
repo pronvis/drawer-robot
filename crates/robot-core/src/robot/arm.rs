@@ -16,7 +16,7 @@ impl Default for ArmMode {
 #[derive(Default)]
 pub struct Arm {
     tension: i32,
-    last_sended_tension: Option<i32>,
+    last_sended: Option<u32>,
     mode: ArmMode,
     free_mode_speed: u32,
 }
@@ -39,20 +39,35 @@ impl Arm {
     }
 
     pub fn get_speed(&mut self, arm_index: u8) -> Option<u32> {
-        if self.mode == ArmMode::Free {
-            return Some(self.free_mode_speed);
-        }
+        match self.mode {
+            ArmMode::Free => {
+                if self.check_and_update_last_sended(self.free_mode_speed) {
+                    return None;
+                }
 
-        if let Some(last_sended_tension) = self.last_sended_tension {
-            if last_sended_tension == self.tension {
-                return None;
+                return Some(self.free_mode_speed);
+            }
+            ArmMode::ByTension => {
+                if self.check_and_update_last_sended(self.tension as u32) {
+                    return None;
+                }
+
+                let desired_tension = Self::desired_tension_by_arm(arm_index);
+                let speed = tension_to_speed(desired_tension - self.tension);
+                return Some(speed);
+            }
+        }
+    }
+
+    pub fn check_and_update_last_sended(&mut self, value: u32) -> bool {
+        if let Some(last_sended) = self.last_sended {
+            if last_sended == value {
+                return true;
             }
         }
 
-        self.last_sended_tension = Some(self.tension);
-        let desired_tension = Self::desired_tension_by_arm(arm_index);
-        let speed = tension_to_speed(desired_tension - self.tension);
-        return Some(speed);
+        self.last_sended = Some(value);
+        return false;
     }
 
     pub fn desired_tension_by_arm(arm_index: u8) -> i32 {
