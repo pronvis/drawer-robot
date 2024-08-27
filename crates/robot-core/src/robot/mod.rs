@@ -72,7 +72,6 @@ pub struct Robot {
     display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
     arms: RobotArms,
     arm_index: u8,
-    desired_arm_tension: i32,
 }
 
 impl Robot {
@@ -97,8 +96,6 @@ impl Robot {
             display_sender,
             arms: Default::default(),
             arm_index: 0,
-            //INFO: get it empirically
-            desired_arm_tension: 14_000
         }
     }
 
@@ -173,7 +170,7 @@ impl Robot {
                 display::display_str_sync(data_str, &mut self.display_sender).ok();
             },
             RobotCommand::SetByTension => {
-                self.arms.set_by_tenstion_mode(self.desired_arm_tension);
+                self.arms.set_by_tenstion_mode();
 
                 let mut data_str = DisplayString::new();
                 write!(data_str, "Arms in By Tension Mode").expect("not written");
@@ -195,14 +192,14 @@ impl Robot {
                 }
                 
                 let mut data_str = DisplayString::new();
-                let arm_speed  = self.arms.get_arm(self.arm_index).map_or(0, |arm| arm.get_speed().unwrap_or(0));
+                let arm_speed  = self.arms.get_arm(self.arm_index).map_or(0, |arm| arm.get_speed(self.arm_index).unwrap_or(0));
                 write!(data_str, "Arm {0} speed: {1}", self.arm_index, arm_speed).expect("not written");
                 display::display_str_sync(data_str, &mut self.display_sender).ok();
             },
             RobotCommand::NextMotor => {
                 self.arm_index = (self.arm_index + 1) % 4;
                 let mut data_str = DisplayString::new();
-                let arm_speed  = self.arms.get_arm(self.arm_index).map_or(0, |arm| arm.get_speed().unwrap_or(0));
+                let arm_speed  = self.arms.get_arm(self.arm_index).map_or(0, |arm| arm.get_speed(self.arm_index).unwrap_or(0));
                 write!(data_str, "Arm {0} speed: {1}", self.arm_index, arm_speed).expect("not written");
                 display::display_str_sync(data_str, &mut self.display_sender).ok();
             },

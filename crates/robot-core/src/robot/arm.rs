@@ -16,20 +16,14 @@ impl Default for ArmMode {
 #[derive(Default)]
 pub struct Arm {
     tension: i32,
-    desired_tension: Option<i32>,
     last_sended_tension: Option<i32>,
     mode: ArmMode,
     free_mode_speed: u32,
 }
 
 impl Arm {
-    pub fn set_desired_tension(&mut self, desired_tension: i32) {
+    pub fn set_desired_tension(&mut self) {
         self.mode = ArmMode::ByTension;
-        self.desired_tension = Some(desired_tension);
-    }
-
-    pub fn remove_desired_tension(&mut self) {
-        self.desired_tension = None;
     }
 
     pub fn increase_speed(&mut self, speed: u32) {
@@ -44,7 +38,7 @@ impl Arm {
         self.free_mode_speed = 0;
     }
 
-    pub fn get_speed(&mut self) -> Option<u32> {
+    pub fn get_speed(&mut self, arm_index: u8) -> Option<u32> {
         if self.mode == ArmMode::Free {
             return Some(self.free_mode_speed);
         }
@@ -56,8 +50,30 @@ impl Arm {
         }
 
         self.last_sended_tension = Some(self.tension);
-        let speed = tension_to_speed(self.desired_tension.unwrap_or(0) - self.tension);
+        let desired_tension = Self::desired_tension_by_arm(arm_index);
+        let speed = tension_to_speed(desired_tension - self.tension);
         return Some(speed);
+    }
+
+    //INFO:arms tension tuning
+    pub fn desired_tension_by_arm(arm_index: u8) -> i32 {
+        if arm_index == 0 {
+            return 8_000;
+        }
+
+        if arm_index == 1 {
+            return 16_000;
+        }
+
+        if arm_index == 2 {
+            return 11_000;
+        }
+
+        if arm_index == 3 {
+            return 15_000;
+        }
+
+        return 0;
     }
 }
 
@@ -92,11 +108,11 @@ impl RobotArms {
         }
     }
 
-    pub fn set_by_tenstion_mode(&mut self, desired_tension: i32) {
-        self.arm0.set_desired_tension(desired_tension);
-        self.arm1.set_desired_tension(desired_tension);
-        self.arm2.set_desired_tension(desired_tension);
-        self.arm3.set_desired_tension(desired_tension);
+    pub fn set_by_tenstion_mode(&mut self) {
+        self.arm0.set_desired_tension();
+        self.arm1.set_desired_tension();
+        self.arm2.set_desired_tension();
+        self.arm3.set_desired_tension();
     }
 
     pub fn set_free_tenstion_mode(&mut self) {
@@ -108,10 +124,10 @@ impl RobotArms {
 
     pub fn get_speed(&mut self) -> ArmsSpeed {
         ArmsSpeed {
-            s0: self.arm0.get_speed(),
-            s1: self.arm1.get_speed(),
-            s2: self.arm2.get_speed(),
-            s3: self.arm3.get_speed(),
+            s0: self.arm0.get_speed(0),
+            s1: self.arm1.get_speed(1),
+            s2: self.arm2.get_speed(2),
+            s3: self.arm3.get_speed(3),
         }
     }
 
