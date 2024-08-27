@@ -55,25 +55,14 @@ impl Arm {
         return Some(speed);
     }
 
-    //INFO:arms tension tuning
     pub fn desired_tension_by_arm(arm_index: u8) -> i32 {
-        if arm_index == 0 {
-            return 8_000;
+        match arm_index {
+            0 => 8_000,
+            1 => 16_000,
+            2 => 11_000,
+            3 => 15_000,
+            _ => 0,
         }
-
-        if arm_index == 1 {
-            return 16_000;
-        }
-
-        if arm_index == 2 {
-            return 11_000;
-        }
-
-        if arm_index == 3 {
-            return 15_000;
-        }
-
-        return 0;
     }
 }
 
