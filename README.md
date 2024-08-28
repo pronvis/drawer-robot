@@ -72,3 +72,13 @@ For master:
 
 For `AT+BIND={slave_addr}` it may require adding zeroes in front each part. For example: `AT+ADDR?` return
 `21:13:12622`. To bind that address send this command: `AT+BIND=0021,13,012622`
+
+## Images
+
+Motherboard:
+![IMG_5313](https://github.com/user-attachments/assets/93547f06-dfd4-4c1b-a4be-8a93b6534f24)
+
+Companion:
+![IMG_5312](https://github.com/user-attachments/assets/6957e745-acf5-4d0d-8757-bdbca81982d1)
+
+![companion](https://github.com/user-attachments/assets/af5c50a3-657b-44af-87ea-d138acb8e558)
