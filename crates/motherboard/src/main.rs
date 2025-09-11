@@ -41,8 +41,8 @@ mod app {
 
     #[local]
     struct Local {
-        ps3_reader: ps3::Ps3Reader,
-        ps3_bytes_sender: Sender<'static, u8, PS3_CHANNEL_CAPACITY>,
+        // ps3_reader: ps3::Ps3Reader,
+        // ps3_bytes_sender: Sender<'static, u8, PS3_CHANNEL_CAPACITY>,
         tension_data_sender: Sender<'static, TensionData, TENSION_DATA_CHANNEL_CAPACITY>,
         ps3_rx: stm32f1xx_hal::serial::Rx2,
         hc05_rx: stm32f1xx_hal::serial::Rx1,
@@ -67,6 +67,8 @@ mod app {
         configurator_3: TMC2209Configurator,
         communicator_3: TMC2209SerialCommunicator<'D', 2>,
         robot: Robot,
+        ps3_tx: stm32f1xx_hal::serial::Tx2,
+        timer_1: Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>,
     }
 
     #[init(local = [
@@ -188,18 +190,23 @@ mod app {
             (ps3_tx, ps3_rx),
             &mut afio.mapr,
             Config::default()
-                .baudrate(57600.bps())
+                .baudrate(115_200.bps())
                 .wordlength_8bits()
                 .stopbits(stm32f1xx_hal::serial::StopBits::STOP1)
                 .parity_none(),
             &clocks,
         );
         serial_usart2.listen(stm32f1xx_hal::serial::Event::Rxne);
-        let (_, ps3_rx) = serial_usart2.split();
+        let (ps3_tx, ps3_rx) = serial_usart2.split();
 
-        let (ps3_bytes_sender, ps3_bytes_receiver) = make_channel!(u8, PS3_CHANNEL_CAPACITY);
-        let (ps3_commands_sender, ps3_commands_receiver) = make_channel!(ps3::Ps3Command, PS3_CHANNEL_CAPACITY);
-        let ps3_reader = ps3::Ps3Reader::new(ps3_bytes_receiver, ps3_commands_sender);
+        // let (ps3_bytes_sender, ps3_bytes_receiver) = make_channel!(u8, PS3_CHANNEL_CAPACITY);
+        // let (ps3_commands_sender, ps3_commands_receiver) = make_channel!(ps3::Ps3Command, PS3_CHANNEL_CAPACITY);
+        // let ps3_reader = ps3::Ps3Reader::new(ps3_bytes_receiver, ps3_commands_sender);
+
+        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>::new(cx.device.TIM1, &clocks);
+        let mut timer_1: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ> = timer.counter();
+        timer_1.start(1.millis()).unwrap();
+        timer_1.listen(Event::Update);
 
         // SSD1306 display pins
         let scl: Scl1Pin = gpiob.pb8.into_alternate_open_drain(&mut gpiob.crh);
@@ -214,14 +221,14 @@ mod app {
             tmc2209_1.req_sender,
             tmc2209_2.req_sender,
             tmc2209_3.req_sender,
-            ps3_commands_receiver,
+            // ps3_commands_receiver,
             tension_data_receiver,
             hc05_tx,
             display_sender.clone(),
         );
 
         steppers_conf_task::spawn().ok();
-        ps3_reader_task::spawn().unwrap();
+        // ps3_reader_task::spawn().unwrap();
         robot_task::spawn().unwrap();
 
         (
@@ -229,8 +236,8 @@ mod app {
             Local {
                 ps3_rx,
                 hc05_rx,
-                ps3_bytes_sender,
-                ps3_reader,
+                // ps3_bytes_sender,
+                // ps3_reader,
                 tension_data_sender,
                 display_receiver,
                 display_sender,
@@ -253,6 +260,8 @@ mod app {
                 communicator_0: tmc2209_0.communicator,
                 tmc2209_communicator_timer_0: tmc2209_0.timer,
                 robot,
+                ps3_tx,
+                timer_1,
             },
         )
     }
@@ -264,6 +273,18 @@ mod app {
                 cx.local.display.print(message);
             }
         }
+    }
+
+    #[task(binds = TIM1_UP, priority = 3, local = [  timer_1, ps3_tx, x: u8 = 0 ])]
+    fn delay_task_1(mut cx: delay_task_1::Context) {
+        defmt::debug!("delay1: timer task");
+        cx.local.ps3_tx.write(*cx.local.x);
+
+        *cx.local.x += 1;
+
+        cx.local.timer_1.start(100.millis()).unwrap();
+        cx.local.timer_1.clear_interrupt(Event::Update);
+        defmt::debug!("delay1: after 1 secs");
     }
 
     #[task(priority = 9, local = [ configurator_0, configurator_1, configurator_2, configurator_3 ])]
@@ -285,12 +306,12 @@ mod app {
         }
     }
 
-    #[task( priority = 4, local = [  ps3_reader  ])]
-    async fn ps3_reader_task(cx: ps3_reader_task::Context) {
-        loop {
-            cx.local.ps3_reader.work().await;
-        }
-    }
+    // #[task( priority = 4, local = [  ps3_reader  ])]
+    // async fn ps3_reader_task(cx: ps3_reader_task::Context) {
+    //     loop {
+    //         cx.local.ps3_reader.work().await;
+    //     }
+    // }
 
     #[task( priority = 1, local = [robot])]
     async fn robot_task(cx: robot_task::Context) {
@@ -348,16 +369,14 @@ mod app {
         }
     }
 
-    #[task(binds = USART2, priority = 9, local = [ ps3_rx, ps3_bytes_sender ])]
+    #[task(binds = USART2, priority = 9, local = [ ps3_rx ])]
     fn esp32_reader(cx: esp32_reader::Context) {
         let rx = cx.local.ps3_rx;
         if rx.is_rx_not_empty() {
             let received = rx.read();
             match received {
                 Ok(read) => {
-                    cx.local.ps3_bytes_sender.try_send(read).err().map(|err| {
-                        defmt::debug!("fail to send bytes to ps3_reader: {:?}", defmt::Debug2Format(&err));
-                    });
+                    defmt::debug!("read bytes from RaspPi: {}", read);
                 }
 
                 Err(err) => {

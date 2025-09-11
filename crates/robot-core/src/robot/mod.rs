@@ -66,7 +66,7 @@ pub struct Robot {
     stepper_1: Tmc2209CommandsSender,
     stepper_2: Tmc2209CommandsSender,
     stepper_3: Tmc2209CommandsSender,
-    ps3_commands_receiver: Ps3CommandsReceiver,
+    // ps3_commands_receiver: Ps3CommandsReceiver,
     tension_data_receiver: TensionDataReceiver,
     hc05_tx: stm32f1xx_hal::serial::Tx1,
     display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
@@ -80,7 +80,7 @@ impl Robot {
         stepper_1: Tmc2209CommandsSender,
         stepper_2: Tmc2209CommandsSender,
         stepper_3: Tmc2209CommandsSender,
-        ps3_commands_receiver: Ps3CommandsReceiver,
+        // ps3_commands_receiver: Ps3CommandsReceiver,
         tension_data_receiver: TensionDataReceiver,
         hc05_tx: stm32f1xx_hal::serial::Tx1,
         display_sender: Sender<'static, Box<DisplayMemoryPool>, DISPLAY_CHANNEL_CAPACITY>,
@@ -89,7 +89,7 @@ impl Robot {
             stepper_0,
             stepper_1,
             stepper_2,
-            ps3_commands_receiver,
+            // ps3_commands_receiver,
             stepper_3,
             tension_data_receiver,
             hc05_tx,
@@ -100,7 +100,7 @@ impl Robot {
     }
 
     pub async fn work(&mut self) {
-        self.ps3_handler();
+        // self.ps3_handler();
         self.tension_handler();
 
         let arms_speed = self.arms.get_speed();
@@ -130,22 +130,22 @@ impl Robot {
         }
     }
 
-    fn ps3_handler(&mut self) {
-        match self.ps3_commands_receiver.try_recv() {
-            Ok(event) => {
-                let command: Option<RobotCommand> = event.into();
-                if let Some(c) = command {
-                    self.receive_command(c);
-                }
-            }
-            Err(err) => {
-                if err == ReceiveError::NoSender {
-                    defmt::error!("fail to receive command from channel: ReceiveError::NoSender");
-                    return;
-                }
-            }
-        }
-    }
+    // fn ps3_handler(&mut self) {
+    //     match self.ps3_commands_receiver.try_recv() {
+    //         Ok(event) => {
+    //             let command: Option<RobotCommand> = event.into();
+    //             if let Some(c) = command {
+    //                 self.receive_command(c);
+    //             }
+    //         }
+    //         Err(err) => {
+    //             if err == ReceiveError::NoSender {
+    //                 defmt::error!("fail to receive command from channel: ReceiveError::NoSender");
+    //                 return;
+    //             }
+    //         }
+    //     }
+    // }
 
     fn tension_handler(&mut self) {
         let mut tension_data: Option<TensionData> = None;
