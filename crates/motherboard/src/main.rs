@@ -11,7 +11,9 @@
 )]
 mod app {
 
-    use defmt_brtt as _; // global logger
+    use defmt_brtt as _;
+    use fugit::TimerDurationU32;
+    // global logger
     use heapless::pool::singleton::{Box, Pool};
     use robot::Robot;
     use robot_core::display::OledDisplay;
@@ -31,6 +33,7 @@ mod app {
     };
 
     const TIMER_CLOCK_FREQ: u32 = 72_000_000;
+    const TESTING_TIMER_CLOCK_FREQ: u32 = 72_000;
     static mut DISPLAY_MEMORY_POOL_MEMORY: [u8; 96] = [32u8; 96];
 
     const PS3_CHANNEL_CAPACITY: usize = robot_core::ps3::CHANNEL_CAPACITY;
@@ -68,7 +71,7 @@ mod app {
         communicator_3: TMC2209SerialCommunicator<'D', 2>,
         robot: Robot,
         ps3_tx: stm32f1xx_hal::serial::Tx2,
-        timer_1: Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>,
+        timer_1: Counter<stm32f1xx_hal::pac::TIM1, TESTING_TIMER_CLOCK_FREQ>,
     }
 
     #[init(local = [
@@ -203,9 +206,9 @@ mod app {
         // let (ps3_commands_sender, ps3_commands_receiver) = make_channel!(ps3::Ps3Command, PS3_CHANNEL_CAPACITY);
         // let ps3_reader = ps3::Ps3Reader::new(ps3_bytes_receiver, ps3_commands_sender);
 
-        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ>::new(cx.device.TIM1, &clocks);
-        let mut timer_1: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM1, TIMER_CLOCK_FREQ> = timer.counter();
-        timer_1.start(1.millis()).unwrap();
+        let timer = stm32f1xx_hal::timer::FTimer::<stm32f1xx_hal::pac::TIM1, TESTING_TIMER_CLOCK_FREQ>::new(cx.device.TIM1, &clocks);
+        let mut timer_1: stm32f1xx_hal::timer::Counter<stm32f1xx_hal::pac::TIM1, TESTING_TIMER_CLOCK_FREQ> = timer.counter();
+        timer_1.start(10.Hz::<1, 1>().into_duration()).unwrap();
         timer_1.listen(Event::Update);
 
         // SSD1306 display pins
@@ -277,14 +280,14 @@ mod app {
 
     #[task(binds = TIM1_UP, priority = 3, local = [  timer_1, ps3_tx, x: u8 = 0 ])]
     fn delay_task_1(mut cx: delay_task_1::Context) {
-        defmt::debug!("delay1: timer task");
+        defmt::debug!("Write data to RaspPi, x: {} >>>", *cx.local.x);
         cx.local.ps3_tx.write(*cx.local.x);
+        cx.local.ps3_tx.bflush();
 
         *cx.local.x += 1;
 
-        cx.local.timer_1.start(100.millis()).unwrap();
+        cx.local.timer_1.start(4.Hz::<1, 1>().into_duration()).unwrap();
         cx.local.timer_1.clear_interrupt(Event::Update);
-        defmt::debug!("delay1: after 1 secs");
     }
 
     #[task(priority = 9, local = [ configurator_0, configurator_1, configurator_2, configurator_3 ])]
@@ -376,7 +379,7 @@ mod app {
             let received = rx.read();
             match received {
                 Ok(read) => {
-                    defmt::debug!("read bytes from RaspPi: {}", read);
+                    defmt::debug!("read bytes from RaspPi: {} <<<", read);
                 }
 
                 Err(err) => {
